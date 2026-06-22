@@ -1,0 +1,426 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { VettingRecord } from '@/lib/types'
+import {
+  createDefaultChecklist,
+  checklistCompletionPercent,
+  type VettingChecklist as VettingChecklistType,
+  type ChecklistStep,
+} from '@/lib/vettingChecklist'
+import { Card, CardHeader, CardBody } from './ui/Card'
+import { Button } from './ui/Button'
+import { Input, Select, Textarea } from './ui/Input'
+import { Badge, carrierStatusTone } from './ui/Badge'
+import { Spinner } from './ui/Spinner'
+import { ExceptionNoteComposer } from './ExceptionNoteComposer'
+import { cn, formatDateTime } from '@/lib/utils'
+
+const VETTING_TYPES = [
+  { value: 'initial', label: 'Initial' },
+  { value: 'monthly_review', label: 'Monthly Review' },
+  { value: 'revetting', label: 'Re-vetting' },
+  { value: 'exception', label: 'Exception' },
+]
+
+const FINAL_STATUSES = [
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'approved_with_restrictions', label: 'Approved with Restrictions' },
+  { value: 'exception_approved', label: 'Exception Approved' },
+  { value: 'declined', label: 'Declined' },
+]
+
+function hydrateChecklist(record?: VettingRecord): VettingChecklistType {
+  const base = createDefaultChecklist()
+  if (!record?.checklist) return base
+  const saved = record.checklist as Partial<VettingChecklistType>
+  if (!saved.steps) return base
+  // Merge saved completion/notes onto the canonical step definitions by id.
+  const byId = new Map(saved.steps.map((s) => [s.id, s]))
+  base.steps = base.steps.map((s) => {
+    const prev = byId.get(s.id)
+    return prev
+      ? { ...s, completed: !!prev.completed, notes: prev.notes ?? '' }
+      : s
+  })
+  base.exceptionNote = saved.exceptionNote ?? record.exception_note ?? ''
+  return base
+}
+
+export function VettingChecklist({
+  dot,
+  carrierName,
+  vettingRecords,
+  onSaved,
+}: {
+  dot: string
+  carrierName?: string | null
+  vettingRecords: VettingRecord[]
+  onSaved?: () => void | Promise<void>
+}) {
+  const [tab, setTab] = useState<'active' | 'history'>('active')
+
+  const latest = vettingRecords[0]
+  const [vettingType, setVettingType] = useState(
+    latest?.vetting_type || 'initial'
+  )
+  const [checklist, setChecklist] = useState<VettingChecklistType>(() =>
+    hydrateChecklist(latest)
+  )
+  const [internalNotes, setInternalNotes] = useState(
+    latest?.internal_notes || ''
+  )
+  const [reviewedBy, setReviewedBy] = useState(latest?.reviewed_by || '')
+  const [approvedBy, setApprovedBy] = useState(latest?.approved_by || '')
+  const [finalStatus, setFinalStatus] = useState('in_progress')
+  const [exceptionNote, setExceptionNote] = useState(
+    latest?.exception_note || ''
+  )
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [folderUrl, setFolderUrl] = useState<string | null>(
+    latest?.google_drive_folder_url || null
+  )
+
+  const percent = checklistCompletionPercent(checklist)
+
+  const showException = useMemo(() => {
+    const anyRequiredIncomplete = checklist.steps.some(
+      (s) => s.required && !s.completed
+    )
+    const exceptionStepChecked = checklist.steps.find(
+      (s) => s.id === 'exception_note'
+    )?.completed
+    return anyRequiredIncomplete || !!exceptionStepChecked
+  }, [checklist])
+
+  function updateStep(id: string, patch: Partial<ChecklistStep>) {
+    setChecklist((c) => ({
+      ...c,
+      steps: c.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    }))
+  }
+
+  async function save() {
+    setSaving(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/vetting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dotNumber: dot,
+          vettingType,
+          vettingStatus: finalStatus,
+          checklist: { ...checklist, exceptionNote },
+          exceptionNote,
+          internalNotes,
+          reviewedBy,
+          approvedBy,
+          approvalLevelRequired: showException ? 'exception' : 'standard',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Save failed')
+      if (data?.folder?.webViewLink) setFolderUrl(data.folder.webViewLink)
+      setMessage('Vetting record saved.')
+      await onSaved?.()
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Vetting Workspace"
+        action={
+          <div className="flex gap-1 rounded-md bg-gray-100 p-0.5 text-xs">
+            <button
+              onClick={() => setTab('active')}
+              className={cn(
+                'rounded px-3 py-1 font-medium',
+                tab === 'active'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500'
+              )}
+            >
+              Active Vetting
+            </button>
+            <button
+              onClick={() => setTab('history')}
+              className={cn(
+                'rounded px-3 py-1 font-medium',
+                tab === 'history'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500'
+              )}
+            >
+              History ({vettingRecords.length})
+            </button>
+          </div>
+        }
+      />
+      <CardBody>
+        {tab === 'active' ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="w-56">
+                <Select
+                  label="Vetting type"
+                  value={vettingType}
+                  onChange={(e) => setVettingType(e.target.value)}
+                >
+                  {VETTING_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex-1">
+                <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
+                  <span>Required steps complete</span>
+                  <span className="font-semibold">{percent}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all',
+                      percent === 100 ? 'bg-green-500' : 'bg-dts-blue'
+                    )}
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {checklist.steps.map((s) => {
+                const open = expanded[s.id]
+                return (
+                  <div
+                    key={s.id}
+                    className={cn(
+                      'rounded-md border px-3 py-2.5',
+                      s.completed
+                        ? 'border-green-200 bg-green-50/50'
+                        : 'border-gray-200'
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={s.completed}
+                        onChange={(e) =>
+                          updateStep(s.id, { completed: e.target.checked })
+                        }
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-dts-blue focus:ring-dts-blue"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-gray-900">
+                            {s.label}
+                          </span>
+                          <Badge tone="gray">{s.policyRef}</Badge>
+                          {s.required ? (
+                            <Badge tone="maroon">Required</Badge>
+                          ) : (
+                            <Badge tone="blue">Optional</Badge>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpanded((x) => ({ ...x, [s.id]: !x[s.id] }))
+                            }
+                            className="ml-auto text-xs text-dts-blue hover:underline"
+                          >
+                            {open ? 'Hide details' : 'Details'}
+                          </button>
+                        </div>
+                        {open && (
+                          <>
+                            <p className="mt-1.5 text-xs text-gray-600">
+                              {s.description}
+                            </p>
+                            <Textarea
+                              value={s.notes}
+                              onChange={(e) =>
+                                updateStep(s.id, { notes: e.target.value })
+                              }
+                              rows={2}
+                              placeholder="Notes for this step…"
+                              className="mt-2 text-xs"
+                            />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {showException && (
+              <ExceptionNoteComposer
+                value={exceptionNote}
+                onChange={setExceptionNote}
+                carrierName={carrierName}
+                dotNumber={dot}
+              />
+            )}
+
+            <Textarea
+              label="Internal notes"
+              value={internalNotes}
+              onChange={(e) => setInternalNotes(e.target.value)}
+              rows={3}
+              placeholder="Internal notes about this vetting…"
+            />
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Input
+                label="Reviewed by"
+                value={reviewedBy}
+                onChange={(e) => setReviewedBy(e.target.value)}
+                placeholder="Name / role"
+              />
+              <Input
+                label="Approved by"
+                value={approvedBy}
+                onChange={(e) => setApprovedBy(e.target.value)}
+                placeholder="Name, title"
+              />
+              <Select
+                label="Final status"
+                value={finalStatus}
+                onChange={(e) => setFinalStatus(e.target.value)}
+              >
+                {FINAL_STATUSES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
+              <Button onClick={save} disabled={saving}>
+                {saving ? <Spinner size={14} className="text-white" /> : null}
+                {saving ? 'Saving…' : 'Save vetting record'}
+              </Button>
+              {folderUrl && (
+                <a
+                  href={folderUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-dts-blue hover:underline"
+                >
+                  Open Drive folder →
+                </a>
+              )}
+              {message && (
+                <span className="text-sm text-gray-600">{message}</span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <HistoryTab records={vettingRecords} />
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+function HistoryTab({ records }: { records: VettingRecord[] }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  if (records.length === 0) {
+    return <p className="text-sm text-gray-500">No prior vetting records.</p>
+  }
+  return (
+    <ol className="space-y-3">
+      {records.map((r) => {
+        const cl = r.checklist as VettingChecklistType | null
+        return (
+          <li key={r.id} className="rounded-md border border-gray-200">
+            <button
+              onClick={() => setOpen((x) => ({ ...x, [r.id]: !x[r.id] }))}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+            >
+              <div>
+                <div className="text-sm font-medium text-gray-900">
+                  {formatDateTime(r.completed_at || r.created_at)}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {r.vetting_type} · reviewed by {r.reviewed_by || '—'}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge tone={carrierStatusTone(r.vetting_status)}>
+                  {r.vetting_status || 'in progress'}
+                </Badge>
+                <span className="text-xs text-gray-400">
+                  {open[r.id] ? '▲' : '▼'}
+                </span>
+              </div>
+            </button>
+            {open[r.id] && (
+              <div className="space-y-3 border-t border-gray-100 px-4 py-3">
+                {r.google_drive_folder_url && (
+                  <a
+                    href={r.google_drive_folder_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-dts-blue hover:underline"
+                  >
+                    Open Drive folder →
+                  </a>
+                )}
+                {cl?.steps && (
+                  <ul className="space-y-1 text-sm">
+                    {cl.steps.map((s) => (
+                      <li key={s.id} className="flex items-start gap-2">
+                        <span
+                          className={
+                            s.completed ? 'text-green-600' : 'text-gray-300'
+                          }
+                        >
+                          {s.completed ? '✓' : '○'}
+                        </span>
+                        <span className="text-gray-700">{s.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {r.exception_note && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500">
+                      Exception note
+                    </div>
+                    <pre className="mt-1 whitespace-pre-wrap rounded bg-gray-50 p-3 font-mono text-xs text-gray-700">
+                      {r.exception_note}
+                    </pre>
+                  </div>
+                )}
+                {r.internal_notes && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500">
+                      Internal notes
+                    </div>
+                    <p className="mt-1 text-sm text-gray-700">
+                      {r.internal_notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}

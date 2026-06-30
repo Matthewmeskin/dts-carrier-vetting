@@ -18,27 +18,35 @@ import { cn, formatDate, formatScore } from '@/lib/utils'
 // (which may be raw column names like "driver_oos_score" or pre-labeled
 // strings like "Driver OOS Score").
 const SCORE_LABELS: Record<string, string> = {
-  gap_score: 'GAP',
-  crash_score: 'Crash',
-  violation_score: 'Violation',
-  csa_basics_score: 'CSA Basics',
-  driver_oos_score: 'Driver OOS',
-  critical_acute_violation_score: 'Critical/Acute',
-  new_entrant_score: 'New Entrant',
-  mcs_150_score: 'MCS-150',
-  judicial_hellholes_score: 'Judicial Hellholes',
-  safety_rating_score: 'Safety Rating',
+  gap_score: 'GAP Score',
+  crash_score: 'Crash Score',
+  violation_score: 'Violation Score',
+  csa_basics_score: 'CSA Basics Score',
+  driver_oos_score: 'Driver OOS Score',
+  critical_acute_violation_score: 'Critical/Acute Score',
+  new_entrant_score: 'New Entrant Score',
+  mcs_150_score: 'MCS-150 Score',
+  judicial_hellholes_score: 'Judicial Hellholes Score',
+  safety_rating_score: 'Safety Rating Score',
 }
+
+// Tokens that should stay fully uppercased in fallback formatting.
+const ACRONYMS = new Set(['gap', 'oos', 'csa', 'mcs', 'dot', 'mc', 'us'])
 
 function prettyScoreLabel(raw: string): string {
   const key = raw.trim().toLowerCase().replace(/\s+/g, '_').replace(/_+/g, '_')
   if (SCORE_LABELS[key]) return SCORE_LABELS[key]
-  // Fall back: drop a trailing "score", de-underscore, title-case.
+  // Fall back: de-underscore and title-case, keeping known acronyms uppercase.
   return raw
     .replace(/_/g, ' ')
-    .replace(/\bscore\b/i, '')
     .trim()
-    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .split(/\s+/)
+    .map((w) =>
+      ACRONYMS.has(w.toLowerCase())
+        ? w.toUpperCase()
+        : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+    )
+    .join(' ')
 }
 
 type StatusFilter =

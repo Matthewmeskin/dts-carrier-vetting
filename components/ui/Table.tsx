@@ -50,12 +50,19 @@ export function TBody({ children }: { children: React.ReactNode }) {
 export function TR({
   children,
   className,
+  onClick,
 }: {
   children: React.ReactNode
   className?: string
+  onClick?: () => void
 }) {
   return (
-    <tr className={cn('hover:bg-gray-50/70 transition', className)}>{children}</tr>
+    <tr
+      className={cn('hover:bg-gray-50/70 transition', className)}
+      onClick={onClick}
+    >
+      {children}
+    </tr>
   )
 }
 

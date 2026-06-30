@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { CarrierSummary } from '@/lib/types'
 import { Card } from './ui/Card'
 import { Input, Select } from './ui/Input'
-import { Button } from './ui/Button'
 import {
   Badge,
   carrierStatusTone,
@@ -13,6 +13,33 @@ import {
 } from './ui/Badge'
 import { Table, THead, TBody, TR, TH, TD } from './ui/Table'
 import { cn, formatDate, formatScore } from '@/lib/utils'
+
+// Friendly display labels for flagged score keys/labels coming from the DB
+// (which may be raw column names like "driver_oos_score" or pre-labeled
+// strings like "Driver OOS Score").
+const SCORE_LABELS: Record<string, string> = {
+  gap_score: 'GAP',
+  crash_score: 'Crash',
+  violation_score: 'Violation',
+  csa_basics_score: 'CSA Basics',
+  driver_oos_score: 'Driver OOS',
+  critical_acute_violation_score: 'Critical/Acute',
+  new_entrant_score: 'New Entrant',
+  mcs_150_score: 'MCS-150',
+  judicial_hellholes_score: 'Judicial Hellholes',
+  safety_rating_score: 'Safety Rating',
+}
+
+function prettyScoreLabel(raw: string): string {
+  const key = raw.trim().toLowerCase().replace(/\s+/g, '_').replace(/_+/g, '_')
+  if (SCORE_LABELS[key]) return SCORE_LABELS[key]
+  // Fall back: drop a trailing "score", de-underscore, title-case.
+  return raw
+    .replace(/_/g, ' ')
+    .replace(/\bscore\b/i, '')
+    .trim()
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+}
 
 type StatusFilter =
   | 'All'
@@ -38,6 +65,7 @@ export function CarrierTable({
   carriers: CarrierSummary[]
   lastUpload: string | null
 }) {
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StatusFilter>('All')
   const [revettingOnly, setRevettingOnly] = useState(false)
@@ -150,7 +178,6 @@ export function CarrierTable({
             <TH>RMIS</TH>
             <TH>Status</TH>
             <TH>Last Reviewed</TH>
-            <TH></TH>
           </TR>
         </THead>
         <TBody>
@@ -164,11 +191,19 @@ export function CarrierTable({
           {filtered.map((c) => {
             const g = gapTone(c.gap_score)
             return (
-              <TR key={c.id}>
+              <TR
+                key={c.id}
+                className="cursor-pointer"
+                onClick={() => router.push(`/carriers/${c.dot_number}`)}
+              >
                 <TD>
-                  <div className="font-medium text-gray-900">
-                    {c.legal_name ?? '—'}
-                  </div>
+                  <Link
+                    href={`/carriers/${c.dot_number}`}
+                    className="font-medium text-gray-900 hover:text-dts-blue hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {c.legal_name ?? `DOT ${c.dot_number}`}
+                  </Link>
                   {c.dba_name && c.dba_name !== c.legal_name && (
                     <div className="text-xs text-gray-500">
                       dba {c.dba_name}
@@ -189,7 +224,7 @@ export function CarrierTable({
                     <div className="flex flex-wrap gap-1">
                       {c.flagged_scores.map((f) => (
                         <Badge key={f} tone="amber">
-                          {f.replace(' Score', '')}
+                          {prettyScoreLabel(f)}
                         </Badge>
                       ))}
                     </div>
@@ -228,13 +263,6 @@ export function CarrierTable({
                 </TD>
                 <TD className="whitespace-nowrap text-xs text-gray-500">
                   {c.last_reviewed ? formatDate(c.last_reviewed) : '—'}
-                </TD>
-                <TD>
-                  <Link href={`/carriers/${c.dot_number}`}>
-                    <Button size="sm" variant="outline">
-                      View
-                    </Button>
-                  </Link>
                 </TD>
               </TR>
             )

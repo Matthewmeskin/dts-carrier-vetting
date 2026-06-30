@@ -169,6 +169,9 @@ export default function CarrierDetailPage({
       <VettingChecklist
         dot={dot}
         carrierName={carrier.legal_name}
+        safetyRating={carrier.safety_rating}
+        insurance={insurance}
+        score={scores[0]}
         vettingRecords={vettingRecords}
         onSaved={load}
       />

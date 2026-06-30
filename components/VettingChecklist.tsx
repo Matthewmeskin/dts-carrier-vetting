@@ -1,10 +1,14 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { VettingRecord } from '@/lib/types'
+import { InsuranceRecord, ScoreRecord, VettingRecord } from '@/lib/types'
 import {
   createDefaultChecklist,
   checklistCompletionPercent,
+  attachAutoEvidence,
+  applyAutoCompletion,
+  autoSummary,
+  type ChecklistAutoInputs,
   type VettingChecklist as VettingChecklistType,
   type ChecklistStep,
 } from '@/lib/vettingChecklist'
@@ -31,17 +35,29 @@ const FINAL_STATUSES = [
   { value: 'declined', label: 'Declined' },
 ]
 
-function hydrateChecklist(record?: VettingRecord): VettingChecklistType {
-  const base = createDefaultChecklist()
-  if (!record?.checklist) return base
+function hydrateChecklist(
+  record: VettingRecord | undefined,
+  autoInputs: ChecklistAutoInputs
+): VettingChecklistType {
+  // Always attach the RMIS/Bluewire evidence so it shows on every step.
+  const base = attachAutoEvidence(createDefaultChecklist(), autoInputs)
+  if (!record?.checklist) {
+    // Fresh checklist — pre-check the steps the data already clears.
+    return applyAutoCompletion(base)
+  }
   const saved = record.checklist as Partial<VettingChecklistType>
-  if (!saved.steps) return base
-  // Merge saved completion/notes onto the canonical step definitions by id.
+  if (!saved.steps) return applyAutoCompletion(base)
+  // Merge a human's saved completion/notes onto the canonical step definitions.
   const byId = new Map(saved.steps.map((s) => [s.id, s]))
   base.steps = base.steps.map((s) => {
     const prev = byId.get(s.id)
     return prev
-      ? { ...s, completed: !!prev.completed, notes: prev.notes ?? '' }
+      ? {
+          ...s,
+          completed: !!prev.completed,
+          notes: prev.notes ?? '',
+          source: prev.source ?? (prev.completed ? 'manual' : s.source),
+        }
       : s
   })
   base.exceptionNote = saved.exceptionNote ?? record.exception_note ?? ''
@@ -51,22 +67,32 @@ function hydrateChecklist(record?: VettingRecord): VettingChecklistType {
 export function VettingChecklist({
   dot,
   carrierName,
+  safetyRating,
+  insurance,
+  score,
   vettingRecords,
   onSaved,
 }: {
   dot: string
   carrierName?: string | null
+  safetyRating?: string | null
+  insurance?: InsuranceRecord | null
+  score?: ScoreRecord | null
   vettingRecords: VettingRecord[]
   onSaved?: () => void | Promise<void>
 }) {
   const [tab, setTab] = useState<'active' | 'history'>('active')
 
   const latest = vettingRecords[0]
+  const autoInputs = useMemo<ChecklistAutoInputs>(
+    () => ({ safetyRating, insurance, score }),
+    [safetyRating, insurance, score]
+  )
   const [vettingType, setVettingType] = useState(
     latest?.vetting_type || 'initial'
   )
   const [checklist, setChecklist] = useState<VettingChecklistType>(() =>
-    hydrateChecklist(latest)
+    hydrateChecklist(latest, autoInputs)
   )
   const [internalNotes, setInternalNotes] = useState(
     latest?.internal_notes || ''
@@ -85,6 +111,7 @@ export function VettingChecklist({
   )
 
   const percent = checklistCompletionPercent(checklist)
+  const summary = useMemo(() => autoSummary(checklist), [checklist])
 
   const showException = useMemo(() => {
     const anyRequiredIncomplete = checklist.steps.some(
@@ -97,9 +124,12 @@ export function VettingChecklist({
   }, [checklist])
 
   function updateStep(id: string, patch: Partial<ChecklistStep>) {
+    // A human toggling the box overrides any auto state — record that.
+    const withSource =
+      'completed' in patch ? { ...patch, source: 'manual' as const } : patch
     setChecklist((c) => ({
       ...c,
-      steps: c.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      steps: c.steps.map((s) => (s.id === id ? { ...s, ...withSource } : s)),
     }))
   }
 
@@ -199,6 +229,27 @@ export function VettingChecklist({
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              <span className="font-medium text-gray-700">
+                Auto-evaluated from RMIS &amp; Bluewire:
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-green-500" />
+                {summary.autoVerified} auto-verified
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-red-500" />
+                {summary.failed} failed policy
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-gray-300" />
+                {summary.manual} need human review
+              </span>
+              <span className="ml-auto text-gray-400">
+                Auto-checked items can be overridden.
+              </span>
+            </div>
+
             <div className="space-y-2">
               {checklist.steps.map((s) => {
                 const open = expanded[s.id]
@@ -242,6 +293,29 @@ export function VettingChecklist({
                             {open ? 'Hide details' : 'Details'}
                           </button>
                         </div>
+                        {(s.autoStatus || s.evidence) && (
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            {s.autoStatus === 'pass' && (
+                              <Badge tone={s.source === 'manual' ? 'amber' : 'green'}>
+                                {s.source === 'manual'
+                                  ? 'Manual override'
+                                  : 'Auto-verified'}
+                              </Badge>
+                            )}
+                            {s.autoStatus === 'fail' && (
+                              <Badge tone={s.completed ? 'amber' : 'red'}>
+                                {s.completed
+                                  ? 'Override — accepted despite policy'
+                                  : 'Failed policy'}
+                              </Badge>
+                            )}
+                            {s.evidence && (
+                              <span className="text-xs text-gray-500">
+                                {s.evidence}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {open && (
                           <>
                             <p className="mt-1.5 text-xs text-gray-600">

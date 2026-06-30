@@ -1,3 +1,9 @@
+import type { InsuranceRecord, ScoreRecord } from './types'
+import { formatCurrency, formatDate, formatScore } from './utils'
+import { CATEGORY_FIELDS, CATEGORY_THRESHOLD, GAP_THRESHOLD } from './scoringRules'
+
+export type AutoStatus = 'pass' | 'fail' | null
+
 export interface ChecklistStep {
   id: string
   label: string
@@ -8,6 +14,12 @@ export interface ChecklistStep {
   completedBy?: string
   completedAt?: string
   notes: string
+  /** Policy result computed from RMIS / Bluewire data, or null when not data-derivable. */
+  autoStatus?: AutoStatus
+  /** Human-readable evidence backing the auto evaluation (shown inline). */
+  evidence?: string
+  /** Provenance of the current checked state. */
+  source?: 'auto' | 'manual'
 }
 
 export interface VettingChecklist {
@@ -186,4 +198,219 @@ export function checklistCompletionPercent(checklist: VettingChecklist): number 
 
 export function checklistIsComplete(checklist: VettingChecklist): boolean {
   return checklist.steps.filter(s => s.required).every(s => s.completed)
+}
+
+// ---------------------------------------------------------------------------
+// Auto-evaluation — pre-fills checklist steps from RMIS + Bluewire data so the
+// reviewer only does real work on the human-judgment items. Thresholds mirror
+// scoringRules.ts and the RMIS policy so the checklist stays consistent.
+// ---------------------------------------------------------------------------
+
+export const AUTO_AUTO_LIABILITY_MIN = 1_000_000
+export const AUTO_CARGO_MIN = 100_000
+export const AUTO_AUTHORITY_MIN_DAYS = 365
+export const AUTO_GL_OCCURRENCE_PREFERRED = 1_000_000
+export const AUTO_GL_AGGREGATE_PREFERRED = 2_000_000
+
+export interface ChecklistAutoInputs {
+  safetyRating?: string | null
+  insurance?: InsuranceRecord | null
+  score?: ScoreRecord | null
+}
+
+interface StepEval {
+  status: AutoStatus
+  evidence: string
+}
+
+function isActiveStatus(s: string | null | undefined): boolean {
+  if (!s) return false
+  const v = s.trim().toLowerCase()
+  return v === 'active' || v === 'valid' || v === 'a'
+}
+
+function computeAutoEvaluations(
+  inputs: ChecklistAutoInputs
+): Record<string, StepEval> {
+  const ins = inputs.insurance ?? null
+  const score = inputs.score ?? null
+  const out: Record<string, StepEval> = {}
+
+  // Active FMCSA operating authority
+  if (ins && (ins.operating_status || ins.contract_authority_status)) {
+    const opActive = isActiveStatus(ins.operating_status)
+    const caActive =
+      ins.contract_authority_status == null ||
+      isActiveStatus(ins.contract_authority_status)
+    out.authority_active = {
+      status: opActive && caActive ? 'pass' : 'fail',
+      evidence: `Operating: ${ins.operating_status ?? '—'} · Contract authority: ${ins.contract_authority_status ?? '—'}`,
+    }
+  }
+
+  // Safety rating not Conditional / Unsatisfactory
+  if (inputs.safetyRating !== undefined) {
+    const r = (inputs.safetyRating || '').toLowerCase()
+    const bad = r === 'conditional' || r === 'unsatisfactory'
+    out.safety_rating = {
+      status: bad ? 'fail' : 'pass',
+      evidence: `Safety rating: ${inputs.safetyRating || 'Unrated'}`,
+    }
+  }
+
+  // Auto liability ≥ $1M
+  if (ins && (ins.auto_status || ins.auto_limit != null)) {
+    const ok = isActiveStatus(ins.auto_status) && (ins.auto_limit ?? 0) >= AUTO_AUTO_LIABILITY_MIN
+    out.auto_liability = {
+      status: ok ? 'pass' : 'fail',
+      evidence: `${formatCurrency(ins.auto_limit)} ${ins.auto_status ?? '—'}${ins.auto_expiration_date ? `, exp ${formatDate(ins.auto_expiration_date)}` : ''}`,
+    }
+  }
+
+  // Cargo coverage ≥ $100K
+  if (ins && (ins.cargo_status || ins.cargo_limit != null)) {
+    const ok = isActiveStatus(ins.cargo_status) && (ins.cargo_limit ?? 0) >= AUTO_CARGO_MIN
+    out.cargo_coverage = {
+      status: ok ? 'pass' : 'fail',
+      evidence: `${formatCurrency(ins.cargo_limit)} ${ins.cargo_status ?? '—'}${ins.cargo_expiration_date ? `, exp ${formatDate(ins.cargo_expiration_date)}` : ''}`,
+    }
+  }
+
+  // Overall Bluewire GAP ≥ 65
+  if (score && score.gap_score != null) {
+    out.gap_score = {
+      status: score.gap_score >= GAP_THRESHOLD ? 'pass' : 'fail',
+      evidence: `GAP score ${formatScore(score.gap_score)} (threshold ${GAP_THRESHOLD})`,
+    }
+  }
+
+  // All 5 category scores above 65
+  if (score) {
+    const failing: string[] = []
+    let anyPresent = false
+    for (const f of CATEGORY_FIELDS) {
+      const val = score[f.key as keyof ScoreRecord] as number | null | undefined
+      if (val != null) {
+        anyPresent = true
+        if (val <= CATEGORY_THRESHOLD) failing.push(`${f.label} ${formatScore(val)}`)
+      }
+    }
+    if (anyPresent) {
+      out.category_scores = {
+        status: failing.length === 0 ? 'pass' : 'fail',
+        evidence:
+          failing.length === 0
+            ? `All 5 category scores above ${CATEGORY_THRESHOLD}`
+            : `At/below ${CATEGORY_THRESHOLD}: ${failing.join(', ')}`,
+      }
+    }
+  }
+
+  // Continuous authority age ≥ 365 days
+  if (ins && ins.authority_days_active != null) {
+    const d = ins.authority_days_active
+    out.authority_age = {
+      status: d >= AUTO_AUTHORITY_MIN_DAYS ? 'pass' : 'fail',
+      evidence:
+        d >= AUTO_AUTHORITY_MIN_DAYS
+          ? `Authority active ${d} days`
+          : `Authority active ${d} days (under ${AUTO_AUTHORITY_MIN_DAYS} — documented exception required)`,
+    }
+  }
+
+  // Roadside inspection history reviewed
+  if (ins && ins.us_total_inspections != null) {
+    const n = ins.us_total_inspections
+    out.inspection_history = {
+      status: n > 0 ? 'pass' : 'fail',
+      evidence:
+        n > 0
+          ? `${n} inspections · Vehicle OOS ${ins.us_vehicle_oos_ratio ?? '—'} · Driver OOS ${ins.us_driver_oos_ratio ?? '—'}`
+          : `Zero inspections on record — exception review required`,
+    }
+  }
+
+  // Executed broker-carrier agreement on file
+  if (ins && ins.broker_carrier_agreement_on_file != null) {
+    const on = ins.broker_carrier_agreement_on_file
+    out.broker_carrier_agreement = {
+      status: on ? 'pass' : 'fail',
+      evidence: on
+        ? `On file in RMIS${ins.broker_carrier_agreement_date ? ` (${formatDate(ins.broker_carrier_agreement_date)})` : ''}`
+        : `Not on file in RMIS`,
+    }
+  }
+
+  // W-9 on file
+  if (ins && ins.w9_on_file != null) {
+    const on = ins.w9_on_file
+    out.w9 = {
+      status: on ? 'pass' : 'fail',
+      evidence: `${on ? 'W-9 on file' : 'W-9 not on file'}${ins.is_factoring ? ' · factoring — verify NOA & pay-to' : ''}`,
+    }
+  }
+
+  // General liability (optional, preferred $1M/$2M) — informational only
+  if (ins && (ins.general_occurrence_limit != null || ins.general_aggregate_limit != null)) {
+    const occ = ins.general_occurrence_limit ?? 0
+    const agg = ins.general_aggregate_limit ?? 0
+    const meetsPreferred =
+      occ >= AUTO_GL_OCCURRENCE_PREFERRED && agg >= AUTO_GL_AGGREGATE_PREFERRED
+    out.general_liability = {
+      // Optional preference — only auto-check when it clears; never auto-fail.
+      status: meetsPreferred ? 'pass' : null,
+      evidence: `${formatCurrency(ins.general_occurrence_limit)} / ${formatCurrency(ins.general_aggregate_limit)}${meetsPreferred ? '' : ' (below preferred $1M/$2M)'}`,
+    }
+  }
+
+  return out
+}
+
+/** Attach autoStatus + evidence to each step from the supplied data. */
+export function attachAutoEvidence(
+  checklist: VettingChecklist,
+  inputs: ChecklistAutoInputs
+): VettingChecklist {
+  const evals = computeAutoEvaluations(inputs)
+  return {
+    ...checklist,
+    steps: checklist.steps.map((s) => {
+      const e = evals[s.id]
+      return e ? { ...s, autoStatus: e.status, evidence: e.evidence } : s
+    }),
+  }
+}
+
+/** Pre-check the steps the data clears, marking their provenance as 'auto'. */
+export function applyAutoCompletion(
+  checklist: VettingChecklist
+): VettingChecklist {
+  return {
+    ...checklist,
+    steps: checklist.steps.map((s) =>
+      s.autoStatus === 'pass'
+        ? { ...s, completed: true, source: 'auto' }
+        : s.autoStatus === 'fail'
+          ? { ...s, completed: false, source: 'auto' }
+          : s
+    ),
+  }
+}
+
+export interface AutoSummary {
+  autoVerified: number
+  failed: number
+  manual: number
+}
+
+export function autoSummary(checklist: VettingChecklist): AutoSummary {
+  let autoVerified = 0
+  let failed = 0
+  let manual = 0
+  for (const s of checklist.steps) {
+    if (s.autoStatus === 'pass') autoVerified++
+    else if (s.autoStatus === 'fail') failed++
+    else manual++
+  }
+  return { autoVerified, failed, manual }
 }

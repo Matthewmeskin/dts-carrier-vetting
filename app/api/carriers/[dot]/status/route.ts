@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { TablesUpdate } from '@/lib/database.types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,7 +31,7 @@ export async function PATCH(
       )
     }
 
-    const updates: Record<string, any> = {}
+    const updates: TablesUpdate<'carriers'> = {}
     if (carrier_status !== undefined) updates.carrier_status = carrier_status
     if (do_not_use !== undefined) updates.do_not_use = do_not_use
     if (do_not_use_reason !== undefined) updates.do_not_use_reason = do_not_use_reason

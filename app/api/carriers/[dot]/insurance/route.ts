@@ -4,6 +4,7 @@ import { fetchExpandedCarrierXML } from '@/lib/rmisClient'
 import { parseRMISXML, ParsedRMISData } from '@/lib/rmisParser'
 import { evaluateRMIS, RMISEvaluation } from '@/lib/rmisEvaluator'
 import { sendComplianceAlert } from '@/lib/emailAlerts'
+import { TablesInsert, TablesUpdate } from '@/lib/database.types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,7 +20,7 @@ export function buildInsuranceRow(
   parsed: ParsedRMISData,
   evaluation: RMISEvaluation,
   rawResponse: string
-): Record<string, any> {
+): TablesInsert<'carrier_insurance'> {
   return {
     carrier_id: carrierId,
     dot_number: dotNumber,
@@ -119,7 +120,7 @@ export async function GET(
     if (insertError) throw insertError
 
     // Update carrier rmis_insured_id and safety_rating
-    const carrierUpdates: Record<string, any> = {}
+    const carrierUpdates: TablesUpdate<'carriers'> = {}
     if (parsed.rmisCarrierID) carrierUpdates.rmis_insured_id = parsed.rmisCarrierID
     if (parsed.safetyRating) carrierUpdates.safety_rating = parsed.safetyRating
     if (Object.keys(carrierUpdates).length > 0) {

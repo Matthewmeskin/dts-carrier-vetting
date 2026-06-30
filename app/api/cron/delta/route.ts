@@ -11,6 +11,7 @@ import { parseRMISXML } from '@/lib/rmisParser'
 import { evaluateRMIS } from '@/lib/rmisEvaluator'
 import { sendComplianceAlert } from '@/lib/emailAlerts'
 import { buildInsuranceRow } from '@/app/api/carriers/[dot]/insurance/route'
+import { TablesUpdate } from '@/lib/database.types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
           await supabaseAdmin.from('carrier_insurance').insert([row])
 
           // Update carrier safety rating + insured id
-          const carrierUpdates: Record<string, any> = {}
+          const carrierUpdates: TablesUpdate<'carriers'> = {}
           if (parsed.rmisCarrierID) carrierUpdates.rmis_insured_id = parsed.rmisCarrierID
           if (parsed.safetyRating) carrierUpdates.safety_rating = parsed.safetyRating
           if (Object.keys(carrierUpdates).length > 0) {

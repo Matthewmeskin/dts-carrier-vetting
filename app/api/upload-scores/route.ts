@@ -39,6 +39,19 @@ function num(x: any): number | null {
   return Number.isNaN(n) ? null : n
 }
 
+// Bluewire's "Release Month" often arrives as an Excel date serial (days since
+// 1899-12-30). Convert those to a readable "YYYY-MM"; pass real strings through.
+function releaseMonth(x: any): string | null {
+  if (x === undefined || x === null || x === '') return null
+  const s = String(x).trim()
+  const n = Number(s)
+  if (!Number.isNaN(n) && n > 20000 && n < 90000) {
+    const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000)
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  }
+  return s
+}
+
 interface FlaggedCarrier {
   dotNumber: string
   legalName: string
@@ -136,7 +149,7 @@ export async function POST(request: Request) {
           safety_rating_score: num(r.safetyRatingScore),
           severity_category: r.severityCategory ?? null,
           rating_label: r.safetyRating ?? null,
-          release_month: r.releaseMonth ?? null,
+          release_month: releaseMonth(r.releaseMonth),
           overall_pass: evaluation.overallPass,
           requires_revetting: evaluation.requiresRevetting,
           flagged_scores: evaluation.flaggedCategories,

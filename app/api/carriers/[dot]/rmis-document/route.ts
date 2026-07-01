@@ -48,14 +48,8 @@ export async function GET(
       )
     }
 
-    // documentID is the RMIS-format MC number (e.g. "MC981214"). Brokerware
-    // stores it without the prefix, so add it when missing.
-    const rawMc = (carrier as any).mc_number
-    const mcFormatted =
-      rawMc && /^\d+$/.test(String(rawMc).trim())
-        ? `MC${String(rawMc).trim()}`
-        : rawMc
-    const documentID = documentIDOverride || mcFormatted || dot
+    // RMIS identifies carrier documents by DOT number.
+    const documentID = documentIDOverride || dot
 
     const doc = await fetchCarrierDocument({
       insdID: String(insdID),

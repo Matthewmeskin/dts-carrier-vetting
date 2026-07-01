@@ -32,12 +32,8 @@ export async function GET(
     }
 
     const insdID = String((carrier as any).rmis_insured_id ?? '')
-    const rawMc = (carrier as any).mc_number
-    const mc =
-      rawMc && /^\d+$/.test(String(rawMc).trim())
-        ? `MC${String(rawMc).trim()}`
-        : rawMc
-    const documentID = String(mc || dot)
+    const documentID =
+      request.nextUrl.searchParams.get('documentID') || dot
 
     const q = new URLSearchParams({
       clientID,

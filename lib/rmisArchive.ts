@@ -36,12 +36,8 @@ export async function archiveCarrierDocuments(args: {
   const { dot, carrierId, insdID, parsed } = args
   const result: ArchiveResult = { archived: 0, unchanged: 0, errors: [] }
 
-  // RMIS's Document API expects the RMIS-format MC number (e.g. "MC981214"),
-  // which the Expanded Carrier response provides — not the bare Brokerware MC.
-  const documentID =
-    parsed.mcNumber && parsed.mcNumber.trim() !== ''
-      ? parsed.mcNumber.trim()
-      : args.documentID
+  // RMIS's Document API identifies the carrier's documents by DOT number.
+  const documentID = dot
 
   const candidates: Candidate[] = [
     {

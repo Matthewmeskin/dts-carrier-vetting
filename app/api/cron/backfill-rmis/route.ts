@@ -78,8 +78,7 @@ export async function POST(request: Request) {
             dot,
             carrierId: (carrier as any).id,
             insdID: String(insdID),
-            documentID: String((carrier as any).mc_number || dot),
-            parsed,
+            xml,
           })
           docsArchived += archive.archived
         }

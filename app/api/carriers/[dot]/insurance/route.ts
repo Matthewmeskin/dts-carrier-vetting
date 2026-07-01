@@ -158,8 +158,7 @@ export async function GET(
           dot,
           carrierId: (carrier as any).id,
           insdID: String(insdID),
-          documentID: String((carrier as any).mc_number || dot),
-          parsed,
+          xml,
         })
       } catch (archiveErr) {
         documents.errors.push(

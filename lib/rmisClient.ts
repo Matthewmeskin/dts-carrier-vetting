@@ -119,57 +119,32 @@ function detectContentType(buf: Buffer): { contentType: string; ext: string } {
   return { contentType: 'application/octet-stream', ext: 'bin' }
 }
 
-// A real document base64 payload is large; anything shorter is a status
-// string or error, not a file.
-const MIN_BASE64_LENGTH = 200
-
-function looksBase64(s: string): boolean {
-  const t = s.replace(/\s/g, '')
-  return t.length >= MIN_BASE64_LENGTH && /^[A-Za-z0-9+/=]+$/.test(t)
+// Map RMIS DocumentFileType to a content type + extension, falling back to a
+// magic-byte sniff.
+function mapFileType(fileType: string, buf: Buffer): { contentType: string; ext: string } {
+  const t = fileType.trim().toLowerCase()
+  if (t === 'pdf') return { contentType: 'application/pdf', ext: 'pdf' }
+  if (t === 'tif' || t === 'tiff') return { contentType: 'image/tiff', ext: 'tif' }
+  if (t === 'jpg' || t === 'jpeg') return { contentType: 'image/jpeg', ext: 'jpg' }
+  if (t === 'png') return { contentType: 'image/png', ext: 'png' }
+  if (t === 'doc' || t === 'docx')
+    return {
+      contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ext: t,
+    }
+  return detectContentType(buf)
 }
 
-// Pull the base64 payload out of the DocumentAPI response, which may be a bare
-// string or a JSON object keyed under one of several field names. Returns null
-// when the response carries no plausible document (e.g. an RMIS error or an
-// empty result), so the caller can surface a clear message.
-function extractBase64(raw: string): string | null {
-  const text = raw.trim()
-  try {
-    const parsed = JSON.parse(text)
-    if (typeof parsed === 'string') {
-      return looksBase64(parsed) ? parsed : null
-    }
-    if (parsed && typeof parsed === 'object') {
-      const KNOWN = [
-        'document', 'documentdata', 'data', 'filedata', 'file',
-        'base64', 'content', 'bytes', 'image',
-      ]
-      const entries = Object.entries(parsed as Record<string, unknown>)
-      for (const [k, v] of entries) {
-        if (typeof v === 'string' && KNOWN.includes(k.toLowerCase()) && looksBase64(v)) {
-          return v
-        }
-      }
-      // Fallback: the longest base64-looking string value.
-      let best: string | null = null
-      for (const [, v] of entries) {
-        if (typeof v === 'string' && looksBase64(v) && (!best || v.length > best.length)) {
-          best = v
-        }
-      }
-      return best
-    }
-  } catch {
-    // Not JSON — the whole body may be the base64 payload.
-    const body = text.replace(/^"|"$/g, '')
-    return looksBase64(body) ? body : null
-  }
-  return null
+function xmlTag(xml: string, tag: string): string | null {
+  const m = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i').exec(xml)
+  return m ? m[1] : null
 }
 
 /**
- * Retrieve a carrier document from RMIS (base64) and decode it to a Buffer.
- * documentType is one of Certificate | W9 | Agreement | ClientAgreement | Document.
+ * Retrieve a carrier document from RMIS and decode it. The Document API returns
+ * XML: <RMISDocumentAPI> with <DocumentInfo> metadata and a <DocumentData>
+ * base64 payload. documentType ∈ Certificate | W9 | Agreement | ClientAgreement
+ * | Document; documentID is the RMIS image/document id from the Expanded record.
  */
 export async function fetchCarrierDocument(params: {
   insdID: string
@@ -190,32 +165,32 @@ export async function fetchCarrierDocument(params: {
 
   const res = await fetch(`${DOCUMENT_URL}?${query.toString()}`, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/xml, text/xml' },
     cache: 'no-store',
   })
-
   if (!res.ok) {
     throw new Error(`RMIS Document API returned ${res.status} ${res.statusText}`)
   }
 
-  const raw = await res.text()
-  const base64 = extractBase64(raw)
-  if (!base64) {
-    // RMIS answered but there is no real document — usually the carrier has
-    // this document type not on file, or the insured ID is invalid.
-    throw new Error(
-      'RMIS returned no document for this carrier and type ' +
-        '(not on file, or the RMIS insured ID is invalid). ' +
-        `RMIS response: ${raw.slice(0, 300)}`
-    )
+  const xml = await res.text()
+  const result = xmlTag(xml, 'Result')?.trim()
+  if (result && result.toUpperCase() !== 'SUCCESS') {
+    throw new Error(`RMIS Document API: ${xmlTag(xml, 'Error')?.trim() || 'error'}`)
   }
 
+  const base64 = (xmlTag(xml, 'DocumentData') ?? '').replace(/\s+/g, '')
+  if (!base64) {
+    throw new Error(`RMIS Document API returned no document data: ${xml.slice(0, 200)}`)
+  }
   const buffer = Buffer.from(base64, 'base64')
   if (buffer.length < 100) {
     throw new Error('RMIS document payload was too small to be a valid file')
   }
-  const { contentType, ext } = detectContentType(buffer)
-  const fileName = `${params.documentType}-${params.documentID}.${ext}`
+
+  const fileType = xmlTag(xml, 'DocumentFileType')?.trim() ?? ''
+  const title = xmlTag(xml, 'DocumentTitle')?.trim() ?? ''
+  const { contentType, ext } = mapFileType(fileType, buffer)
+  const fileName = title || `${params.documentType}-${params.documentID}.${ext}`
   return { buffer, contentType, fileName }
 }
 

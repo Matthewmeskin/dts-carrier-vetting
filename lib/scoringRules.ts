@@ -1,5 +1,8 @@
+// Overall GAP score passes at 65 and over.
 export const GAP_THRESHOLD = 65
-export const CATEGORY_THRESHOLD = 65
+// Individual safety category scores only flag when they are NOT over 30
+// (i.e. 30 or below). Higher category scores are better.
+export const CATEGORY_THRESHOLD = 30
 
 export const CATEGORY_FIELDS = [
   { key: 'crash_score', label: 'Crash Score' },

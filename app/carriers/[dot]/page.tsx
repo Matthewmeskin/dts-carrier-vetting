@@ -5,11 +5,9 @@ import Link from 'next/link'
 import { CarrierDetail } from '@/lib/types'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Badge, carrierStatusTone, type BadgeTone } from '@/components/ui/Badge'
-import { Select } from '@/components/ui/Input'
 import {
   computeRevetStatus,
   isBrokerwareDisabled,
-  REVET_INTERVAL_OPTIONS,
   type RevetState,
 } from '@/lib/revet'
 import { Spinner } from '@/components/ui/Spinner'
@@ -20,16 +18,6 @@ import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
 import { DeltaTimeline } from '@/components/DeltaTimeline'
-
-const CARRIER_STATUSES = [
-  'Pending Review',
-  'Approved',
-  'Approved with Restrictions',
-  'Exception Approved',
-  'Declined',
-  'Suspended',
-  'Do Not Use',
-]
 
 const REVET_TONE: Record<RevetState, BadgeTone> = {
   overdue: 'red',
@@ -175,51 +163,19 @@ export default function CarrierDetailPage({
                 </span>
               </div>
             </div>
-            <div className="flex flex-col gap-3">
-              <div className="w-56">
-                <Select
-                  label="Carrier status"
-                  value={carrier.carrier_status || 'Pending Review'}
-                  disabled={savingStatus}
-                  onChange={(e) => updateStatus(e.target.value)}
-                >
-                  {CARRIER_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="w-56">
-                <Select
-                  label="Re-vetting cadence"
-                  value={String(carrier.revet_interval_days ?? 120)}
-                  disabled={savingStatus}
-                  onChange={(e) => updateRevetInterval(Number(e.target.value))}
-                >
-                  {REVET_INTERVAL_OPTIONS.map((d) => (
-                    <option key={d} value={d}>
-                      Every {d} days
-                    </option>
-                  ))}
-                </Select>
-                <div className="mt-1.5 flex items-center gap-2">
-                  {disabled ? (
-                    <span className="text-xs text-gray-500">
-                      Disabled — re-vetting not required
+            <div className="text-right text-sm text-gray-500">
+              {disabled ? (
+                <span>Disabled — re-vetting not required</span>
+              ) : (
+                <div className="flex flex-col items-end gap-1">
+                  <Badge tone={REVET_TONE[revet.state]}>{revet.label}</Badge>
+                  {revet.dueDate && (
+                    <span className="text-xs">
+                      due {revet.dueDate.toLocaleDateString()}
                     </span>
-                  ) : (
-                    <>
-                      <Badge tone={REVET_TONE[revet.state]}>{revet.label}</Badge>
-                      {revet.dueDate && (
-                        <span className="text-xs text-gray-500">
-                          due {revet.dueDate.toLocaleDateString()}
-                        </span>
-                      )}
-                    </>
                   )}
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </CardBody>
@@ -230,16 +186,8 @@ export default function CarrierDetailPage({
         flags={insurance?.rmis_flags}
       />
 
-      {/* Panel 2 — Authority & Identity */}
-      <AuthorityPanel insurance={insurance} />
-
-      {/* Panel 3 — Insurance */}
-      <InsurancePanel insurance={insurance} dot={dot} onRefreshed={load} />
-
-      {/* Panel 4 — Safety Scores */}
-      <ScorePanel scores={scores} />
-
-      {/* Panel 5 — Vetting Workspace */}
+      {/* Vetting Workspace — decision (status + re-vet timer + reviewers + save)
+          lives at the top of this panel, right under the carrier header. */}
       <VettingChecklist
         dot={dot}
         carrierName={carrier.legal_name}
@@ -248,7 +196,23 @@ export default function CarrierDetailPage({
         score={scores[0]}
         vettingRecords={vettingRecords}
         onSaved={load}
+        carrierStatus={carrier.carrier_status}
+        onCarrierStatusChange={updateStatus}
+        revetIntervalDays={carrier.revet_interval_days}
+        onRevetIntervalChange={updateRevetInterval}
+        revet={revet}
+        revetDisabled={disabled}
+        statusSaving={savingStatus}
       />
+
+      {/* Authority & Identity */}
+      <AuthorityPanel insurance={insurance} />
+
+      {/* Insurance */}
+      <InsurancePanel insurance={insurance} dot={dot} onRefreshed={load} />
+
+      {/* Safety Scores */}
+      <ScorePanel scores={scores} />
 
       {/* Panel 6 — Documents */}
       <CarrierDocuments dot={dot} reloadKey={docReload} />

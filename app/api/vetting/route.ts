@@ -5,13 +5,8 @@ import { getOrCreateCarrierFolder } from '@/lib/googleDrive'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const TERMINAL_STATUSES = [
-  'approved',
-  'approved_with_restrictions',
-  'exception_approved',
-  'declined',
-]
-
+// Legacy snake_case → carrier status, kept for backward compatibility with any
+// older callers. New callers send the carrier status value directly.
 const STATUS_MAP: Record<string, string> = {
   approved: 'Approved',
   approved_with_restrictions: 'Approved with Restrictions',
@@ -19,6 +14,10 @@ const STATUS_MAP: Record<string, string> = {
   declined: 'Declined',
   in_progress: 'Pending Review',
 }
+
+// A vetting is "complete" (stamps completed_at and starts the re-vet clock) for
+// any real decision — i.e. anything other than the not-yet-decided states.
+const IN_PROGRESS_STATUSES = new Set(['Pending Review', 'in_progress', '', null as any])
 
 export async function POST(request: Request) {
   try {
@@ -62,13 +61,16 @@ export async function POST(request: Request) {
       console.error('Drive error:', driveErr)
     }
 
-    const isTerminal = TERMINAL_STATUSES.includes(vettingStatus)
+    // Accept the carrier-status value directly, or map a legacy snake_case one.
+    const resolvedStatus: string | null =
+      STATUS_MAP[vettingStatus] ?? (vettingStatus ? String(vettingStatus) : null)
+    const isComplete = !!resolvedStatus && !IN_PROGRESS_STATUSES.has(resolvedStatus)
 
     const vettingRow = {
       carrier_id: (carrier as any).id,
       dot_number: String(dotNumber),
       vetting_type: vettingType ?? null,
-      vetting_status: vettingStatus ?? null,
+      vetting_status: resolvedStatus,
       checklist: checklist ?? null,
       exception_note: exceptionNote ?? null,
       internal_notes: internalNotes ?? null,
@@ -77,7 +79,7 @@ export async function POST(request: Request) {
       approval_level_required: approvalLevelRequired ?? null,
       google_drive_folder_id: folder?.id ?? null,
       google_drive_folder_url: folder?.webViewLink ?? null,
-      completed_at: isTerminal ? new Date().toISOString() : null,
+      completed_at: isComplete ? new Date().toISOString() : null,
     }
 
     const { data: vettingRecord, error: insertError } = await supabaseAdmin
@@ -87,12 +89,11 @@ export async function POST(request: Request) {
       .single()
     if (insertError) throw insertError
 
-    // Map status to carrier_status and update
-    const mappedStatus = STATUS_MAP[vettingStatus]
-    if (mappedStatus) {
+    // Keep the carrier's live status in sync with the decision.
+    if (resolvedStatus) {
       await supabaseAdmin
         .from('carriers')
-        .update({ carrier_status: mappedStatus })
+        .update({ carrier_status: resolvedStatus })
         .eq('dot_number', String(dotNumber))
     }
 

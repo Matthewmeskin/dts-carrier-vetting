@@ -16,10 +16,11 @@ import {
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Button } from './ui/Button'
 import { Input, Select, Textarea } from './ui/Input'
-import { Badge, carrierStatusTone } from './ui/Badge'
+import { Badge, carrierStatusTone, type BadgeTone } from './ui/Badge'
 import { Spinner } from './ui/Spinner'
 import { ExceptionNoteComposer } from './ExceptionNoteComposer'
 import { cn, formatDateTime } from '@/lib/utils'
+import { REVET_INTERVAL_OPTIONS, type RevetStatus, type RevetState } from '@/lib/revet'
 
 const VETTING_TYPES = [
   { value: 'initial', label: 'Initial' },
@@ -28,13 +29,23 @@ const VETTING_TYPES = [
   { value: 'exception', label: 'Exception' },
 ]
 
-const FINAL_STATUSES = [
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'approved_with_restrictions', label: 'Approved with Restrictions' },
-  { value: 'exception_approved', label: 'Exception Approved' },
-  { value: 'declined', label: 'Declined' },
+// The single carrier status = the vetting decision.
+const CARRIER_STATUSES = [
+  'Pending Review',
+  'Approved',
+  'Approved with Restrictions',
+  'Exception Approved',
+  'Declined',
+  'Suspended',
+  'Do Not Use',
 ]
+
+const REVET_TONE: Record<RevetState, BadgeTone> = {
+  overdue: 'red',
+  due_soon: 'amber',
+  ok: 'green',
+  unknown: 'gray',
+}
 
 function hydrateChecklist(
   record: VettingRecord | undefined,
@@ -73,6 +84,13 @@ export function VettingChecklist({
   score,
   vettingRecords,
   onSaved,
+  carrierStatus,
+  onCarrierStatusChange,
+  revetIntervalDays,
+  onRevetIntervalChange,
+  revet,
+  revetDisabled,
+  statusSaving,
 }: {
   dot: string
   carrierName?: string | null
@@ -81,6 +99,13 @@ export function VettingChecklist({
   score?: ScoreRecord | null
   vettingRecords: VettingRecord[]
   onSaved?: () => void | Promise<void>
+  carrierStatus: string | null
+  onCarrierStatusChange: (status: string) => void
+  revetIntervalDays: number | null
+  onRevetIntervalChange: (days: number) => void
+  revet: RevetStatus
+  revetDisabled?: boolean
+  statusSaving?: boolean
 }) {
   const [tab, setTab] = useState<'active' | 'history'>('active')
 
@@ -100,7 +125,6 @@ export function VettingChecklist({
   )
   const [reviewedBy, setReviewedBy] = useState(latest?.reviewed_by || '')
   const [approvedBy, setApprovedBy] = useState(latest?.approved_by || '')
-  const [finalStatus, setFinalStatus] = useState('in_progress')
   const [exceptionNote, setExceptionNote] = useState(
     latest?.exception_note || ''
   )
@@ -144,7 +168,8 @@ export function VettingChecklist({
         body: JSON.stringify({
           dotNumber: dot,
           vettingType,
-          vettingStatus: finalStatus,
+          // The single carrier status is the vetting decision/outcome.
+          vettingStatus: carrierStatus ?? 'Pending Review',
           checklist: { ...checklist, exceptionNote },
           exceptionNote,
           internalNotes,
@@ -199,6 +224,89 @@ export function VettingChecklist({
       <CardBody>
         {tab === 'active' ? (
           <div className="space-y-4">
+            {/* Decision bar — the single status + re-vet timer + reviewers + save */}
+            <div className="rounded-lg border border-dts-blue/30 bg-blue-50/40 p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Select
+                  label="Carrier status (vetting decision)"
+                  value={carrierStatus ?? 'Pending Review'}
+                  disabled={statusSaving}
+                  onChange={(e) => onCarrierStatusChange(e.target.value)}
+                >
+                  {CARRIER_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+                <div>
+                  <Select
+                    label="Re-vetting cadence"
+                    value={String(revetIntervalDays ?? 120)}
+                    disabled={statusSaving || revetDisabled}
+                    onChange={(e) => onRevetIntervalChange(Number(e.target.value))}
+                  >
+                    {REVET_INTERVAL_OPTIONS.map((d) => (
+                      <option key={d} value={d}>
+                        Every {d} days
+                      </option>
+                    ))}
+                  </Select>
+                  <div className="mt-1.5">
+                    {revetDisabled ? (
+                      <span className="text-xs text-gray-500">
+                        Disabled — re-vetting not required
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        <Badge tone={REVET_TONE[revet.state]}>{revet.label}</Badge>
+                        {revet.dueDate && (
+                          <span className="text-xs text-gray-500">
+                            due {revet.dueDate.toLocaleDateString()}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Input
+                  label="Reviewed by"
+                  value={reviewedBy}
+                  onChange={(e) => setReviewedBy(e.target.value)}
+                  placeholder="Name / role"
+                />
+                <Input
+                  label="Approved by"
+                  value={approvedBy}
+                  onChange={(e) => setApprovedBy(e.target.value)}
+                  placeholder="Name, title"
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-dts-blue/20 pt-3">
+                <Button onClick={save} disabled={saving}>
+                  {saving ? <Spinner size={14} className="text-white" /> : null}
+                  {saving ? 'Saving…' : 'Save vetting record'}
+                </Button>
+                {folderUrl && (
+                  <a
+                    href={folderUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-dts-blue hover:underline"
+                  >
+                    Open Drive folder →
+                  </a>
+                )}
+                {message && (
+                  <span className="text-sm text-gray-600">{message}</span>
+                )}
+                <span className="ml-auto text-xs text-gray-500">
+                  Setting a final status records the vetting &amp; starts the
+                  re-vet clock.
+                </span>
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-56">
                 <Select
@@ -379,51 +487,6 @@ export function VettingChecklist({
               placeholder="Internal notes about this vetting…"
             />
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Input
-                label="Reviewed by"
-                value={reviewedBy}
-                onChange={(e) => setReviewedBy(e.target.value)}
-                placeholder="Name / role"
-              />
-              <Input
-                label="Approved by"
-                value={approvedBy}
-                onChange={(e) => setApprovedBy(e.target.value)}
-                placeholder="Name, title"
-              />
-              <Select
-                label="Final status"
-                value={finalStatus}
-                onChange={(e) => setFinalStatus(e.target.value)}
-              >
-                {FINAL_STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
-              <Button onClick={save} disabled={saving}>
-                {saving ? <Spinner size={14} className="text-white" /> : null}
-                {saving ? 'Saving…' : 'Save vetting record'}
-              </Button>
-              {folderUrl && (
-                <a
-                  href={folderUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm font-medium text-dts-blue hover:underline"
-                >
-                  Open Drive folder →
-                </a>
-              )}
-              {message && (
-                <span className="text-sm text-gray-600">{message}</span>
-              )}
-            </div>
           </div>
         ) : (
           <HistoryTab records={vettingRecords} />

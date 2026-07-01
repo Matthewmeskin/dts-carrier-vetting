@@ -42,20 +42,35 @@ function resolveCreds(override?: RMISCredentials) {
 export async function fetchExpandedCarrierXML(params: {
   insdID?: string
   dotNumber?: string
+  mcNumber?: string
   credentials?: RMISCredentials
 }): Promise<string> {
   const { clientID, clientPassword } = resolveCreds(params.credentials)
 
-  if (!params.insdID && !params.dotNumber) {
-    throw new Error('fetchExpandedCarrierXML requires either insdID or dotNumber')
+  // Expanded Carrier API: querytype ∈ INSDID | MC_MX | DOT, with queryid as the
+  // matching identifier. Prefer the RMIS insured id, then DOT, then MC.
+  let querytype: string
+  let queryid: string
+  if (params.insdID) {
+    querytype = 'INSDID'
+    queryid = params.insdID
+  } else if (params.dotNumber) {
+    querytype = 'DOT'
+    queryid = params.dotNumber
+  } else if (params.mcNumber) {
+    querytype = 'MC_MX'
+    queryid = params.mcNumber
+  } else {
+    throw new Error('fetchExpandedCarrierXML requires insdID, dotNumber, or mcNumber')
   }
 
   const query = new URLSearchParams({
-    ClientID: clientID,
-    ClientPassword: clientPassword,
+    clientID,
+    pwd: clientPassword,
+    querytype,
+    queryid,
+    version: '13',
   })
-  if (params.insdID) query.set('InsdID', params.insdID)
-  if (params.dotNumber) query.set('DOTNumber', params.dotNumber)
 
   const res = await fetch(`${EXPANDED_URL}?${query.toString()}`, {
     method: 'GET',

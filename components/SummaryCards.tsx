@@ -6,6 +6,7 @@ export interface Metrics {
   requireRevetting: number
   hardStopsActive: number
   changesThisWeek: number
+  dueForRevet: number
 }
 
 const CARDS: {
@@ -14,6 +15,11 @@ const CARDS: {
   accent: string
 }[] = [
   { key: 'totalCarriers', label: 'Total Carriers', accent: 'text-dts-blue' },
+  {
+    key: 'dueForRevet',
+    label: 'Due for Re-vet',
+    accent: 'text-orange-600',
+  },
   {
     key: 'requireRevetting',
     label: 'Require Revetting',
@@ -35,7 +41,7 @@ export function SummaryCards({
   loading?: boolean
 }) {
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
       {CARDS.map((c) => (
         <Card key={c.key} className="px-5 py-4">
           <div className="text-xs font-medium uppercase tracking-wide text-gray-500">

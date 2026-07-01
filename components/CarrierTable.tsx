@@ -13,6 +13,21 @@ import {
 } from './ui/Badge'
 import { Table, THead, TBody, TR, TH, TD } from './ui/Table'
 import { cn, formatDate, formatScore } from '@/lib/utils'
+import { computeRevetStatus, type RevetState } from '@/lib/revet'
+import type { BadgeTone } from './ui/Badge'
+
+const ACTIVE_STATUSES = [
+  'Approved',
+  'Approved with Restrictions',
+  'Exception Approved',
+]
+
+const REVET_TONE: Record<RevetState, BadgeTone> = {
+  overdue: 'red',
+  due_soon: 'amber',
+  ok: 'green',
+  unknown: 'gray',
+}
 
 // Friendly display labels for flagged score keys/labels coming from the DB
 // (which may be raw column names like "driver_oos_score" or pre-labeled
@@ -51,8 +66,10 @@ function prettyScoreLabel(raw: string): string {
 
 type StatusFilter =
   | 'All'
+  | 'Active'
   | 'Approved'
   | 'NeedsReview'
+  | 'DueForRevet'
   | 'HardStop'
   | 'DoNotUse'
 
@@ -88,12 +105,26 @@ export function CarrierTable({
       }
       if (revettingOnly && !c.requires_revetting) return false
       switch (status) {
+        case 'Active':
+          return (
+            !c.do_not_use &&
+            c.carrier_status != null &&
+            ACTIVE_STATUSES.includes(c.carrier_status)
+          )
         case 'Approved':
           return c.carrier_status === 'Approved'
         case 'NeedsReview':
           return (
             c.carrier_status === 'Pending Review' || !!c.requires_revetting
           )
+        case 'DueForRevet': {
+          const r = computeRevetStatus(
+            c.last_reviewed,
+            c.created_at,
+            c.revet_interval_days
+          )
+          return r.state === 'overdue' || r.state === 'due_soon'
+        }
         case 'HardStop':
           return (c.hard_stops?.length ?? 0) > 0
         case 'DoNotUse':
@@ -138,8 +169,10 @@ export function CarrierTable({
             onChange={(e) => setStatus(e.target.value as StatusFilter)}
           >
             <option value="All">All</option>
+            <option value="Active">Active</option>
             <option value="Approved">Approved</option>
             <option value="NeedsReview">Needs Review</option>
+            <option value="DueForRevet">Due for Re-vet</option>
             <option value="HardStop">Hard Stop</option>
             <option value="DoNotUse">Do Not Use</option>
           </Select>
@@ -186,6 +219,7 @@ export function CarrierTable({
             <TH>RMIS</TH>
             <TH>Status</TH>
             <TH>Last Reviewed</TH>
+            <TH>Re-vet</TH>
           </TR>
         </THead>
         <TBody>
@@ -198,6 +232,11 @@ export function CarrierTable({
           )}
           {filtered.map((c) => {
             const g = gapTone(c.gap_score)
+            const rv = computeRevetStatus(
+              c.last_reviewed,
+              c.created_at,
+              c.revet_interval_days
+            )
             return (
               <TR
                 key={c.id}
@@ -271,6 +310,12 @@ export function CarrierTable({
                 </TD>
                 <TD className="whitespace-nowrap text-xs text-gray-500">
                   {c.last_reviewed ? formatDate(c.last_reviewed) : '—'}
+                </TD>
+                <TD className="whitespace-nowrap">
+                  <Badge tone={REVET_TONE[rv.state]}>{rv.label}</Badge>
+                  <div className="mt-0.5 text-[10px] text-gray-400">
+                    every {rv.intervalDays}d
+                  </div>
                 </TD>
               </TR>
             )

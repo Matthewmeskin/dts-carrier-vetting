@@ -380,6 +380,7 @@ export type Database = {
           mc_number: string | null
           power_units: number | null
           rmis_insured_id: string | null
+          revet_interval_days: number | null
           safety_rating: string | null
           state: string | null
           street: string | null
@@ -399,6 +400,7 @@ export type Database = {
           mc_number?: string | null
           power_units?: number | null
           rmis_insured_id?: string | null
+          revet_interval_days?: number | null
           safety_rating?: string | null
           state?: string | null
           street?: string | null
@@ -418,6 +420,7 @@ export type Database = {
           mc_number?: string | null
           power_units?: number | null
           rmis_insured_id?: string | null
+          revet_interval_days?: number | null
           safety_rating?: string | null
           state?: string | null
           street?: string | null

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { TablesUpdate } from '@/lib/database.types'
+import { REVET_INTERVAL_OPTIONS } from '@/lib/revet'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -22,7 +23,8 @@ export async function PATCH(
   try {
     const dot = params.dot
     const body = await request.json()
-    const { carrier_status, do_not_use, do_not_use_reason } = body ?? {}
+    const { carrier_status, do_not_use, do_not_use_reason, revet_interval_days } =
+      body ?? {}
 
     if (carrier_status !== undefined && !ALLOWED_STATUSES.includes(carrier_status)) {
       return NextResponse.json(
@@ -31,10 +33,22 @@ export async function PATCH(
       )
     }
 
+    if (
+      revet_interval_days !== undefined &&
+      !REVET_INTERVAL_OPTIONS.includes(revet_interval_days)
+    ) {
+      return NextResponse.json(
+        { error: `Invalid revet_interval_days: ${revet_interval_days}` },
+        { status: 400 }
+      )
+    }
+
     const updates: TablesUpdate<'carriers'> = {}
     if (carrier_status !== undefined) updates.carrier_status = carrier_status
     if (do_not_use !== undefined) updates.do_not_use = do_not_use
     if (do_not_use_reason !== undefined) updates.do_not_use_reason = do_not_use_reason
+    if (revet_interval_days !== undefined)
+      updates.revet_interval_days = revet_interval_days
 
     const { data, error } = await supabaseAdmin
       .from('carriers')

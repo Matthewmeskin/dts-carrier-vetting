@@ -24,6 +24,8 @@ export interface CarrierSummary {
   hard_stops: string[] | null
   insurance_fetched_at: string | null
   last_reviewed: string | null
+  revet_interval_days: number | null
+  created_at: string | null
 }
 
 export interface CarrierRecord {
@@ -42,6 +44,7 @@ export interface CarrierRecord {
   carrier_status: string | null
   do_not_use: boolean | null
   do_not_use_reason: string | null
+  revet_interval_days: number | null
   created_at: string
   updated_at: string
 }

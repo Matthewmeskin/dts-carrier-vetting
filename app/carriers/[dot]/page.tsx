@@ -4,8 +4,13 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { CarrierDetail } from '@/lib/types'
 import { Card, CardBody } from '@/components/ui/Card'
-import { Badge, carrierStatusTone } from '@/components/ui/Badge'
+import { Badge, carrierStatusTone, type BadgeTone } from '@/components/ui/Badge'
 import { Select } from '@/components/ui/Input'
+import {
+  computeRevetStatus,
+  REVET_INTERVAL_OPTIONS,
+  type RevetState,
+} from '@/lib/revet'
 import { Spinner } from '@/components/ui/Spinner'
 import { AlertBanner } from '@/components/AlertBanner'
 import { AuthorityPanel } from '@/components/AuthorityPanel'
@@ -24,6 +29,13 @@ const CARRIER_STATUSES = [
   'Suspended',
   'Do Not Use',
 ]
+
+const REVET_TONE: Record<RevetState, BadgeTone> = {
+  overdue: 'red',
+  due_soon: 'amber',
+  ok: 'green',
+  unknown: 'gray',
+}
 
 export default function CarrierDetailPage({
   params,
@@ -68,6 +80,21 @@ export default function CarrierDetailPage({
     }
   }
 
+  async function updateRevetInterval(days: number) {
+    if (!detail) return
+    setSavingStatus(true)
+    try {
+      const res = await fetch(`/api/carriers/${dot}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revet_interval_days: days }),
+      })
+      if (res.ok) await load()
+    } finally {
+      setSavingStatus(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -90,6 +117,11 @@ export default function CarrierDetailPage({
   }
 
   const { carrier, scores, insurance, vettingRecords, deltaLog } = detail
+  const revet = computeRevetStatus(
+    vettingRecords[0]?.completed_at ?? null,
+    carrier.created_at,
+    carrier.revet_interval_days
+  )
 
   return (
     <div className="space-y-5">
@@ -131,19 +163,43 @@ export default function CarrierDetailPage({
                 </span>
               </div>
             </div>
-            <div className="w-56">
-              <Select
-                label="Carrier status"
-                value={carrier.carrier_status || 'Pending Review'}
-                disabled={savingStatus}
-                onChange={(e) => updateStatus(e.target.value)}
-              >
-                {CARRIER_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </Select>
+            <div className="flex flex-col gap-3">
+              <div className="w-56">
+                <Select
+                  label="Carrier status"
+                  value={carrier.carrier_status || 'Pending Review'}
+                  disabled={savingStatus}
+                  onChange={(e) => updateStatus(e.target.value)}
+                >
+                  {CARRIER_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="w-56">
+                <Select
+                  label="Re-vetting cadence"
+                  value={String(carrier.revet_interval_days ?? 120)}
+                  disabled={savingStatus}
+                  onChange={(e) => updateRevetInterval(Number(e.target.value))}
+                >
+                  {REVET_INTERVAL_OPTIONS.map((d) => (
+                    <option key={d} value={d}>
+                      Every {d} days
+                    </option>
+                  ))}
+                </Select>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <Badge tone={REVET_TONE[revet.state]}>{revet.label}</Badge>
+                  {revet.dueDate && (
+                    <span className="text-xs text-gray-500">
+                      due {revet.dueDate.toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </CardBody>

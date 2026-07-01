@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { computeRevetStatus } from '@/lib/revet'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -49,11 +50,39 @@ export async function GET() {
       .select('id', { count: 'exact', head: true })
       .gte('detected_at', sevenDaysAgo)
 
+    // Carriers due or overdue for re-vetting (clock starts at last completed
+    // vetting, or onboarding for never-vetted carriers).
+    const { data: carriers } = await supabaseAdmin
+      .from('carriers')
+      .select('dot_number, created_at, revet_interval_days')
+
+    const { data: vetting } = await supabaseAdmin
+      .from('vetting_records')
+      .select('dot_number, completed_at')
+      .order('completed_at', { ascending: false })
+
+    const lastReviewed = new Map<string, string | null>()
+    for (const v of vetting ?? []) {
+      if (!lastReviewed.has(v.dot_number)) {
+        lastReviewed.set(v.dot_number, v.completed_at ?? null)
+      }
+    }
+
+    const dueForRevet = (carriers ?? []).filter((c) => {
+      const r = computeRevetStatus(
+        lastReviewed.get(c.dot_number) ?? null,
+        c.created_at ?? null,
+        c.revet_interval_days ?? null
+      )
+      return r.state === 'overdue' || r.state === 'due_soon'
+    }).length
+
     return NextResponse.json({
       totalCarriers: totalCarriers ?? 0,
       requireRevetting,
       hardStopsActive,
       changesThisWeek: changesThisWeek ?? 0,
+      dueForRevet,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'

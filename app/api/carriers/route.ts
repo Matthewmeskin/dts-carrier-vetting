@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { computeRevetStatus } from '@/lib/revet'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+
+const ACTIVE_STATUSES = [
+  'Approved',
+  'Approved with Restrictions',
+  'Exception Approved',
+]
 
 interface CarrierSummary {
   id: string
@@ -28,6 +35,8 @@ interface CarrierSummary {
   hard_stops: string[] | null
   insurance_fetched_at: string | null
   last_reviewed: string | null
+  revet_interval_days: number | null
+  created_at: string | null
 }
 
 function latestPerDot<T extends Record<string, any>>(rows: T[]): Record<string, T> {
@@ -44,6 +53,8 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams
     const status = params.get('status')
     const requiresRevetting = params.get('requiresRevetting') === 'true'
+    const dueForRevet = params.get('dueForRevet') === 'true'
+    const activeOnly = params.get('activeOnly') === 'true'
     const search = params.get('search')
     const limit = Number(params.get('limit')) || 500
     const offset = Number(params.get('offset')) || 0
@@ -120,6 +131,8 @@ export async function GET(request: NextRequest) {
         hard_stops: ins?.hard_stops ?? null,
         insurance_fetched_at: ins?.fetched_at ?? null,
         last_reviewed: v?.completed_at ?? null,
+        revet_interval_days: c.revet_interval_days ?? null,
+        created_at: c.created_at ?? null,
       }
     })
 
@@ -134,6 +147,22 @@ export async function GET(request: NextRequest) {
 
     if (requiresRevetting) {
       merged = merged.filter((c) => c.requires_revetting === true)
+    }
+
+    if (activeOnly) {
+      merged = merged.filter(
+        (c) =>
+          !c.do_not_use &&
+          c.carrier_status != null &&
+          ACTIVE_STATUSES.includes(c.carrier_status)
+      )
+    }
+
+    if (dueForRevet) {
+      merged = merged.filter((c) => {
+        const r = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days)
+        return r.state === 'overdue' || r.state === 'due_soon'
+      })
     }
 
     // Sort by gap_score ascending, nulls last

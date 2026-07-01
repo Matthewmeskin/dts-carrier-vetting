@@ -45,30 +45,42 @@ export async function POST(request: Request) {
     }
 
     let active = 0
+    let disabled = 0
     const byDot = new Map<string, TablesInsert<'carriers'>>()
     const skipped: TablesInsert<'brokerware_skipped_carriers'>[] = []
+    const now = new Date().toISOString()
 
     for (const c of list) {
       const status = s(c.status)
-      if (!status || status.toLowerCase() !== 'active') continue
-      active++
+      const isActive = !!status && status.toLowerCase() === 'active'
+      if (isActive) active++
+      else disabled++
+
       const dot = s(c.dot)
       if (!dot) {
-        skipped.push({
-          brokerware_carrier_id:
-            c.carrierId != null && !isNaN(Number(c.carrierId)) ? Number(c.carrierId) : null,
-          carrier_name: s(c.carrierName),
-          mc: s(c.mc),
-          scac: s(c.scac),
-          city: s(c.carrierCity),
-          state: s(c.carrierState),
-          phone: s(c.carrierPhone),
-          email: s(c.carrierContactEmail),
-          status,
-          reason: 'no_dot',
-        })
+        // Only active carriers missing a DOT need review; a disabled carrier
+        // without a DOT isn't vettable anyway.
+        if (isActive) {
+          skipped.push({
+            brokerware_carrier_id:
+              c.carrierId != null && !isNaN(Number(c.carrierId)) ? Number(c.carrierId) : null,
+            carrier_name: s(c.carrierName),
+            mc: s(c.mc),
+            scac: s(c.scac),
+            city: s(c.carrierCity),
+            state: s(c.carrierState),
+            phone: s(c.carrierPhone),
+            email: s(c.carrierContactEmail),
+            status,
+            reason: 'no_dot',
+          })
+        }
         continue
       }
+
+      // Save every carrier with a DOT — active and disabled — stamping the raw
+      // Brokerware status so disabled carriers are flagged and excluded from
+      // vetting downstream.
       byDot.set(dot, {
         dot_number: dot,
         mc_number: s(c.mc),
@@ -81,7 +93,8 @@ export async function POST(request: Request) {
         email: s(c.carrierContactEmail),
         brokerware_carrier_id:
           c.carrierId != null && !isNaN(Number(c.carrierId)) ? Number(c.carrierId) : null,
-        brokerware_synced_at: new Date().toISOString(),
+        brokerware_status: status,
+        brokerware_synced_at: now,
       })
     }
 
@@ -113,6 +126,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       received: list.length,
       active,
+      disabled,
       upserted,
       skippedNoDot: skipped.length,
     })

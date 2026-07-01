@@ -8,6 +8,7 @@ import { Badge, carrierStatusTone, type BadgeTone } from '@/components/ui/Badge'
 import { Select } from '@/components/ui/Input'
 import {
   computeRevetStatus,
+  isBrokerwareDisabled,
   REVET_INTERVAL_OPTIONS,
   type RevetState,
 } from '@/lib/revet'
@@ -124,6 +125,7 @@ export default function CarrierDetailPage({
     carrier.created_at,
     carrier.revet_interval_days
   )
+  const disabled = isBrokerwareDisabled(carrier.brokerware_status)
 
   return (
     <div className="space-y-5">
@@ -143,6 +145,14 @@ export default function CarrierDetailPage({
                 <Badge tone={carrierStatusTone(carrier.carrier_status)}>
                   {carrier.carrier_status || '—'}
                 </Badge>
+                {disabled && (
+                  <Badge tone="gray">
+                    Disabled in Brokerware
+                    {carrier.brokerware_status
+                      ? ` (${carrier.brokerware_status})`
+                      : ''}
+                  </Badge>
+                )}
                 {carrier.do_not_use && <Badge tone="red">Do Not Use</Badge>}
               </div>
               {carrier.dba_name &&
@@ -194,11 +204,19 @@ export default function CarrierDetailPage({
                   ))}
                 </Select>
                 <div className="mt-1.5 flex items-center gap-2">
-                  <Badge tone={REVET_TONE[revet.state]}>{revet.label}</Badge>
-                  {revet.dueDate && (
+                  {disabled ? (
                     <span className="text-xs text-gray-500">
-                      due {revet.dueDate.toLocaleDateString()}
+                      Disabled — re-vetting not required
                     </span>
+                  ) : (
+                    <>
+                      <Badge tone={REVET_TONE[revet.state]}>{revet.label}</Badge>
+                      {revet.dueDate && (
+                        <span className="text-xs text-gray-500">
+                          due {revet.dueDate.toLocaleDateString()}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

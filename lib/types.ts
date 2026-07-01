@@ -26,6 +26,7 @@ export interface CarrierSummary {
   last_reviewed: string | null
   revet_interval_days: number | null
   created_at: string | null
+  brokerware_status: string | null
 }
 
 export interface CarrierRecord {
@@ -48,6 +49,7 @@ export interface CarrierRecord {
   phone: string | null
   email: string | null
   brokerware_carrier_id: number | null
+  brokerware_status: string | null
   brokerware_synced_at: string | null
   created_at: string
   updated_at: string

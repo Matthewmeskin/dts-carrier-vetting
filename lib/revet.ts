@@ -10,6 +10,15 @@ export const REVET_DUE_SOON_WINDOW = 14
 
 export type RevetState = 'ok' | 'due_soon' | 'overdue' | 'unknown'
 
+/** A carrier is "disabled" when Brokerware reports a non-Active status. */
+export function isBrokerwareDisabled(status: string | null | undefined): boolean {
+  return (
+    status != null &&
+    status.trim() !== '' &&
+    status.trim().toLowerCase() !== 'active'
+  )
+}
+
 export interface RevetStatus {
   intervalDays: number
   dueDate: Date | null

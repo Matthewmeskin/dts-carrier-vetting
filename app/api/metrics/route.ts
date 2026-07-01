@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { computeRevetStatus } from '@/lib/revet'
+import { computeRevetStatus, isBrokerwareDisabled } from '@/lib/revet'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -54,7 +54,7 @@ export async function GET() {
     // vetting, or onboarding for never-vetted carriers).
     const { data: carriers } = await supabaseAdmin
       .from('carriers')
-      .select('dot_number, created_at, revet_interval_days')
+      .select('dot_number, created_at, revet_interval_days, brokerware_status')
 
     const { data: vetting } = await supabaseAdmin
       .from('vetting_records')
@@ -69,6 +69,7 @@ export async function GET() {
     }
 
     const dueForRevet = (carriers ?? []).filter((c) => {
+      if (isBrokerwareDisabled(c.brokerware_status)) return false
       const r = computeRevetStatus(
         lastReviewed.get(c.dot_number) ?? null,
         c.created_at ?? null,

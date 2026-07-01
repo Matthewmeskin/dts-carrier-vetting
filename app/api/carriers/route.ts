@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { computeRevetStatus } from '@/lib/revet'
+import { computeRevetStatus, isBrokerwareDisabled } from '@/lib/revet'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -37,6 +37,7 @@ interface CarrierSummary {
   last_reviewed: string | null
   revet_interval_days: number | null
   created_at: string | null
+  brokerware_status: string | null
 }
 
 function latestPerDot<T extends Record<string, any>>(rows: T[]): Record<string, T> {
@@ -133,6 +134,7 @@ export async function GET(request: NextRequest) {
         last_reviewed: v?.completed_at ?? null,
         revet_interval_days: c.revet_interval_days ?? null,
         created_at: c.created_at ?? null,
+        brokerware_status: c.brokerware_status ?? null,
       }
     })
 
@@ -153,6 +155,7 @@ export async function GET(request: NextRequest) {
       merged = merged.filter(
         (c) =>
           !c.do_not_use &&
+          !isBrokerwareDisabled(c.brokerware_status) &&
           c.carrier_status != null &&
           ACTIVE_STATUSES.includes(c.carrier_status)
       )
@@ -160,6 +163,7 @@ export async function GET(request: NextRequest) {
 
     if (dueForRevet) {
       merged = merged.filter((c) => {
+        if (isBrokerwareDisabled(c.brokerware_status)) return false
         const r = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days)
         return r.state === 'overdue' || r.state === 'due_soon'
       })

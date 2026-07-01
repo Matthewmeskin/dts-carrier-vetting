@@ -13,7 +13,11 @@ import {
 } from './ui/Badge'
 import { Table, THead, TBody, TR, TH, TD } from './ui/Table'
 import { cn, formatDate, formatScore } from '@/lib/utils'
-import { computeRevetStatus, type RevetState } from '@/lib/revet'
+import {
+  computeRevetStatus,
+  isBrokerwareDisabled,
+  type RevetState,
+} from '@/lib/revet'
 import type { BadgeTone } from './ui/Badge'
 
 const ACTIVE_STATUSES = [
@@ -72,6 +76,7 @@ type StatusFilter =
   | 'DueForRevet'
   | 'HardStop'
   | 'DoNotUse'
+  | 'Disabled'
 
 type SortKey = 'gap' | 'name' | 'reviewed'
 
@@ -108,9 +113,12 @@ export function CarrierTable({
         case 'Active':
           return (
             !c.do_not_use &&
+            !isBrokerwareDisabled(c.brokerware_status) &&
             c.carrier_status != null &&
             ACTIVE_STATUSES.includes(c.carrier_status)
           )
+        case 'Disabled':
+          return isBrokerwareDisabled(c.brokerware_status)
         case 'Approved':
           return c.carrier_status === 'Approved'
         case 'NeedsReview':
@@ -118,6 +126,7 @@ export function CarrierTable({
             c.carrier_status === 'Pending Review' || !!c.requires_revetting
           )
         case 'DueForRevet': {
+          if (isBrokerwareDisabled(c.brokerware_status)) return false
           const r = computeRevetStatus(
             c.last_reviewed,
             c.created_at,
@@ -175,6 +184,7 @@ export function CarrierTable({
             <option value="DueForRevet">Due for Re-vet</option>
             <option value="HardStop">Hard Stop</option>
             <option value="DoNotUse">Do Not Use</option>
+            <option value="Disabled">Disabled (Brokerware)</option>
           </Select>
         </div>
         <div className="w-44">
@@ -237,6 +247,7 @@ export function CarrierTable({
               c.created_at,
               c.revet_interval_days
             )
+            const disabled = isBrokerwareDisabled(c.brokerware_status)
             return (
               <TR
                 key={c.id}
@@ -304,18 +315,30 @@ export function CarrierTable({
                   )}
                 </TD>
                 <TD>
-                  <Badge tone={carrierStatusTone(c.carrier_status)}>
-                    {c.carrier_status ?? '—'}
-                  </Badge>
+                  {disabled ? (
+                    <Badge tone="gray">Disabled</Badge>
+                  ) : (
+                    <Badge tone={carrierStatusTone(c.carrier_status)}>
+                      {c.carrier_status ?? '—'}
+                    </Badge>
+                  )}
                 </TD>
                 <TD className="whitespace-nowrap text-xs text-gray-500">
                   {c.last_reviewed ? formatDate(c.last_reviewed) : '—'}
                 </TD>
                 <TD className="whitespace-nowrap">
-                  <Badge tone={REVET_TONE[rv.state]}>{rv.label}</Badge>
-                  <div className="mt-0.5 text-[10px] text-gray-400">
-                    every {rv.intervalDays}d
-                  </div>
+                  {disabled ? (
+                    <span className="text-xs text-gray-400">
+                      Not required
+                    </span>
+                  ) : (
+                    <>
+                      <Badge tone={REVET_TONE[rv.state]}>{rv.label}</Badge>
+                      <div className="mt-0.5 text-[10px] text-gray-400">
+                        every {rv.intervalDays}d
+                      </div>
+                    </>
+                  )}
                 </TD>
               </TR>
             )

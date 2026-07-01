@@ -155,27 +155,24 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     )
   }
 
-  // INFO — OOS ratios vs national averages (Policy Section 10)
+  // INFO — OOS ratios vs national averages (Policy Section 10). Out-of-service
+  // risk is already captured by the Bluewire GAP category scores (Driver OOS,
+  // CSA basics, etc.), so we keep these informational only and never flag on
+  // them to avoid double-counting the same signal.
   const vehicleOOS = parseFloat(data.usVehicleOOSRatio.replace('%', ''))
   const driverOOS = parseFloat(data.usDriverOOSRatio.replace('%', ''))
 
-  if (!isNaN(vehicleOOS) && vehicleOOS > VEHICLE_OOS_NATIONAL_AVG) {
-    flags.push(
-      `Vehicle OOS ratio ${data.usVehicleOOSRatio} exceeds national average of ${VEHICLE_OOS_NATIONAL_AVG}% — review inspection detail`
-    )
-  } else if (!isNaN(vehicleOOS)) {
+  if (!isNaN(vehicleOOS)) {
+    const rel = vehicleOOS > VEHICLE_OOS_NATIONAL_AVG ? 'above' : 'below'
     info.push(
-      `Vehicle OOS ratio ${data.usVehicleOOSRatio} is below national average of ${VEHICLE_OOS_NATIONAL_AVG}%`
+      `Vehicle OOS ratio ${data.usVehicleOOSRatio} is ${rel} national average of ${VEHICLE_OOS_NATIONAL_AVG}% (covered by Bluewire scores)`
     )
   }
 
-  if (!isNaN(driverOOS) && driverOOS > DRIVER_OOS_NATIONAL_AVG) {
-    flags.push(
-      `Driver OOS ratio ${data.usDriverOOSRatio} exceeds national average of ${DRIVER_OOS_NATIONAL_AVG}% — review inspection detail`
-    )
-  } else if (!isNaN(driverOOS)) {
+  if (!isNaN(driverOOS)) {
+    const rel = driverOOS > DRIVER_OOS_NATIONAL_AVG ? 'above' : 'below'
     info.push(
-      `Driver OOS ratio ${data.usDriverOOSRatio} is below national average of ${DRIVER_OOS_NATIONAL_AVG}%`
+      `Driver OOS ratio ${data.usDriverOOSRatio} is ${rel} national average of ${DRIVER_OOS_NATIONAL_AVG}% (covered by Bluewire scores)`
     )
   }
 

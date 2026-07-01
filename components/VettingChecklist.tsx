@@ -307,6 +307,23 @@ export function VettingChecklist({
               </div>
             </div>
 
+            {showException && (
+              <ExceptionNoteComposer
+                value={exceptionNote}
+                onChange={setExceptionNote}
+                carrierName={carrierName}
+                dotNumber={dot}
+              />
+            )}
+
+            <Textarea
+              label="Internal notes"
+              value={internalNotes}
+              onChange={(e) => setInternalNotes(e.target.value)}
+              rows={3}
+              placeholder="Internal notes about this vetting…"
+            />
+
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-56">
                 <Select
@@ -470,22 +487,6 @@ export function VettingChecklist({
               })}
             </div>
 
-            {showException && (
-              <ExceptionNoteComposer
-                value={exceptionNote}
-                onChange={setExceptionNote}
-                carrierName={carrierName}
-                dotNumber={dot}
-              />
-            )}
-
-            <Textarea
-              label="Internal notes"
-              value={internalNotes}
-              onChange={(e) => setInternalNotes(e.target.value)}
-              rows={3}
-              placeholder="Internal notes about this vetting…"
-            />
 
           </div>
         ) : (

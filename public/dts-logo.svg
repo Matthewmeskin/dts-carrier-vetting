@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 150" role="img" aria-label="DTS — Diversified Transportation Services">
+  <defs>
+    <linearGradient id="dtsSpeed" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8a1a2c"/>
+      <stop offset="50%" stop-color="#8a1a2c"/>
+      <stop offset="100%" stop-color="#b9b9b9"/>
+    </linearGradient>
+  </defs>
+  <text x="0" y="92" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-style="italic" font-size="112" letter-spacing="-6" fill="#8a1a2c">DTS</text>
+  <g fill="url(#dtsSpeed)">
+    <polygon points="320,24 690,24 656,40 286,40"/>
+    <polygon points="306,52 690,52 656,68 272,68"/>
+    <polygon points="292,80 690,80 656,96 258,96"/>
+  </g>
+  <text x="2" y="138" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="35" fill="#141414">Diversified Transportation Services</text>
+</svg>

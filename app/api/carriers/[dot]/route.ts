@@ -11,62 +11,72 @@ export async function GET(
   try {
     const dot = params.dot
 
-    const { data: carrier, error: carrierError } = await supabaseAdmin
-      .from('carriers')
-      .select('*')
-      .eq('dot_number', dot)
-      .single()
+    // Fetch everything the detail page needs in parallel — these are all keyed
+    // by dot_number and independent of each other.
+    const [carrierRes, scoresRes, insRes, vetRes, deltaRes] = await Promise.all([
+      supabaseAdmin.from('carriers').select('*').eq('dot_number', dot).single(),
+      supabaseAdmin
+        .from('carrier_scores')
+        .select('*')
+        .eq('dot_number', dot)
+        .order('upload_date', { ascending: false })
+        .limit(6),
+      supabaseAdmin
+        .from('carrier_insurance')
+        .select('*')
+        .eq('dot_number', dot)
+        .order('updated_at', { ascending: false })
+        .limit(1),
+      supabaseAdmin
+        .from('vetting_records')
+        .select('*')
+        .eq('dot_number', dot)
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabaseAdmin
+        .from('carrier_delta_log')
+        .select('*')
+        .eq('dot_number', dot)
+        .order('detected_at', { ascending: false })
+        .limit(30),
+    ])
 
-    if (carrierError || !carrier) {
+    const carrier = carrierRes.data
+    if (carrierRes.error || !carrier) {
       return NextResponse.json({ error: 'Carrier not found' }, { status: 404 })
     }
 
-    const { data: scores } = await supabaseAdmin
-      .from('carrier_scores')
-      .select('*')
-      .eq('dot_number', dot)
-      .order('upload_date', { ascending: false })
-      .limit(6)
+    const scores = scoresRes.data ?? []
+    const insurance =
+      insRes.data && insRes.data.length > 0 ? insRes.data[0] : null
+    const vettingRecords = vetRes.data ?? []
+    const deltaLog = deltaRes.data ?? []
 
-    const { data: insuranceRows } = await supabaseAdmin
-      .from('carrier_insurance')
-      .select('*')
-      .eq('dot_number', dot)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-
-    const insurance = insuranceRows && insuranceRows.length > 0 ? insuranceRows[0] : null
-
-    const { data: vettingRecords } = await supabaseAdmin
-      .from('vetting_records')
-      .select('*')
-      .eq('dot_number', dot)
-      .order('created_at', { ascending: false })
-      .limit(5)
-
-    const recordsWithDocs = []
-    for (const record of vettingRecords ?? []) {
-      const { data: documents } = await supabaseAdmin
+    // One query for all documents across these vetting records (no N+1 loop).
+    const recordIds = vettingRecords.map((r: any) => r.id)
+    const docsByRecord: Record<string, any[]> = {}
+    if (recordIds.length > 0) {
+      const { data: docs } = await supabaseAdmin
         .from('vetting_documents')
         .select('*')
-        .eq('vetting_record_id', (record as any).id)
+        .in('vetting_record_id', recordIds)
         .order('uploaded_at', { ascending: false })
-      recordsWithDocs.push({ ...(record as any), documents: documents ?? [] })
+      for (const d of docs ?? []) {
+        const key = (d as any).vetting_record_id
+        ;(docsByRecord[key] ??= []).push(d)
+      }
     }
-
-    const { data: deltaLog } = await supabaseAdmin
-      .from('carrier_delta_log')
-      .select('*')
-      .eq('dot_number', dot)
-      .order('detected_at', { ascending: false })
-      .limit(30)
+    const recordsWithDocs = vettingRecords.map((r: any) => ({
+      ...r,
+      documents: docsByRecord[r.id] ?? [],
+    }))
 
     return NextResponse.json({
       carrier,
-      scores: scores ?? [],
+      scores,
       insurance,
       vettingRecords: recordsWithDocs,
-      deltaLog: deltaLog ?? [],
+      deltaLog,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

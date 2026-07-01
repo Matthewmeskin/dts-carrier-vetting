@@ -17,30 +17,35 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <div className="min-h-screen flex flex-col">
-          <header className="bg-dts-maroon text-white shadow">
-            <div className="mx-auto max-w-[1400px] px-6 py-3 flex items-center justify-between">
+          <header className="bg-white border-b border-gray-200 shadow-sm">
+            <div className="mx-auto max-w-[1400px] px-6 py-2.5 flex items-center justify-between">
               <Link href="/carriers" className="flex items-center gap-3">
-                <span className="text-lg font-bold tracking-tight">DTS</span>
-                <span className="text-sm opacity-90">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/dts-logo.svg"
+                  alt="DTS — Diversified Transportation Services"
+                  className="h-10 w-auto"
+                />
+                <span className="hidden border-l border-gray-200 pl-3 text-sm font-medium text-gray-500 sm:inline">
                   Carrier Compliance Portal
                 </span>
               </Link>
-              <nav className="flex items-center gap-4 text-sm">
+              <nav className="flex items-center gap-1 text-sm">
                 <Link
                   href="/carriers"
-                  className="rounded px-3 py-1.5 hover:bg-white/10 transition"
+                  className="rounded px-3 py-1.5 text-gray-700 transition hover:bg-gray-100"
                 >
                   Carriers
                 </Link>
                 <Link
                   href="/changes"
-                  className="rounded px-3 py-1.5 hover:bg-white/10 transition"
+                  className="rounded px-3 py-1.5 text-gray-700 transition hover:bg-gray-100"
                 >
                   Changes
                 </Link>
                 <Link
                   href="/upload"
-                  className="rounded px-3 py-1.5 hover:bg-white/10 transition"
+                  className="rounded px-3 py-1.5 text-gray-700 transition hover:bg-gray-100"
                 >
                   Upload Scores
                 </Link>

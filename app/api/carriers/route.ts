@@ -78,36 +78,41 @@ export async function GET(request: NextRequest) {
     }
     // NeedsReview and HardStop are handled after merge (need related data)
 
-    const { data: carriers, error: carriersError } = await carrierQuery
-    if (carriersError) throw carriersError
+    // Fetch carriers, scores, insurance and vetting in parallel. Select only the
+    // columns the list needs — crucially NOT carrier_insurance.raw_rmis_response,
+    // which is a ~40KB XML blob per row and would balloon the payload to tens of
+    // MB across the roster. Explicit high limit avoids PostgREST's 1000-row cap
+    // silently hiding carriers as history accumulates.
+    const [carriersRes, scoresRes, insRes, vetRes] = await Promise.all([
+      carrierQuery,
+      supabaseAdmin
+        .from('carrier_scores')
+        .select(
+          'dot_number, gap_score, requires_revetting, flagged_scores, approval_level, upload_date'
+        )
+        .order('upload_date', { ascending: false })
+        .limit(100000),
+      supabaseAdmin
+        .from('carrier_insurance')
+        .select(
+          'dot_number, auto_status, cargo_status, rmis_overall_pass, rmis_is_certified, hard_stops, fetched_at, updated_at'
+        )
+        .order('updated_at', { ascending: false })
+        .limit(100000),
+      supabaseAdmin
+        .from('vetting_records')
+        .select('dot_number, completed_at')
+        .order('completed_at', { ascending: false }),
+    ])
+    if (carriersRes.error) throw carriersRes.error
+    if (scoresRes.error) throw scoresRes.error
+    if (insRes.error) throw insRes.error
+    if (vetRes.error) throw vetRes.error
 
-    // Scores ordered by upload_date desc, latest per dot. Explicit high limit so
-    // PostgREST's default 1000-row cap can't silently hide carriers as history
-    // accumulates (multiple score rows per carrier).
-    const { data: scores, error: scoresError } = await supabaseAdmin
-      .from('carrier_scores')
-      .select('*')
-      .order('upload_date', { ascending: false })
-      .limit(100000)
-    if (scoresError) throw scoresError
-    const latestScores = latestPerDot(scores ?? [])
-
-    // Insurance ordered by updated_at desc, latest per dot (same 1000-cap guard).
-    const { data: insurance, error: insError } = await supabaseAdmin
-      .from('carrier_insurance')
-      .select('*')
-      .order('updated_at', { ascending: false })
-      .limit(100000)
-    if (insError) throw insError
-    const latestInsurance = latestPerDot(insurance ?? [])
-
-    // Vetting records ordered by completed_at desc, latest completed per dot
-    const { data: vetting, error: vetError } = await supabaseAdmin
-      .from('vetting_records')
-      .select('*')
-      .order('completed_at', { ascending: false })
-    if (vetError) throw vetError
-    const latestVetting = latestPerDot(vetting ?? [])
+    const carriers = carriersRes.data
+    const latestScores = latestPerDot(scoresRes.data ?? [])
+    const latestInsurance = latestPerDot(insRes.data ?? [])
+    const latestVetting = latestPerDot(vetRes.data ?? [])
 
     let merged: CarrierSummary[] = (carriers ?? []).map((c: any) => {
       const dot = String(c.dot_number)

@@ -11,10 +11,37 @@ export const runtime = 'nodejs'
 // (active-only) list.
 export async function GET() {
   try {
-    const { data: carriers } = await supabaseAdmin
-      .from('carriers')
-      .select('dot_number, created_at, revet_interval_days, brokerware_status')
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
+    // All dashboard queries run in parallel (each selects only the columns it
+    // needs — never the raw_rmis_response blob).
+    const [carriersRes, scoresRes, insRes, changesRes, vettingRes] =
+      await Promise.all([
+        supabaseAdmin
+          .from('carriers')
+          .select('dot_number, created_at, revet_interval_days, brokerware_status'),
+        supabaseAdmin
+          .from('carrier_scores')
+          .select('dot_number, requires_revetting, upload_date')
+          .order('upload_date', { ascending: false })
+          .limit(100000),
+        supabaseAdmin
+          .from('carrier_insurance')
+          .select('dot_number, hard_stops, updated_at')
+          .order('updated_at', { ascending: false })
+          .limit(100000),
+        supabaseAdmin
+          .from('carrier_delta_log')
+          .select('dot_number, detected_at')
+          .gte('detected_at', sevenDaysAgo)
+          .limit(100000),
+        supabaseAdmin
+          .from('vetting_records')
+          .select('dot_number, completed_at')
+          .order('completed_at', { ascending: false }),
+      ])
+
+    const carriers = carriersRes.data
     // The set of active-Brokerware carriers everything else is scoped to.
     const activeDots = new Set(
       (carriers ?? [])
@@ -24,12 +51,7 @@ export async function GET() {
     const totalCarriers = activeDots.size
 
     // Latest score per carrier -> requires_revetting count (active only)
-    const { data: scores } = await supabaseAdmin
-      .from('carrier_scores')
-      .select('dot_number, requires_revetting, upload_date')
-      .order('upload_date', { ascending: false })
-      .limit(100000)
-
+    const scores = scoresRes.data
     const latestScore = new Map<string, boolean>()
     for (const s of scores ?? []) {
       if (!latestScore.has(s.dot_number)) {
@@ -42,12 +64,7 @@ export async function GET() {
     }
 
     // Latest insurance per carrier -> active hard stops (active only)
-    const { data: insurance } = await supabaseAdmin
-      .from('carrier_insurance')
-      .select('dot_number, hard_stops, updated_at')
-      .order('updated_at', { ascending: false })
-      .limit(100000)
-
+    const insurance = insRes.data
     const latestHardStops = new Map<string, string[]>()
     for (const i of insurance ?? []) {
       if (!latestHardStops.has(i.dot_number)) {
@@ -60,23 +77,13 @@ export async function GET() {
     }
 
     // Delta changes in the last 7 days (active only)
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: recentChanges } = await supabaseAdmin
-      .from('carrier_delta_log')
-      .select('dot_number, detected_at')
-      .gte('detected_at', sevenDaysAgo)
-      .limit(100000)
-    const changesThisWeek = (recentChanges ?? []).filter((c) =>
+    const changesThisWeek = (changesRes.data ?? []).filter((c) =>
       activeDots.has(c.dot_number)
     ).length
 
     // Carriers due or overdue for re-vetting (active only). The clock starts at
     // the last completed vetting, or onboarding for never-vetted carriers.
-    const { data: vetting } = await supabaseAdmin
-      .from('vetting_records')
-      .select('dot_number, completed_at')
-      .order('completed_at', { ascending: false })
-
+    const vetting = vettingRes.data
     const lastReviewed = new Map<string, string | null>()
     for (const v of vetting ?? []) {
       if (!lastReviewed.has(v.dot_number)) {

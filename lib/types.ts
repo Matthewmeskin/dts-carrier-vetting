@@ -126,7 +126,7 @@ export interface InsuranceRecord {
 
 export interface VettingDocumentRecord {
   id: string
-  vetting_record_id: string
+  vetting_record_id: string | null
   dot_number: string
   document_type: string | null
   file_name: string | null
@@ -134,8 +134,12 @@ export interface VettingDocumentRecord {
   mime_type: string | null
   google_drive_file_id: string | null
   google_drive_view_url: string | null
+  storage_bucket: string | null
+  storage_path: string | null
   uploaded_by: string | null
   uploaded_at: string
+  /** Resolved link (signed Storage URL or Drive view URL) from the documents API. */
+  url?: string | null
 }
 
 export interface VettingRecord {

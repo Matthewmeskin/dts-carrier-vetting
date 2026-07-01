@@ -12,7 +12,7 @@ import { AuthorityPanel } from '@/components/AuthorityPanel'
 import { InsurancePanel } from '@/components/InsurancePanel'
 import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
-import { DocumentUploader } from '@/components/DocumentUploader'
+import { CarrierDocuments } from '@/components/CarrierDocuments'
 import { DeltaTimeline } from '@/components/DeltaTimeline'
 
 const CARRIER_STATUSES = [
@@ -90,8 +90,6 @@ export default function CarrierDetailPage({
   }
 
   const { carrier, scores, insurance, vettingRecords, deltaLog } = detail
-  const latestVetting = vettingRecords[0]
-  const documents = latestVetting?.documents ?? []
 
   return (
     <div className="space-y-5">
@@ -177,11 +175,7 @@ export default function CarrierDetailPage({
       />
 
       {/* Panel 6 — Documents */}
-      <DocumentUploader
-        vettingRecordId={latestVetting?.id ?? null}
-        documents={documents}
-        onUploaded={load}
-      />
+      <CarrierDocuments dot={dot} />
 
       {/* Panel 7 — Change History */}
       <DeltaTimeline entries={deltaLog} />

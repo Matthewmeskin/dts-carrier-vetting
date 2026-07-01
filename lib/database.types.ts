@@ -437,6 +437,8 @@ export type Database = {
           google_drive_view_url: string | null
           id: string
           mime_type: string | null
+          storage_bucket: string | null
+          storage_path: string | null
           uploaded_at: string | null
           uploaded_by: string | null
           vetting_record_id: string | null
@@ -451,6 +453,8 @@ export type Database = {
           google_drive_view_url?: string | null
           id?: string
           mime_type?: string | null
+          storage_bucket?: string | null
+          storage_path?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           vetting_record_id?: string | null
@@ -465,6 +469,8 @@ export type Database = {
           google_drive_view_url?: string | null
           id?: string
           mime_type?: string | null
+          storage_bucket?: string | null
+          storage_path?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           vetting_record_id?: string | null

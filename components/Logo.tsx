@@ -2,19 +2,19 @@
 
 import { useState } from 'react'
 
-// Prefers the official PNG at /public/dts-logo.png. If that file isn't present
-// yet, it falls back to the SVG so the header never shows a broken image.
+// Tries the official logo (png, then uppercase .PNG) and falls back to the SVG
+// so the header never shows a broken image.
+const CANDIDATES = ['/dts-logo.png', '/dts-logo.PNG', '/dts-logo.svg']
+
 export function Logo({ className }: { className?: string }) {
-  const [src, setSrc] = useState('/dts-logo.png')
+  const [i, setI] = useState(0)
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={src}
+      src={CANDIDATES[i]}
       alt="DTS — Diversified Transportation Services"
       className={className}
-      onError={() => {
-        if (src !== '/dts-logo.svg') setSrc('/dts-logo.svg')
-      }}
+      onError={() => setI((x) => Math.min(x + 1, CANDIDATES.length - 1))}
     />
   )
 }

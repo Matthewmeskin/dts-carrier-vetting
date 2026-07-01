@@ -45,8 +45,8 @@ export async function POST(request: Request) {
     }
 
     let active = 0
-    let skippedNoDot = 0
     const byDot = new Map<string, TablesInsert<'carriers'>>()
+    const skipped: TablesInsert<'brokerware_skipped_carriers'>[] = []
 
     for (const c of list) {
       const status = s(c.status)
@@ -54,7 +54,19 @@ export async function POST(request: Request) {
       active++
       const dot = s(c.dot)
       if (!dot) {
-        skippedNoDot++
+        skipped.push({
+          brokerware_carrier_id:
+            c.carrierId != null && !isNaN(Number(c.carrierId)) ? Number(c.carrierId) : null,
+          carrier_name: s(c.carrierName),
+          mc: s(c.mc),
+          scac: s(c.scac),
+          city: s(c.carrierCity),
+          state: s(c.carrierState),
+          phone: s(c.carrierPhone),
+          email: s(c.carrierContactEmail),
+          status,
+          reason: 'no_dot',
+        })
         continue
       }
       byDot.set(dot, {
@@ -84,12 +96,40 @@ export async function POST(request: Request) {
       upserted += chunk.length
     }
 
+    // Replace the no-DOT list with this sync's results so it always reflects
+    // the latest pull.
+    await supabaseAdmin
+      .from('brokerware_skipped_carriers')
+      .delete()
+      .not('id', 'is', null)
+    for (let i = 0; i < skipped.length; i += CHUNK) {
+      const chunk = skipped.slice(i, i + CHUNK)
+      const { error } = await supabaseAdmin
+        .from('brokerware_skipped_carriers')
+        .insert(chunk)
+      if (error) throw error
+    }
+
     return NextResponse.json({
       received: list.length,
       active,
       upserted,
-      skippedNoDot,
+      skippedNoDot: skipped.length,
     })
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })
+  }
+}
+
+// GET — list the active Brokerware carriers skipped for having no DOT.
+export async function GET() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('brokerware_skipped_carriers')
+      .select('*')
+      .order('carrier_name', { ascending: true })
+    if (error) throw error
+    return NextResponse.json({ skipped: data ?? [], count: (data ?? []).length })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })
   }

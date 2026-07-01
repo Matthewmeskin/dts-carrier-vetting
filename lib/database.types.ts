@@ -44,6 +44,51 @@ export type Database = {
         }
         Relationships: []
       }
+      brokerware_skipped_carriers: {
+        Row: {
+          brokerware_carrier_id: number | null
+          carrier_name: string | null
+          city: string | null
+          email: string | null
+          id: string
+          mc: string | null
+          phone: string | null
+          reason: string | null
+          scac: string | null
+          state: string | null
+          status: string | null
+          synced_at: string | null
+        }
+        Insert: {
+          brokerware_carrier_id?: number | null
+          carrier_name?: string | null
+          city?: string | null
+          email?: string | null
+          id?: string
+          mc?: string | null
+          phone?: string | null
+          reason?: string | null
+          scac?: string | null
+          state?: string | null
+          status?: string | null
+          synced_at?: string | null
+        }
+        Update: {
+          brokerware_carrier_id?: number | null
+          carrier_name?: string | null
+          city?: string | null
+          email?: string | null
+          id?: string
+          mc?: string | null
+          phone?: string | null
+          reason?: string | null
+          scac?: string | null
+          state?: string | null
+          status?: string | null
+          synced_at?: string | null
+        }
+        Relationships: []
+      }
       carrier_delta_log: {
         Row: {
           alert_sent: boolean | null

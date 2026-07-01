@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { CarrierSummary } from '@/lib/types'
 import { SummaryCards, Metrics } from '@/components/SummaryCards'
 import { CarrierTable } from '@/components/CarrierTable'
+import { NoDotCarriers } from '@/components/NoDotCarriers'
 import { Spinner } from '@/components/ui/Spinner'
 
 export default function CarriersPage() {
@@ -52,6 +53,8 @@ export default function CarriersPage() {
       </div>
 
       <SummaryCards metrics={metrics} loading={loading} />
+
+      <NoDotCarriers />
 
       {error ? (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

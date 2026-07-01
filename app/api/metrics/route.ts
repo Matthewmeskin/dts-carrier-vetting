@@ -1,19 +1,29 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { computeRevetStatus, isBrokerwareDisabled } from '@/lib/revet'
+import { computeRevetStatus, isBrokerwareActive } from '@/lib/revet'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Dashboard summary metrics for the carrier list page.
+// Dashboard summary metrics for the carrier list page. Every count is scoped to
+// carriers Brokerware reports as Active — disabled/inactive carriers are kept in
+// the DB for history but excluded from vetting, so the dashboard matches the
+// (active-only) list.
 export async function GET() {
   try {
-    // Total carriers
-    const { count: totalCarriers } = await supabaseAdmin
+    const { data: carriers } = await supabaseAdmin
       .from('carriers')
-      .select('id', { count: 'exact', head: true })
+      .select('dot_number, created_at, revet_interval_days, brokerware_status')
 
-    // Latest score per carrier -> requires_revetting count
+    // The set of active-Brokerware carriers everything else is scoped to.
+    const activeDots = new Set(
+      (carriers ?? [])
+        .filter((c) => isBrokerwareActive(c.brokerware_status))
+        .map((c) => c.dot_number)
+    )
+    const totalCarriers = activeDots.size
+
+    // Latest score per carrier -> requires_revetting count (active only)
     const { data: scores } = await supabaseAdmin
       .from('carrier_scores')
       .select('dot_number, requires_revetting, upload_date')
@@ -26,9 +36,12 @@ export async function GET() {
         latestScore.set(s.dot_number, !!s.requires_revetting)
       }
     }
-    const requireRevetting = Array.from(latestScore.values()).filter(Boolean).length
+    let requireRevetting = 0
+    for (const [dot, needs] of Array.from(latestScore)) {
+      if (needs && activeDots.has(dot)) requireRevetting++
+    }
 
-    // Latest insurance per carrier -> active hard stops
+    // Latest insurance per carrier -> active hard stops (active only)
     const { data: insurance } = await supabaseAdmin
       .from('carrier_insurance')
       .select('dot_number, hard_stops, updated_at')
@@ -41,23 +54,24 @@ export async function GET() {
         latestHardStops.set(i.dot_number, i.hard_stops ?? [])
       }
     }
-    const hardStopsActive = Array.from(latestHardStops.values()).filter(
-      (hs) => hs && hs.length > 0
+    let hardStopsActive = 0
+    for (const [dot, hs] of Array.from(latestHardStops)) {
+      if (hs && hs.length > 0 && activeDots.has(dot)) hardStopsActive++
+    }
+
+    // Delta changes in the last 7 days (active only)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentChanges } = await supabaseAdmin
+      .from('carrier_delta_log')
+      .select('dot_number, detected_at')
+      .gte('detected_at', sevenDaysAgo)
+      .limit(100000)
+    const changesThisWeek = (recentChanges ?? []).filter((c) =>
+      activeDots.has(c.dot_number)
     ).length
 
-    // Delta changes in the last 7 days
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const { count: changesThisWeek } = await supabaseAdmin
-      .from('carrier_delta_log')
-      .select('id', { count: 'exact', head: true })
-      .gte('detected_at', sevenDaysAgo)
-
-    // Carriers due or overdue for re-vetting (clock starts at last completed
-    // vetting, or onboarding for never-vetted carriers).
-    const { data: carriers } = await supabaseAdmin
-      .from('carriers')
-      .select('dot_number, created_at, revet_interval_days, brokerware_status')
-
+    // Carriers due or overdue for re-vetting (active only). The clock starts at
+    // the last completed vetting, or onboarding for never-vetted carriers.
     const { data: vetting } = await supabaseAdmin
       .from('vetting_records')
       .select('dot_number, completed_at')
@@ -71,7 +85,7 @@ export async function GET() {
     }
 
     const dueForRevet = (carriers ?? []).filter((c) => {
-      if (isBrokerwareDisabled(c.brokerware_status)) return false
+      if (!isBrokerwareActive(c.brokerware_status)) return false
       const r = computeRevetStatus(
         lastReviewed.get(c.dot_number) ?? null,
         c.created_at ?? null,
@@ -81,10 +95,10 @@ export async function GET() {
     }).length
 
     return NextResponse.json({
-      totalCarriers: totalCarriers ?? 0,
+      totalCarriers,
       requireRevetting,
       hardStopsActive,
-      changesThisWeek: changesThisWeek ?? 0,
+      changesThisWeek,
       dueForRevet,
     })
   } catch (err) {

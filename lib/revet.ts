@@ -19,6 +19,11 @@ export function isBrokerwareDisabled(status: string | null | undefined): boolean
   )
 }
 
+/** A carrier is "active" when Brokerware explicitly reports an Active status. */
+export function isBrokerwareActive(status: string | null | undefined): boolean {
+  return !!status && status.trim().toLowerCase() === 'active'
+}
+
 export interface RevetStatus {
   intervalDays: number
   dueDate: Date | null

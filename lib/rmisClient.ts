@@ -82,7 +82,15 @@ export async function fetchExpandedCarrierXML(params: {
     throw new Error(`RMIS Expanded Carrier API returned ${res.status} ${res.statusText}`)
   }
 
-  return res.text()
+  const xml = await res.text()
+  // RMIS returns HTTP 200 with an error envelope on auth/param failures
+  // (e.g. "Password could not be validated."). Reject these so callers never
+  // parse an empty stub and store it over good data.
+  if (/<Result>\s*ERROR\s*<\/Result>/i.test(xml)) {
+    const err = /<Error>([\s\S]*?)<\/Error>/i.exec(xml)?.[1]?.trim()
+    throw new Error(`RMIS Expanded Carrier API error: ${err || 'unknown error'}`)
+  }
+  return xml
 }
 
 export type RMISDocumentType =

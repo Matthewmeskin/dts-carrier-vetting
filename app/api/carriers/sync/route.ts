@@ -13,6 +13,19 @@ function s(v: unknown): string | null {
   return t === '' ? null : t
 }
 
+// Some Brokerware entries are non-transport / placeholder accounts, not carriers
+// we vet (e.g. "(%CC Non-Transport)", "Carrier Placeholder N"). They should
+// never be treated as a vettable carrier or flagged as "missing a DOT".
+function isNonCarrier(name: string | null): boolean {
+  if (!name) return false
+  const n = name.toLowerCase()
+  return (
+    n.includes('non-transport') ||
+    n.includes('non transport') ||
+    n.includes('placeholder')
+  )
+}
+
 // Normalize the incoming payload into an array of Brokerware carrier objects.
 // Accepts a bare array, a wrapped object ({carriers|data|results}), or a single
 // carrier object.
@@ -51,6 +64,9 @@ export async function POST(request: Request) {
     const now = new Date().toISOString()
 
     for (const c of list) {
+      // Skip non-transport / placeholder accounts entirely — not vettable.
+      if (isNonCarrier(s(c.carrierName))) continue
+
       const status = s(c.status)
       const isActive = !!status && status.toLowerCase() === 'active'
       if (isActive) active++

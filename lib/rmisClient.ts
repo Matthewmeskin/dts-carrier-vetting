@@ -13,6 +13,7 @@ const CLIENT_PASSWORD = process.env.RMIS_CLIENT_PASSWORD
 
 const DELTA_URL = `${BASE_URL}/_c/std/api/DeltaAPI.aspx`
 const EXPANDED_URL = `${BASE_URL}/_c/std/api/ExpandedCarrierAPI.aspx`
+const DOCUMENT_URL = `${BASE_URL}/_c/std/api/DocumentAPI.aspx`
 
 function requireCredentials() {
   if (!CLIENT_ID || !CLIENT_PASSWORD) {
@@ -67,6 +68,105 @@ export async function fetchExpandedCarrierXML(params: {
   }
 
   return res.text()
+}
+
+export type RMISDocumentType =
+  | 'Certificate'
+  | 'W9'
+  | 'Agreement'
+  | 'ClientAgreement'
+  | 'Document'
+
+export interface RMISDocument {
+  buffer: Buffer
+  contentType: string
+  fileName: string
+}
+
+// Best-effort file-type sniff from magic bytes, since the DocumentAPI does not
+// return a content type. Most RMIS documents are PDFs.
+function detectContentType(buf: Buffer): { contentType: string; ext: string } {
+  if (buf.length >= 4 && buf.toString('ascii', 0, 4) === '%PDF')
+    return { contentType: 'application/pdf', ext: 'pdf' }
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xd8)
+    return { contentType: 'image/jpeg', ext: 'jpg' }
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47)
+    return { contentType: 'image/png', ext: 'png' }
+  if (buf.length >= 2 && buf[0] === 0x50 && buf[1] === 0x4b)
+    // PK zip container — modern Office docs (docx/xlsx). Default to docx.
+    return { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ext: 'docx' }
+  return { contentType: 'application/octet-stream', ext: 'bin' }
+}
+
+// Pull the base64 payload out of the DocumentAPI response, which may be a bare
+// string or a JSON object keyed under one of several field names.
+function extractBase64(raw: string): string {
+  const text = raw.trim()
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed === 'string') return parsed
+    if (parsed && typeof parsed === 'object') {
+      const KNOWN = [
+        'document', 'documentdata', 'data', 'filedata', 'file',
+        'base64', 'content', 'bytes', 'image',
+      ]
+      const entries = Object.entries(parsed as Record<string, unknown>)
+      // Prefer a known key, otherwise the longest string value.
+      for (const [k, v] of entries) {
+        if (typeof v === 'string' && KNOWN.includes(k.toLowerCase())) return v
+      }
+      let best = ''
+      for (const [, v] of entries) {
+        if (typeof v === 'string' && v.length > best.length) best = v
+      }
+      if (best) return best
+    }
+  } catch {
+    // Not JSON — treat the whole body as the base64 payload.
+  }
+  return text.replace(/^"|"$/g, '')
+}
+
+/**
+ * Retrieve a carrier document from RMIS (base64) and decode it to a Buffer.
+ * documentType is one of Certificate | W9 | Agreement | ClientAgreement | Document.
+ */
+export async function fetchCarrierDocument(params: {
+  insdID: string
+  documentType: RMISDocumentType
+  documentID: string
+  credentials?: RMISCredentials
+}): Promise<RMISDocument> {
+  const { clientID, clientPassword } = resolveCreds(params.credentials)
+
+  const query = new URLSearchParams({
+    clientID,
+    pwd: clientPassword,
+    documentType: params.documentType,
+    documentID: params.documentID,
+    insdID: params.insdID,
+    version: '1',
+  })
+
+  const res = await fetch(`${DOCUMENT_URL}?${query.toString()}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  })
+
+  if (!res.ok) {
+    throw new Error(`RMIS Document API returned ${res.status} ${res.statusText}`)
+  }
+
+  const base64 = extractBase64(await res.text())
+  if (!base64) {
+    throw new Error('RMIS Document API returned no document data')
+  }
+
+  const buffer = Buffer.from(base64, 'base64')
+  const { contentType, ext } = detectContentType(buffer)
+  const fileName = `${params.documentType}-${params.documentID}.${ext}`
+  return { buffer, contentType, fileName }
 }
 
 async function deltaRequest(body: Record<string, unknown>): Promise<any> {

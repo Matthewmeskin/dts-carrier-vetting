@@ -30,7 +30,30 @@ function formatBytes(bytes?: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function CarrierDocuments({ dot }: { dot: string }) {
+export interface RmisDocAvailability {
+  insuredId: string | null
+  certificate: boolean | null
+  w9: boolean | null
+  agreement: boolean | null
+}
+
+const RMIS_DOCS: {
+  type: string
+  label: string
+  flag: keyof Omit<RmisDocAvailability, 'insuredId'>
+}[] = [
+  { type: 'Certificate', label: 'Insurance Certificate (COI)', flag: 'certificate' },
+  { type: 'W9', label: 'W-9', flag: 'w9' },
+  { type: 'Agreement', label: 'Broker-Carrier Agreement', flag: 'agreement' },
+]
+
+export function CarrierDocuments({
+  dot,
+  rmis,
+}: {
+  dot: string
+  rmis?: RmisDocAvailability
+}) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [documents, setDocuments] = useState<VettingDocumentRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -165,6 +188,49 @@ export function CarrierDocuments({ dot }: { dot: string }) {
                   <Badge tone="blue">{typeLabel(d.document_type)}</Badge>
                 </a>
               ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 border-t border-gray-100 pt-4">
+          <div className="mb-2 flex items-baseline gap-2">
+            <h4 className="text-sm font-semibold text-gray-900">From RMIS</h4>
+            <span className="text-xs text-gray-400">
+              Pulled live from RMIS on demand
+            </span>
+          </div>
+          {!rmis?.insuredId ? (
+            <p className="text-sm text-gray-500">
+              No RMIS insured ID on file yet — run an RMIS insurance pull first to
+              enable document retrieval.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {RMIS_DOCS.map((d) => {
+                const onFile = !!rmis[d.flag]
+                return onFile ? (
+                  <a
+                    key={d.type}
+                    href={`/api/carriers/${dot}/rmis-document?type=${d.type}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 hover:bg-gray-50"
+                  >
+                    <span className="text-sm font-medium text-gray-900">
+                      {d.label}
+                    </span>
+                    <Badge tone="green">On file · view</Badge>
+                  </a>
+                ) : (
+                  <div
+                    key={d.type}
+                    className="flex items-center justify-between gap-3 rounded-md border border-dashed border-gray-200 px-3 py-2"
+                  >
+                    <span className="text-sm text-gray-400">{d.label}</span>
+                    <span className="text-xs text-gray-400">Not on file</span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

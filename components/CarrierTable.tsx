@@ -202,7 +202,7 @@ export function CarrierTable({
             <option value="DueForRevet">Due for Re-vet</option>
             <option value="HardStop">Hard Stop</option>
             <option value="DoNotUse">Do Not Use</option>
-            <option value="Disabled">Disabled (Brokerware)</option>
+            <option value="Disabled">Inactive / Disabled (Brokerware)</option>
           </Select>
         </div>
         <div className="w-44">
@@ -334,7 +334,9 @@ export function CarrierTable({
                 </TD>
                 <TD>
                   {disabled ? (
-                    <Badge tone="gray">Disabled</Badge>
+                    <Badge tone="gray">
+                      {c.brokerware_status || 'Disabled'} (Brokerware)
+                    </Badge>
                   ) : (
                     <Badge tone={carrierStatusTone(c.carrier_status)}>
                       {c.carrier_status ?? '—'}

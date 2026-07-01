@@ -6,6 +6,7 @@ import { CATEGORY_FIELDS, getApprovalLevelLabel, ApprovalLevel } from '@/lib/sco
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge, BadgeTone } from './ui/Badge'
 import { Table, THead, TBody, TR, TH, TD } from './ui/Table'
+import { ScoreTrend } from './ScoreTrend'
 import { cn, formatDate, formatScore } from '@/lib/utils'
 
 function approvalTone(level?: string | null): BadgeTone {
@@ -32,6 +33,11 @@ function gapColor(gap: number | null | undefined): string {
 
 export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
   const latest = scores[0]
+  const prev = scores[1]
+  const gapDelta =
+    latest?.gap_score != null && prev?.gap_score != null
+      ? latest.gap_score - prev.gap_score
+      : null
 
   return (
     <Card>
@@ -74,8 +80,19 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
                 >
                   {formatScore(latest.gap_score)}
                 </div>
-                <div className="mt-1 text-xs text-gray-400">
-                  Threshold: 65.00
+                <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
+                  <span>Threshold: 65.00</span>
+                  {gapDelta !== null && Math.abs(gapDelta) >= 0.01 && (
+                    <span
+                      className={cn(
+                        'font-semibold',
+                        gapDelta >= 0 ? 'text-green-600' : 'text-red-600'
+                      )}
+                    >
+                      {gapDelta >= 0 ? '▲' : '▼'} {formatScore(Math.abs(gapDelta))} vs
+                      last
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col gap-2">
@@ -135,6 +152,12 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
                 )
               })}
             </div>
+
+            {scores.length > 1 && (
+              <div className="mt-6">
+                <ScoreTrend scores={scores} />
+              </div>
+            )}
 
             {scores.length > 1 && (
               <div className="mt-6">

@@ -45,6 +45,10 @@ export interface CarrierRecord {
   do_not_use: boolean | null
   do_not_use_reason: string | null
   revet_interval_days: number | null
+  phone: string | null
+  email: string | null
+  brokerware_carrier_id: number | null
+  brokerware_synced_at: string | null
   created_at: string
   updated_at: string
 }

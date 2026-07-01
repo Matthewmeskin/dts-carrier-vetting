@@ -374,8 +374,12 @@ export type Database = {
       }
       carriers: {
         Row: {
+          brokerware_carrier_id: number | null
+          brokerware_synced_at: string | null
           carrier_status: string | null
           city: string | null
+          email: string | null
+          phone: string | null
           created_at: string | null
           dba_name: string | null
           do_not_use: boolean | null
@@ -394,10 +398,14 @@ export type Database = {
           zip: string | null
         }
         Insert: {
+          brokerware_carrier_id?: number | null
+          brokerware_synced_at?: string | null
           carrier_status?: string | null
           city?: string | null
           created_at?: string | null
           dba_name?: string | null
+          email?: string | null
+          phone?: string | null
           do_not_use?: boolean | null
           do_not_use_reason?: string | null
           dot_number: string
@@ -414,10 +422,14 @@ export type Database = {
           zip?: string | null
         }
         Update: {
+          brokerware_carrier_id?: number | null
+          brokerware_synced_at?: string | null
           carrier_status?: string | null
           city?: string | null
           created_at?: string | null
           dba_name?: string | null
+          email?: string | null
+          phone?: string | null
           do_not_use?: boolean | null
           do_not_use_reason?: string | null
           dot_number?: string

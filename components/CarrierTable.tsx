@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { CarrierSummary } from '@/lib/types'
 import { Card } from './ui/Card'
 import { Input, Select } from './ui/Input'
@@ -11,7 +12,6 @@ import {
   carrierStatusTone,
   coverageStatusTone,
 } from './ui/Badge'
-import { Table, THead, TBody, TR, TH, TD } from './ui/Table'
 import { cn, formatDate, formatScore } from '@/lib/utils'
 import {
   computeRevetStatus,
@@ -91,6 +91,20 @@ function gapTone(gap: number | null): { tone: string; label: string } {
   if (gap >= 65) return { tone: 'text-green-700', label: formatScore(gap) }
   if (gap >= 60) return { tone: 'text-amber-600', label: formatScore(gap) }
   return { tone: 'text-red-600', label: formatScore(gap) }
+}
+
+// Shared column widths so the (fixed) header row and the virtualized body rows
+// line up. Fixed widths sum to ~1000px; the carrier column flexes.
+const COL = {
+  carrier: 'min-w-[180px] flex-1 pr-3',
+  dot: 'w-24 shrink-0 pr-2',
+  gap: 'w-16 shrink-0 pr-2 text-right',
+  flagged: 'w-52 shrink-0 pr-2',
+  insurance: 'w-44 shrink-0 pr-2',
+  rmis: 'w-28 shrink-0 pr-2',
+  status: 'w-32 shrink-0 pr-2',
+  reviewed: 'w-28 shrink-0 pr-2',
+  revet: 'w-28 shrink-0',
 }
 
 export function CarrierTable({
@@ -177,6 +191,16 @@ export function CarrierTable({
     return rows
   }, [carriers, search, status, revettingOnly, sort, hasBrokerwareData])
 
+  // Virtualize the rows so only what's on screen is rendered — smooth scrolling
+  // even with the full 700+ carrier roster.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 68,
+    overscan: 12,
+  })
+
   return (
     <Card>
       <div className="flex flex-wrap items-end gap-3 border-b border-gray-100 px-5 py-4">
@@ -236,135 +260,155 @@ export function CarrierTable({
         </div>
       </div>
 
-      <Table>
-        <THead>
-          <TR className="hover:bg-transparent">
-            <TH>Carrier</TH>
-            <TH>DOT</TH>
-            <TH className="text-right">GAP</TH>
-            <TH>Flagged Scores</TH>
-            <TH>Insurance</TH>
-            <TH>RMIS</TH>
-            <TH>Status</TH>
-            <TH>Last Reviewed</TH>
-            <TH>Re-vet</TH>
-          </TR>
-        </THead>
-        <TBody>
-          {filtered.length === 0 && (
-            <TR className="hover:bg-transparent">
-              <TD className="py-8 text-center text-gray-400" >
-                <span className="block">No carriers match the current filters.</span>
-              </TD>
-            </TR>
-          )}
-          {filtered.map((c) => {
-            const g = gapTone(c.gap_score)
-            const rv = computeRevetStatus(
-              c.last_reviewed,
-              c.created_at,
-              c.revet_interval_days
-            )
-            const disabled = isBrokerwareDisabled(c.brokerware_status)
-            return (
-              <TR
-                key={c.id}
-                className="cursor-pointer"
-                onClick={() => router.push(`/carriers/${c.dot_number}`)}
+      <div className="overflow-x-auto">
+        <div className="min-w-[1180px]">
+          {/* Header row */}
+          <div className="flex items-center border-b border-gray-100 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <div className={COL.carrier}>Carrier</div>
+            <div className={COL.dot}>DOT</div>
+            <div className={COL.gap}>GAP</div>
+            <div className={COL.flagged}>Flagged Scores</div>
+            <div className={COL.insurance}>Insurance</div>
+            <div className={COL.rmis}>RMIS</div>
+            <div className={COL.status}>Status</div>
+            <div className={COL.reviewed}>Last Reviewed</div>
+            <div className={COL.revet}>Re-vet</div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-gray-400">
+              No carriers match the current filters.
+            </div>
+          ) : (
+            <div ref={scrollRef} className="max-h-[70vh] overflow-y-auto">
+              <div
+                style={{
+                  height: rowVirtualizer.getTotalSize(),
+                  position: 'relative',
+                  width: '100%',
+                }}
               >
-                <TD>
-                  <Link
-                    href={`/carriers/${c.dot_number}`}
-                    className="font-medium text-gray-900 hover:text-dts-blue hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {c.legal_name ?? `DOT ${c.dot_number}`}
-                  </Link>
-                  {c.dba_name && c.dba_name !== c.legal_name && (
-                    <div className="text-xs text-gray-500">
-                      dba {c.dba_name}
-                    </div>
-                  )}
-                  <div className="text-xs text-gray-400">
-                    {[c.city, c.state].filter(Boolean).join(', ')}
-                  </div>
-                </TD>
-                <TD className="whitespace-nowrap text-gray-600">
-                  {c.dot_number}
-                </TD>
-                <TD className={cn('text-right text-base font-bold', g.tone)}>
-                  {g.label}
-                </TD>
-                <TD>
-                  {c.flagged_scores && c.flagged_scores.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {c.flagged_scores.map((f) => (
-                        <Badge key={f} tone="amber">
-                          {prettyScoreLabel(f)}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-gray-400">None</span>
-                  )}
-                </TD>
-                <TD>
-                  {(c.hard_stops?.length ?? 0) > 0 ? (
-                    <Badge tone="red">{c.hard_stops!.length} hard stop(s)</Badge>
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      <Badge tone={coverageStatusTone(c.auto_status)}>
-                        Auto: {c.auto_status ?? '—'}
-                      </Badge>
-                      <Badge tone={coverageStatusTone(c.cargo_status)}>
-                        Cargo: {c.cargo_status ?? '—'}
-                      </Badge>
-                    </div>
-                  )}
-                </TD>
-                <TD>
-                  {c.rmis_is_certified === null ||
-                  c.rmis_is_certified === undefined ? (
-                    <span className="text-xs text-gray-400">—</span>
-                  ) : c.rmis_is_certified ? (
-                    <Badge tone="green">Certified</Badge>
-                  ) : (
-                    <Badge tone="gray">Not certified</Badge>
-                  )}
-                </TD>
-                <TD>
-                  {disabled ? (
-                    <Badge tone="gray">
-                      {c.brokerware_status || 'Disabled'} (Brokerware)
-                    </Badge>
-                  ) : (
-                    <Badge tone={carrierStatusTone(c.carrier_status)}>
-                      {c.carrier_status ?? '—'}
-                    </Badge>
-                  )}
-                </TD>
-                <TD className="whitespace-nowrap text-xs text-gray-500">
-                  {c.last_reviewed ? formatDate(c.last_reviewed) : '—'}
-                </TD>
-                <TD className="whitespace-nowrap">
-                  {disabled ? (
-                    <span className="text-xs text-gray-400">
-                      Not required
-                    </span>
-                  ) : (
-                    <>
-                      <Badge tone={REVET_TONE[rv.state]}>{rv.label}</Badge>
-                      <div className="mt-0.5 text-[10px] text-gray-400">
-                        every {rv.intervalDays}d
+                {rowVirtualizer.getVirtualItems().map((vi) => {
+                  const c = filtered[vi.index]
+                  const g = gapTone(c.gap_score)
+                  const rv = computeRevetStatus(
+                    c.last_reviewed,
+                    c.created_at,
+                    c.revet_interval_days
+                  )
+                  const disabled = isBrokerwareDisabled(c.brokerware_status)
+                  return (
+                    <div
+                      key={c.id}
+                      data-index={vi.index}
+                      ref={rowVirtualizer.measureElement}
+                      onClick={() => router.push(`/carriers/${c.dot_number}`)}
+                      className="absolute left-0 top-0 flex w-full cursor-pointer items-start border-b border-gray-100 px-5 py-3 text-sm hover:bg-gray-50"
+                      style={{ transform: `translateY(${vi.start}px)` }}
+                    >
+                      <div className={COL.carrier}>
+                        <Link
+                          href={`/carriers/${c.dot_number}`}
+                          className="font-medium text-gray-900 hover:text-dts-blue hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {c.legal_name ?? `DOT ${c.dot_number}`}
+                        </Link>
+                        {c.dba_name && c.dba_name !== c.legal_name && (
+                          <div className="text-xs text-gray-500">
+                            dba {c.dba_name}
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-400">
+                          {[c.city, c.state].filter(Boolean).join(', ')}
+                        </div>
                       </div>
-                    </>
-                  )}
-                </TD>
-              </TR>
-            )
-          })}
-        </TBody>
-      </Table>
+                      <div className={cn(COL.dot, 'whitespace-nowrap text-gray-600')}>
+                        {c.dot_number}
+                      </div>
+                      <div className={cn(COL.gap, 'text-base font-bold', g.tone)}>
+                        {g.label}
+                      </div>
+                      <div className={COL.flagged}>
+                        {c.flagged_scores && c.flagged_scores.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {c.flagged_scores.map((f) => (
+                              <Badge key={f} tone="amber">
+                                {prettyScoreLabel(f)}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">None</span>
+                        )}
+                      </div>
+                      <div className={COL.insurance}>
+                        {(c.hard_stops?.length ?? 0) > 0 ? (
+                          <Badge tone="red">
+                            {c.hard_stops!.length} hard stop(s)
+                          </Badge>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            <Badge tone={coverageStatusTone(c.auto_status)}>
+                              Auto: {c.auto_status ?? '—'}
+                            </Badge>
+                            <Badge tone={coverageStatusTone(c.cargo_status)}>
+                              Cargo: {c.cargo_status ?? '—'}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                      <div className={COL.rmis}>
+                        {c.rmis_is_certified === null ||
+                        c.rmis_is_certified === undefined ? (
+                          <span className="text-xs text-gray-400">—</span>
+                        ) : c.rmis_is_certified ? (
+                          <Badge tone="green">Certified</Badge>
+                        ) : (
+                          <Badge tone="gray">Not certified</Badge>
+                        )}
+                      </div>
+                      <div className={COL.status}>
+                        {disabled ? (
+                          <Badge tone="gray">
+                            {c.brokerware_status || 'Disabled'} (Brokerware)
+                          </Badge>
+                        ) : (
+                          <Badge tone={carrierStatusTone(c.carrier_status)}>
+                            {c.carrier_status ?? '—'}
+                          </Badge>
+                        )}
+                      </div>
+                      <div
+                        className={cn(
+                          COL.reviewed,
+                          'whitespace-nowrap text-xs text-gray-500'
+                        )}
+                      >
+                        {c.last_reviewed ? formatDate(c.last_reviewed) : '—'}
+                      </div>
+                      <div className={cn(COL.revet, 'whitespace-nowrap')}>
+                        {disabled ? (
+                          <span className="text-xs text-gray-400">
+                            Not required
+                          </span>
+                        ) : (
+                          <>
+                            <Badge tone={REVET_TONE[rv.state]}>{rv.label}</Badge>
+                            <div className="mt-0.5 text-[10px] text-gray-400">
+                              every {rv.intervalDays}d
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </Card>
   )
 }

@@ -138,11 +138,14 @@ export async function POST(request: Request) {
 
       const evaluation = evaluateScores({
         gap_score: num(r.gapScore) ?? 0,
-        crash_score: num(r.crashScore) ?? 0,
-        violation_score: num(r.violationScore) ?? 0,
-        csa_basics_score: num(r.csaBasicsScore) ?? 0,
-        driver_oos_score: num(r.driverOosScore) ?? 0,
-        critical_acute_violation_score: num(r.criticalAcuteScore) ?? 0,
+        crash_score: num(r.crashScore),
+        violation_score: num(r.violationScore),
+        csa_basics_score: num(r.csaBasicsScore),
+        driver_oos_score: num(r.driverOosScore),
+        critical_acute_violation_score: num(r.criticalAcuteScore),
+        new_entrant_score: num(r.newEntrantScore),
+        mcs_150_score: num(r.mcs150Score),
+        safety_rating_score: num(r.safetyRatingScore),
       })
 
       scoreRows.push({

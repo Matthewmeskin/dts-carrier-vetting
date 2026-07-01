@@ -1,6 +1,12 @@
 import type { InsuranceRecord, ScoreRecord } from './types'
 import { formatCurrency, formatDate, formatScore, daysSince } from './utils'
-import { CATEGORY_FIELDS, CATEGORY_THRESHOLD, GAP_THRESHOLD } from './scoringRules'
+import {
+  GATING_FIELDS,
+  scoreFieldPasses,
+  MIN_30_THRESHOLD,
+  PERFECT_SCORE,
+  GAP_THRESHOLD,
+} from './scoringRules'
 
 export type AutoStatus = 'pass' | 'fail' | null
 
@@ -144,8 +150,8 @@ export function createDefaultChecklist(): VettingChecklist {
       {
         id: 'category_scores',
         category: 'assessment',
-        label: 'Confirmed all 5 safety category scores are above 30',
-        description: 'Crash Score, Violation Score, CSA Basics Score, Driver OOS Score, and Critical Acute Violation Score must each individually be above 30. Any score at or below 30 requires additional vetting on the detail.',
+        label: 'Confirmed safety category scores meet thresholds',
+        description: 'Crash, Violation, CSA Basics, and Driver OOS must be at or above 30. Critical/Acute Violation, New Entrant, MCS-150, and Safety Rating must be 100. Judicial Hellholes is not considered. Any failing score requires additional vetting.',
         policyRef: 'Section 9.3',
         required: true,
         completed: false,
@@ -349,15 +355,17 @@ function computeAutoEvaluations(
     }
   }
 
-  // All 5 category scores above 65
+  // Category scores meet their thresholds (≥30 for Crash/Violation/CSA/Driver
+  // OOS, =100 for Critical-Acute/New Entrant/MCS-150/Safety Rating).
   if (score) {
     const failing: string[] = []
     let anyPresent = false
-    for (const f of CATEGORY_FIELDS) {
+    for (const f of GATING_FIELDS) {
       const val = score[f.key as keyof ScoreRecord] as number | null | undefined
-      if (val != null) {
-        anyPresent = true
-        if (val <= CATEGORY_THRESHOLD) failing.push(`${f.label} ${formatScore(val)}`)
+      if (val == null) continue
+      anyPresent = true
+      if (scoreFieldPasses(f.key, val) === false) {
+        failing.push(`${f.label} ${formatScore(val)}`)
       }
     }
     if (anyPresent) {
@@ -365,8 +373,8 @@ function computeAutoEvaluations(
         status: failing.length === 0 ? 'pass' : 'fail',
         evidence:
           failing.length === 0
-            ? `All 5 category scores above ${CATEGORY_THRESHOLD}`
-            : `At/below ${CATEGORY_THRESHOLD}: ${failing.join(', ')}`,
+            ? `All category scores meet thresholds (≥${MIN_30_THRESHOLD} / =${PERFECT_SCORE})`
+            : `Failing: ${failing.join(', ')}`,
       }
     }
   }

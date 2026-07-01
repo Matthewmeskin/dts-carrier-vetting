@@ -1,16 +1,51 @@
 // Overall GAP score passes at 65 and over.
 export const GAP_THRESHOLD = 65
-// Individual safety category scores only flag when they are NOT over 30
-// (i.e. 30 or below). Higher category scores are better.
-export const CATEGORY_THRESHOLD = 30
+// "At or above 30" categories.
+export const MIN_30_THRESHOLD = 30
+// "Must be a perfect 100" scores.
+export const PERFECT_SCORE = 100
 
-export const CATEGORY_FIELDS = [
-  { key: 'crash_score', label: 'Crash Score' },
-  { key: 'violation_score', label: 'Violation Score' },
-  { key: 'csa_basics_score', label: 'CSA Basics Score' },
-  { key: 'driver_oos_score', label: 'Driver OOS Score' },
-  { key: 'critical_acute_violation_score', label: 'Critical Acute Violation Score' },
-] as const
+export type ScoreRequirement = 'min30' | 'perfect' | 'ignored'
+
+export interface ScoreFieldDef {
+  key: string
+  label: string
+  requirement: ScoreRequirement
+}
+
+// The full set of component scores and how each one gates approval:
+//  - min30:   must be >= 30 (Crash, Violation, CSA Basics, Driver OOS)
+//  - perfect: must be 100   (Critical/Acute Violation, New Entrant, MCS-150, Safety Rating)
+//  - ignored: shown for context only, never gates (Judicial Hellholes)
+export const SCORE_FIELDS: ScoreFieldDef[] = [
+  { key: 'crash_score', label: 'Crash Score', requirement: 'min30' },
+  { key: 'violation_score', label: 'Violation Score', requirement: 'min30' },
+  { key: 'csa_basics_score', label: 'CSA Basics Score', requirement: 'min30' },
+  { key: 'driver_oos_score', label: 'Driver OOS Score', requirement: 'min30' },
+  { key: 'critical_acute_violation_score', label: 'Critical/Acute Violation Score', requirement: 'perfect' },
+  { key: 'new_entrant_score', label: 'New Entrant Score', requirement: 'perfect' },
+  { key: 'mcs_150_score', label: 'MCS-150 Score', requirement: 'perfect' },
+  { key: 'safety_rating_score', label: 'Safety Rating Score', requirement: 'perfect' },
+  { key: 'judicial_hellholes_score', label: 'Judicial Hellholes Score', requirement: 'ignored' },
+]
+
+// Scores that actually gate approval (everything except the ignored ones).
+export const GATING_FIELDS = SCORE_FIELDS.filter((f) => f.requirement !== 'ignored')
+
+/**
+ * Whether a single score value satisfies its requirement.
+ * Returns null when the score isn't present or the field is ignored.
+ */
+export function scoreFieldPasses(
+  key: string,
+  val: number | null | undefined
+): boolean | null {
+  if (val === null || val === undefined) return null
+  const def = SCORE_FIELDS.find((f) => f.key === key)
+  if (!def || def.requirement === 'ignored') return null
+  if (def.requirement === 'perfect') return val >= PERFECT_SCORE
+  return val >= MIN_30_THRESHOLD
+}
 
 export type ApprovalLevel =
   | 'auto_clear'
@@ -27,15 +62,16 @@ export interface ScoreEvaluation {
   summary: string
 }
 
-export function evaluateScores(scores: Record<string, number>): ScoreEvaluation {
+export function evaluateScores(
+  scores: Record<string, number | null | undefined>
+): ScoreEvaluation {
   const gapScore = scores.gap_score ?? 0
   const flaggedCategories: string[] = []
 
-  for (const field of CATEGORY_FIELDS) {
-    const val = scores[field.key]
-    if (val !== undefined && val !== null && val <= CATEGORY_THRESHOLD) {
-      flaggedCategories.push(field.label)
-    }
+  for (const f of GATING_FIELDS) {
+    const val = scores[f.key]
+    if (val === undefined || val === null) continue
+    if (scoreFieldPasses(f.key, val) === false) flaggedCategories.push(f.label)
   }
 
   const gapPasses = gapScore >= GAP_THRESHOLD

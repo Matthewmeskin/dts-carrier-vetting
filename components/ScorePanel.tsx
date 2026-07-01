@@ -3,7 +3,10 @@
 import Link from 'next/link'
 import { ScoreRecord } from '@/lib/types'
 import {
-  CATEGORY_THRESHOLD,
+  SCORE_FIELDS,
+  scoreFieldPasses,
+  MIN_30_THRESHOLD,
+  PERFECT_SCORE,
   getApprovalLevelLabel,
   ApprovalLevel,
 } from '@/lib/scoringRules'
@@ -35,24 +38,24 @@ function gapColor(gap: number | null | undefined): string {
   return 'text-red-600'
 }
 
-// All 9 GAP component scores. The first 5 (`counted`) are the safety categories
-// that drive the flag rule (must be above CATEGORY_THRESHOLD); the last 4 are
-// shown for context and don't gate approval.
-const ALL_SCORE_FIELDS: {
-  key: keyof ScoreRecord
-  label: string
-  counted: boolean
-}[] = [
-  { key: 'crash_score', label: 'Crash', counted: true },
-  { key: 'violation_score', label: 'Violation', counted: true },
-  { key: 'csa_basics_score', label: 'CSA Basics', counted: true },
-  { key: 'driver_oos_score', label: 'Driver OOS', counted: true },
-  { key: 'critical_acute_violation_score', label: 'Critical/Acute Violation', counted: true },
-  { key: 'new_entrant_score', label: 'New Entrant', counted: false },
-  { key: 'mcs_150_score', label: 'MCS-150', counted: false },
-  { key: 'judicial_hellholes_score', label: 'Judicial Hellholes', counted: false },
-  { key: 'safety_rating_score', label: 'Safety Rating', counted: false },
-]
+// Short display labels (the full labels used for flagging live in scoringRules).
+const SHORT_LABEL: Record<string, string> = {
+  crash_score: 'Crash',
+  violation_score: 'Violation',
+  csa_basics_score: 'CSA Basics',
+  driver_oos_score: 'Driver OOS',
+  critical_acute_violation_score: 'Critical/Acute Violation',
+  new_entrant_score: 'New Entrant',
+  mcs_150_score: 'MCS-150',
+  safety_rating_score: 'Safety Rating',
+  judicial_hellholes_score: 'Judicial Hellholes',
+}
+
+function requirementNote(req: string): string {
+  if (req === 'min30') return `≥ ${MIN_30_THRESHOLD}`
+  if (req === 'perfect') return `= ${PERFECT_SCORE}`
+  return 'not considered'
+}
 
 export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
   const latest = scores[0]
@@ -140,13 +143,12 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {ALL_SCORE_FIELDS.map((f) => {
-                const val = latest[f.key] as number | null
-                const has = val !== null && val !== undefined
-                // Only the 5 safety categories gate approval (threshold 30);
-                // the other 4 are contextual and shown neutrally.
-                const pass = has && val > CATEGORY_THRESHOLD
-                const tone = !f.counted
+              {SCORE_FIELDS.map((f) => {
+                const val = latest[f.key as keyof ScoreRecord] as number | null
+                const ignored = f.requirement === 'ignored'
+                // null = not present or not considered; true/false = pass/fail.
+                const pass = scoreFieldPasses(f.key, val)
+                const tone = ignored
                   ? 'border-gray-200 bg-gray-50'
                   : pass
                     ? 'border-green-200 bg-green-50'
@@ -161,18 +163,16 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
                   >
                     <div>
                       <div className="text-xs font-medium text-gray-700">
-                        {f.label}
-                        {!f.counted && (
-                          <span className="ml-1 text-[10px] font-normal text-gray-400">
-                            info
-                          </span>
-                        )}
+                        {SHORT_LABEL[f.key] ?? f.label}
+                        <span className="ml-1 text-[10px] font-normal text-gray-400">
+                          {requirementNote(f.requirement)}
+                        </span>
                       </div>
                       <div className="text-lg font-bold text-gray-900">
                         {formatScore(val)}
                       </div>
                     </div>
-                    {f.counted && (
+                    {!ignored && (
                       <span
                         className={cn(
                           'text-lg font-bold',
@@ -187,9 +187,10 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
               })}
             </div>
             <p className="mt-2 text-xs text-gray-400">
-              ✓/✕ reflects the 5 safety categories that gate approval (must be
-              above {CATEGORY_THRESHOLD}). New Entrant, MCS-150, Judicial
-              Hellholes, and Safety Rating are shown for context.
+              Crash, Violation, CSA Basics, and Driver OOS must be ≥{' '}
+              {MIN_30_THRESHOLD}. Critical/Acute Violation, New Entrant, MCS-150,
+              and Safety Rating must be {PERFECT_SCORE}. Judicial Hellholes is not
+              considered.
             </p>
 
             {scores.length > 1 && (

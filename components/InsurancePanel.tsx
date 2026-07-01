@@ -111,10 +111,12 @@ export function InsurancePanel({
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string[] | null>(null)
   const [showInfo, setShowInfo] = useState(false)
+  const [docMsg, setDocMsg] = useState<string | null>(null)
 
   async function refresh() {
     setRefreshing(true)
     setError(null)
+    setDocMsg(null)
     try {
       const res = await fetch(`/api/carriers/${dot}/insurance`, {
         cache: 'no-store',
@@ -122,6 +124,16 @@ export function InsurancePanel({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Refresh failed')
       if (data?.evaluation?.info) setInfo(data.evaluation.info)
+      const d = data?.documents
+      if (d) {
+        if (d.archived > 0) {
+          setDocMsg(
+            `Archived ${d.archived} new document version(s); ${d.unchanged} unchanged.`
+          )
+        } else if (d.unchanged > 0) {
+          setDocMsg(`Documents up to date (${d.unchanged} unchanged).`)
+        }
+      }
       await onRefreshed?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Refresh failed')
@@ -185,7 +197,7 @@ export function InsurancePanel({
             disabled={refreshing}
           >
             {refreshing ? <Spinner size={14} /> : null}
-            {refreshing ? 'Refreshing…' : 'Refresh RMIS'}
+            {refreshing ? 'Refreshing…' : 'Refresh from RMIS'}
           </Button>
         }
       />
@@ -193,6 +205,11 @@ export function InsurancePanel({
         {error && (
           <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
+          </div>
+        )}
+        {docMsg && (
+          <div className="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+            {docMsg}
           </div>
         )}
 

@@ -47,6 +47,7 @@ export default function CarrierDetailPage({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [savingStatus, setSavingStatus] = useState(false)
+  const [docReload, setDocReload] = useState(0)
 
   const load = useCallback(async () => {
     try {
@@ -54,6 +55,7 @@ export default function CarrierDetailPage({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to load carrier')
       setDetail(data)
+      setDocReload((k) => k + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
@@ -233,6 +235,7 @@ export default function CarrierDetailPage({
       {/* Panel 6 — Documents */}
       <CarrierDocuments
         dot={dot}
+        reloadKey={docReload}
         rmis={{
           insuredId: carrier.rmis_insured_id,
           certificate: insurance?.rmis_is_certified ?? null,

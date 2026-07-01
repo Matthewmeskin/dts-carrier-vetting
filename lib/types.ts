@@ -139,6 +139,9 @@ export interface VettingDocumentRecord {
   google_drive_view_url: string | null
   storage_bucket: string | null
   storage_path: string | null
+  source: string | null
+  rmis_document_type: string | null
+  content_sha256: string | null
   uploaded_by: string | null
   uploaded_at: string
   /** Resolved link (signed Storage URL or Drive view URL) from the documents API. */

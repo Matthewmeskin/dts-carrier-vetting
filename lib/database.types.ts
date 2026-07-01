@@ -432,11 +432,14 @@ export type Database = {
       vetting_documents: {
         Row: {
           carrier_id: string | null
+          content_sha256: string | null
           document_type: string | null
           dot_number: string
           file_name: string | null
           file_size_bytes: number | null
           google_drive_file_id: string | null
+          rmis_document_type: string | null
+          source: string | null
           google_drive_view_url: string | null
           id: string
           mime_type: string | null
@@ -448,9 +451,12 @@ export type Database = {
         }
         Insert: {
           carrier_id?: string | null
+          content_sha256?: string | null
           document_type?: string | null
           dot_number: string
           file_name?: string | null
+          rmis_document_type?: string | null
+          source?: string | null
           file_size_bytes?: number | null
           google_drive_file_id?: string | null
           google_drive_view_url?: string | null

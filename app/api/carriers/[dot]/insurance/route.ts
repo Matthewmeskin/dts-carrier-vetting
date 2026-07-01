@@ -4,6 +4,7 @@ import { fetchExpandedCarrierXML } from '@/lib/rmisClient'
 import { parseRMISXML, ParsedRMISData } from '@/lib/rmisParser'
 import { evaluateRMIS, RMISEvaluation } from '@/lib/rmisEvaluator'
 import { sendComplianceAlert } from '@/lib/emailAlerts'
+import { archiveCarrierDocuments } from '@/lib/rmisArchive'
 import { TablesInsert, TablesUpdate } from '@/lib/database.types'
 
 export const dynamic = 'force-dynamic'
@@ -148,7 +149,26 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ parsed, evaluation })
+    // Snapshot RMIS documents (COI, W-9, agreement), keeping prior versions.
+    let documents = { archived: 0, unchanged: 0, errors: [] as string[] }
+    const insdID = parsed.rmisCarrierID || (carrier as any).rmis_insured_id
+    if (insdID) {
+      try {
+        documents = await archiveCarrierDocuments({
+          dot,
+          carrierId: (carrier as any).id,
+          insdID: String(insdID),
+          documentID: String((carrier as any).mc_number || dot),
+          parsed,
+        })
+      } catch (archiveErr) {
+        documents.errors.push(
+          archiveErr instanceof Error ? archiveErr.message : 'archive failed'
+        )
+      }
+    }
+
+    return NextResponse.json({ parsed, evaluation, documents })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })
   }

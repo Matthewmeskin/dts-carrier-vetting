@@ -13,6 +13,7 @@ const DOC_TYPES = [
   { value: 'broker_carrier_agreement', label: 'Broker-Carrier Agreement' },
   { value: 'w9', label: 'W-9' },
   { value: 'insurance_cert', label: 'Insurance Certificate' },
+  { value: 'noa', label: 'Notice of Assignment (NOA)' },
   { value: 'exception_note', label: 'Exception Note' },
   { value: 'osint_report', label: 'OSINT Report' },
   { value: 'fmcsa_screenshot', label: 'FMCSA Screenshot' },
@@ -50,9 +51,11 @@ const RMIS_DOCS: {
 export function CarrierDocuments({
   dot,
   rmis,
+  reloadKey,
 }: {
   dot: string
   rmis?: RmisDocAvailability
+  reloadKey?: number
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [documents, setDocuments] = useState<VettingDocumentRecord[]>([])
@@ -77,7 +80,7 @@ export function CarrierDocuments({
 
   useEffect(() => {
     load()
-  }, [load])
+  }, [load, reloadKey])
 
   async function upload() {
     if (!file) return
@@ -174,8 +177,13 @@ export function CarrierDocuments({
                   className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 hover:bg-gray-50"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-gray-900">
-                      {d.file_name || 'Document'}
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium text-gray-900">
+                        {d.file_name || 'Document'}
+                      </span>
+                      {d.source === 'rmis' && (
+                        <Badge tone="green">RMIS</Badge>
+                      )}
                     </div>
                     <div className="text-xs text-gray-500">
                       {formatDate(d.uploaded_at)}

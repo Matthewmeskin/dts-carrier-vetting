@@ -112,7 +112,9 @@ export interface InsuranceRecord {
   pay_to_entity: string | null
   pay_to_address: string | null
   operating_status: string | null
+  common_authority_status: string | null
   contract_authority_status: string | null
+  broker_authority_status: string | null
   authority_original_date: string | null
   authority_reinstatement_date: string | null
   authority_revocation_date: string | null

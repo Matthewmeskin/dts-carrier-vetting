@@ -182,7 +182,9 @@ export type Database = {
           cargo_status: string | null
           cargo_underwriter: string | null
           carrier_id: string | null
+          common_authority_status: string | null
           contract_authority_status: string | null
+          broker_authority_status: string | null
           dot_number: string
           fetched_at: string | null
           general_aggregate_limit: number | null
@@ -238,7 +240,9 @@ export type Database = {
           cargo_status?: string | null
           cargo_underwriter?: string | null
           carrier_id?: string | null
+          common_authority_status?: string | null
           contract_authority_status?: string | null
+          broker_authority_status?: string | null
           dot_number: string
           fetched_at?: string | null
           general_aggregate_limit?: number | null
@@ -294,7 +298,9 @@ export type Database = {
           cargo_status?: string | null
           cargo_underwriter?: string | null
           carrier_id?: string | null
+          common_authority_status?: string | null
           contract_authority_status?: string | null
+          broker_authority_status?: string | null
           dot_number?: string
           fetched_at?: string | null
           general_aggregate_limit?: number | null

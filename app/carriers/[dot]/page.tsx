@@ -251,16 +251,7 @@ export default function CarrierDetailPage({
       />
 
       {/* Panel 6 — Documents */}
-      <CarrierDocuments
-        dot={dot}
-        reloadKey={docReload}
-        rmis={{
-          insuredId: carrier.rmis_insured_id,
-          certificate: insurance?.rmis_is_certified ?? null,
-          w9: insurance?.w9_on_file ?? null,
-          agreement: insurance?.broker_carrier_agreement_on_file ?? null,
-        }}
-      />
+      <CarrierDocuments dot={dot} reloadKey={docReload} />
 
       {/* Panel 7 — Change History */}
       <DeltaTimeline entries={deltaLog} />

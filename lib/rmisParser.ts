@@ -16,7 +16,9 @@ export interface ParsedRMISData {
   dbaName: string
   headerTimestamp: string
   // Authority
+  commonAuthorityStatus: string
   contractAuthorityStatus: string
+  brokerAuthorityStatus: string
   operatingStatus: string
   saferActiveStatus: string
   safetyRating: string
@@ -128,10 +130,33 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     ? Array.isArray(certNotes) ? certNotes : [certNotes]
     : []
 
-  // Agreement
+  // Agreement (structured section)
   const agreementObj = agreements
     ? Array.isArray(agreements) ? agreements[agreements.length - 1] : agreements
     : null
+
+  // Uploaded documents (RMIS "Documents" list). Many carriers keep their
+  // broker-carrier agreement and W-9 here as uploaded PDFs rather than in the
+  // structured <ClientCarrierAgreements>/<W9> sections, so we treat a matching
+  // document as proof the item is on file too.
+  const docList = root.Documents?.Document
+  const docArray = docList ? (Array.isArray(docList) ? docList : [docList]) : []
+  let docHasAgreement = false
+  let docAgreementDate = ''
+  let docHasW9 = false
+  for (const d of docArray) {
+    const desc = String(d?.Description ?? '').toLowerCase()
+    if (desc.includes('agreement')) {
+      docHasAgreement = true
+      if (!docAgreementDate) docAgreementDate = String(d?.CreateDatePST ?? '')
+    }
+    if (desc.includes('w9') || desc.includes('w-9')) docHasW9 = true
+  }
+
+  const structuredAgreement = agreementObj?.Agree === 'Yes'
+  const agreementOnFile = structuredAgreement || docHasAgreement
+  const w9Structured = !!(w9?.TaxID)
+  const w9OnFile = w9Structured || docHasW9
 
   return {
     rmisCarrierID: String(carrier.RMISCarrierID ?? ''),
@@ -141,7 +166,9 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     dbaName: String(dot.dot_DBAName ?? carrier.CompanyName ?? ''),
     headerTimestamp: String(header.TimeStampUTC ?? header.TimeStamp ?? ''),
 
+    commonAuthorityStatus: String(dot.dot_CommonAuthority ?? ''),
     contractAuthorityStatus: String(dot.dot_ContractAuthority ?? ''),
+    brokerAuthorityStatus: String(dot.dot_BrokerAuthority ?? ''),
     operatingStatus: String(dotTesting.OperatingStatus ?? ''),
     saferActiveStatus: String(dotTesting.Safer_ActiveInactiveStatus ?? ''),
     safetyRating: String(dotTesting.SafetyRating ?? 'None'),
@@ -174,11 +201,14 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     rmisIsCertified: certStatus?.IsCertified === 'True' || certStatus?.IsCertified === true,
     certificationNotes: notesArray.map(String),
 
-    brokerCarrierAgreementOnFile: agreementObj?.Agree === 'Yes',
-    brokerCarrierAgreementDate: String(agreementObj?.Date ?? ''),
-    brokerCarrierAgreementTitle: String(agreementObj?.AgreementTitle ?? ''),
+    brokerCarrierAgreementOnFile: agreementOnFile,
+    brokerCarrierAgreementDate: String(agreementObj?.Date ?? docAgreementDate ?? ''),
+    brokerCarrierAgreementTitle: String(
+      agreementObj?.AgreementTitle ??
+        (docHasAgreement ? 'Agreement Document (uploaded to RMIS)' : '')
+    ),
 
-    w9OnFile: !!(w9?.TaxID),
+    w9OnFile,
     w9TaxID: String(w9['TaxID-EIN'] ?? w9.TaxID ?? ''),
     w9BusinessName: String(w9.BusinessName ?? w9.CoName ?? ''),
     w9CompanyType: String(w9.CompanyType ?? ''),

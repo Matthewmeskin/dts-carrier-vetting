@@ -21,10 +21,15 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
   const flags: string[] = []
   const info: string[] = []
 
-  // HARD STOP — Active operating authority (Policy Section 5)
-  if (data.contractAuthorityStatus !== 'A') {
+  // HARD STOP — Active operating authority (Policy Section 5). A carrier may
+  // operate under COMMON or CONTRACT authority (or both); either being active
+  // satisfies the requirement. Only hard-stop when neither is active.
+  const commonActive = data.commonAuthorityStatus === 'A'
+  const contractActive = data.contractAuthorityStatus === 'A'
+  if (!commonActive && !contractActive) {
     hardStops.push(
-      `No active contract authority — FMCSA shows "${data.contractAuthorityStatus || 'unknown'}"`
+      `No active operating authority — FMCSA shows common "${data.commonAuthorityStatus || 'unknown'}", ` +
+      `contract "${data.contractAuthorityStatus || 'unknown'}"`
     )
   }
 

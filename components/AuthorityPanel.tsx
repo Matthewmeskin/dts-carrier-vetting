@@ -62,16 +62,24 @@ export function AuthorityPanel({
             value={insurance.operating_status}
           />
           <Field
-            label="Contract Authority"
-            value={
-              insurance.contract_authority_status === 'A' ? (
-                <Badge tone="green">Active (A)</Badge>
+            label="Operating Authority"
+            value={(() => {
+              const active: string[] = []
+              if (insurance.common_authority_status === 'A') active.push('Common')
+              if (insurance.contract_authority_status === 'A') active.push('Contract')
+              if (insurance.broker_authority_status === 'A') active.push('Broker')
+              return active.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {active.map((a) => (
+                    <Badge key={a} tone="green">
+                      {a}
+                    </Badge>
+                  ))}
+                </div>
               ) : (
-                <Badge tone="red">
-                  {insurance.contract_authority_status || 'Unknown'}
-                </Badge>
+                <Badge tone="red">None active</Badge>
               )
-            }
+            })()}
           />
           <Field
             label="RMIS Certified"

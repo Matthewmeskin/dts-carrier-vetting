@@ -286,15 +286,30 @@ function computeAutoEvaluations(
   const score = inputs.score ?? null
   const out: Record<string, StepEval> = {}
 
-  // Active FMCSA operating authority
-  if (ins && (ins.operating_status || ins.contract_authority_status)) {
+  // Active FMCSA operating authority. A carrier may run on common OR contract
+  // authority (or both) — any active authority satisfies the requirement.
+  if (
+    ins &&
+    (ins.operating_status ||
+      ins.common_authority_status ||
+      ins.contract_authority_status)
+  ) {
     const opActive = isActiveStatus(ins.operating_status)
-    const caActive =
-      ins.contract_authority_status == null ||
-      isActiveStatus(ins.contract_authority_status)
+    const authTypes: string[] = []
+    if (ins.common_authority_status === 'A') authTypes.push('Common')
+    if (ins.contract_authority_status === 'A') authTypes.push('Contract')
+    if (ins.broker_authority_status === 'A') authTypes.push('Broker')
+    // If we have no authority columns at all, don't fail on their absence.
+    const haveAuthorityData =
+      ins.common_authority_status != null ||
+      ins.contract_authority_status != null ||
+      ins.broker_authority_status != null
+    const authActive = authTypes.length > 0 || !haveAuthorityData
     out.authority_active = {
-      status: opActive && caActive ? 'pass' : 'fail',
-      evidence: `Operating: ${ins.operating_status ?? '—'} · Contract authority: ${ins.contract_authority_status ?? '—'}`,
+      status: opActive && authActive ? 'pass' : 'fail',
+      evidence: `Operating: ${ins.operating_status ?? '—'} · Authority: ${
+        authTypes.length > 0 ? authTypes.join(', ') : 'none active'
+      }`,
     }
   }
 

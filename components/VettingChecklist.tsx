@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { InsuranceRecord, ScoreRecord, VettingRecord } from '@/lib/types'
 import {
   createDefaultChecklist,
@@ -46,6 +46,17 @@ const REVET_TONE: Record<RevetState, BadgeTone> = {
   ok: 'green',
   unknown: 'gray',
 }
+
+const ATTACH_TYPES = [
+  { value: 'exception_note', label: 'Exception Note' },
+  { value: 'broker_carrier_agreement', label: 'Broker-Carrier Agreement' },
+  { value: 'w9', label: 'W-9' },
+  { value: 'insurance_cert', label: 'Insurance Certificate' },
+  { value: 'noa', label: 'Notice of Assignment (NOA)' },
+  { value: 'osint_report', label: 'OSINT Report' },
+  { value: 'fmcsa_screenshot', label: 'FMCSA Screenshot' },
+  { value: 'other', label: 'Other' },
+]
 
 function hydrateChecklist(
   record: VettingRecord | undefined,
@@ -134,6 +145,9 @@ export function VettingChecklist({
   const [folderUrl, setFolderUrl] = useState<string | null>(
     latest?.google_drive_folder_url || null
   )
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [attachFile, setAttachFile] = useState<File | null>(null)
+  const [attachType, setAttachType] = useState('exception_note')
 
   const percent = checklistCompletionPercent(checklist)
   const summary = useMemo(() => autoSummary(checklist), [checklist])
@@ -181,7 +195,36 @@ export function VettingChecklist({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Save failed')
       if (data?.folder?.webViewLink) setFolderUrl(data.folder.webViewLink)
-      setMessage('Vetting record saved.')
+
+      // Attach the selected document to this review, if any.
+      if (attachFile && data?.id) {
+        try {
+          const fd = new FormData()
+          fd.append('file', attachFile)
+          fd.append('documentType', attachType)
+          fd.append('uploadedBy', reviewedBy)
+          fd.append('vettingRecordId', String(data.id))
+          const upRes = await fetch(`/api/carriers/${dot}/documents`, {
+            method: 'POST',
+            body: fd,
+          })
+          if (!upRes.ok) {
+            const upErr = await upRes.json().catch(() => ({}))
+            throw new Error(upErr.error || 'Document upload failed')
+          }
+          setAttachFile(null)
+          if (fileRef.current) fileRef.current.value = ''
+          setMessage('Vetting record and document saved.')
+        } catch (upErr) {
+          setMessage(
+            `Vetting saved, but document upload failed: ${
+              upErr instanceof Error ? upErr.message : 'error'
+            }`
+          )
+        }
+      } else {
+        setMessage('Vetting record saved.')
+      }
       await onSaved?.()
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Save failed')
@@ -281,6 +324,30 @@ export function VettingChecklist({
                   onChange={(e) => setApprovedBy(e.target.value)}
                   placeholder="Name, title"
                 />
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Select
+                  label="Attach document (optional)"
+                  value={attachType}
+                  onChange={(e) => setAttachType(e.target.value)}
+                >
+                  {ATTACH_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </Select>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    File
+                  </label>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    onChange={(e) => setAttachFile(e.target.files?.[0] ?? null)}
+                    className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-dts-blue file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
+                  />
+                </div>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-dts-blue/20 pt-3">
                 <Button onClick={save} disabled={saving}>

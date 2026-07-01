@@ -66,6 +66,7 @@ export async function POST(
     const file = formData.get('file')
     const documentType = formData.get('documentType')
     const uploadedBy = formData.get('uploadedBy')
+    const vettingRecordId = formData.get('vettingRecordId')
 
     if (!file || typeof (file as any).arrayBuffer !== 'function') {
       return NextResponse.json({ error: 'Missing file' }, { status: 400 })
@@ -93,6 +94,8 @@ export async function POST(
       storage_bucket: BUCKET,
       storage_path: path,
       uploaded_by: uploadedBy ? String(uploadedBy) : null,
+      // Optionally tie the upload to a specific vetting review.
+      vetting_record_id: vettingRecordId ? String(vettingRecordId) : null,
     }
 
     const { data: document, error: insertError } = await supabaseAdmin

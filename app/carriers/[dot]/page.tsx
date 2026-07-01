@@ -178,6 +178,9 @@ export default function CarrierDetailPage({
               )}
             </div>
           </div>
+
+          {/* Authority & Identity, in the same tile as the carrier header */}
+          <AuthorityPanel insurance={insurance} bare />
         </CardBody>
       </Card>
 
@@ -186,8 +189,13 @@ export default function CarrierDetailPage({
         flags={insurance?.rmis_flags}
       />
 
-      {/* Vetting Workspace — decision (status + re-vet timer + reviewers + save)
-          lives at the top of this panel, right under the carrier header. */}
+      {/* Insurance */}
+      <InsurancePanel insurance={insurance} dot={dot} onRefreshed={load} />
+
+      {/* Safety Scores */}
+      <ScorePanel scores={scores} />
+
+      {/* Vetting Workspace */}
       <VettingChecklist
         dot={dot}
         carrierName={carrier.legal_name}
@@ -205,19 +213,10 @@ export default function CarrierDetailPage({
         statusSaving={savingStatus}
       />
 
-      {/* Authority & Identity */}
-      <AuthorityPanel insurance={insurance} />
-
-      {/* Insurance */}
-      <InsurancePanel insurance={insurance} dot={dot} onRefreshed={load} />
-
-      {/* Safety Scores */}
-      <ScorePanel scores={scores} />
-
-      {/* Panel 6 — Documents */}
+      {/* Documents */}
       <CarrierDocuments dot={dot} reloadKey={docReload} />
 
-      {/* Panel 7 — Change History */}
+      {/* Change History */}
       <DeltaTimeline entries={deltaLog} />
     </div>
   )

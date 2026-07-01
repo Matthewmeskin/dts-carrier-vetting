@@ -27,22 +27,37 @@ function Field({
 
 export function AuthorityPanel({
   insurance,
+  bare,
 }: {
   insurance: InsuranceRecord | null
+  bare?: boolean
 }) {
   const [showNotes, setShowNotes] = useState(false)
 
-  if (!insurance) {
-    return (
+  // In `bare` mode, render inside the parent tile (no own Card) with a divider
+  // and small heading; otherwise render as a standalone card.
+  const wrap = (children: React.ReactNode) =>
+    bare ? (
+      <div className="mt-5 border-t border-gray-100 pt-4">
+        <div className="mb-3 flex items-baseline gap-2">
+          <h3 className="text-sm font-bold text-gray-900">Authority &amp; Identity</h3>
+          <span className="text-xs text-gray-400">Sourced from RMIS / FMCSA</span>
+        </div>
+        {children}
+      </div>
+    ) : (
       <Card>
-        <CardHeader title="Authority & Identity" />
-        <CardBody>
-          <p className="text-sm text-gray-500">
-            No RMIS data on file yet. Use the Refresh button on the Insurance
-            panel to pull authority and identity data.
-          </p>
-        </CardBody>
+        <CardHeader title="Authority & Identity" subtitle="Sourced from RMIS / FMCSA" />
+        <CardBody>{children}</CardBody>
       </Card>
+    )
+
+  if (!insurance) {
+    return wrap(
+      <p className="text-sm text-gray-500">
+        No RMIS data on file yet. Use the Refresh button on the Insurance panel to
+        pull authority and identity data.
+      </p>
     )
   }
 
@@ -52,11 +67,9 @@ export function AuthorityPanel({
 
   const notes = insurance.rmis_certification_notes ?? []
 
-  return (
-    <Card>
-      <CardHeader title="Authority & Identity" subtitle="Sourced from RMIS / FMCSA" />
-      <CardBody>
-        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+  return wrap(
+    <>
+      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <Field
             label="Operating Status"
             value={insurance.operating_status}
@@ -182,7 +195,6 @@ export function AuthorityPanel({
             )}
           </div>
         )}
-      </CardBody>
-    </Card>
+    </>
   )
 }

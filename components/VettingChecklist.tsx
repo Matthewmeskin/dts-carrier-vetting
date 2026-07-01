@@ -5,6 +5,7 @@ import { InsuranceRecord, ScoreRecord, VettingRecord } from '@/lib/types'
 import {
   createDefaultChecklist,
   checklistCompletionPercent,
+  CHECKLIST_CATEGORIES,
   attachAutoEvidence,
   applyAutoCompletion,
   autoSummary,
@@ -250,19 +251,38 @@ export function VettingChecklist({
               </span>
             </div>
 
-            <div className="space-y-2">
-              {checklist.steps.map((s) => {
-                const open = expanded[s.id]
+            <div className="space-y-5">
+              {CHECKLIST_CATEGORIES.map((cat) => {
+                const catSteps = checklist.steps.filter(
+                  (s) => s.category === cat.key
+                )
+                if (catSteps.length === 0) return null
+                const catDone = catSteps.filter((s) => s.completed).length
                 return (
-                  <div
-                    key={s.id}
-                    className={cn(
-                      'rounded-md border px-3 py-2.5',
-                      s.completed
-                        ? 'border-green-200 bg-green-50/50'
-                        : 'border-gray-200'
-                    )}
-                  >
+                  <div key={cat.key} className="space-y-2">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-gray-100 pb-1">
+                      <h4 className="text-sm font-bold uppercase tracking-wide text-dts-blue">
+                        {cat.label}
+                      </h4>
+                      <span className="text-xs text-gray-400">
+                        {cat.description}
+                      </span>
+                      <span className="ml-auto text-xs font-medium text-gray-500">
+                        {catDone}/{catSteps.length}
+                      </span>
+                    </div>
+                    {catSteps.map((s) => {
+                      const open = expanded[s.id]
+                      return (
+                        <div
+                          key={s.id}
+                          className={cn(
+                            'rounded-md border px-3 py-2.5',
+                            s.completed
+                              ? 'border-green-200 bg-green-50/50'
+                              : 'border-gray-200'
+                          )}
+                        >
                     <div className="flex items-start gap-3">
                       <input
                         type="checkbox"
@@ -334,6 +354,9 @@ export function VettingChecklist({
                         )}
                       </div>
                     </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )
               })}

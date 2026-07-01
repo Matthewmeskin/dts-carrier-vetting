@@ -156,9 +156,12 @@ export async function POST(request: Request) {
           approval_level: evaluation.approvalLevel,
         }
 
+        // Upsert per carrier + release month so re-uploading the same monthly
+        // file updates that month rather than duplicating it. A new Release
+        // Month always adds a new historical row.
         const { error: scoreError } = await supabaseAdmin
           .from('carrier_scores')
-          .insert([scoreRow])
+          .upsert([scoreRow], { onConflict: 'dot_number,release_month' })
         if (scoreError) throw scoreError
 
         // 4. Collect flagged

@@ -69,6 +69,7 @@ function prettyScoreLabel(raw: string): string {
 }
 
 type StatusFilter =
+  | 'BrokerwareActive'
   | 'All'
   | 'Active'
   | 'Approved'
@@ -77,6 +78,10 @@ type StatusFilter =
   | 'HardStop'
   | 'DoNotUse'
   | 'Disabled'
+
+function isBrokerwareActive(status: string | null | undefined): boolean {
+  return !!status && status.trim().toLowerCase() === 'active'
+}
 
 type SortKey = 'gap' | 'name' | 'reviewed'
 
@@ -97,9 +102,17 @@ export function CarrierTable({
 }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<StatusFilter>('All')
+  const [status, setStatus] = useState<StatusFilter>('BrokerwareActive')
   const [revettingOnly, setRevettingOnly] = useState(false)
   const [sort, setSort] = useState<SortKey>('gap')
+
+  // Whether any carrier carries a Brokerware status yet. Until the Brokerware
+  // sync has populated it, the "Active in Brokerware" filter falls back to
+  // showing everything so the list isn't empty.
+  const hasBrokerwareData = useMemo(
+    () => carriers.some((c) => c.brokerware_status != null),
+    [carriers]
+  )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -110,6 +123,10 @@ export function CarrierTable({
       }
       if (revettingOnly && !c.requires_revetting) return false
       switch (status) {
+        case 'BrokerwareActive':
+          // Show only carriers Brokerware reports as Active. Before the sync has
+          // run (no statuses at all), show everything rather than nothing.
+          return !hasBrokerwareData || isBrokerwareActive(c.brokerware_status)
         case 'Active':
           return (
             !c.do_not_use &&
@@ -158,7 +175,7 @@ export function CarrierTable({
     })
 
     return rows
-  }, [carriers, search, status, revettingOnly, sort])
+  }, [carriers, search, status, revettingOnly, sort, hasBrokerwareData])
 
   return (
     <Card>
@@ -177,8 +194,9 @@ export function CarrierTable({
             value={status}
             onChange={(e) => setStatus(e.target.value as StatusFilter)}
           >
+            <option value="BrokerwareActive">Active in Brokerware</option>
             <option value="All">All</option>
-            <option value="Active">Active</option>
+            <option value="Active">Active (vetting status)</option>
             <option value="Approved">Approved</option>
             <option value="NeedsReview">Needs Review</option>
             <option value="DueForRevet">Due for Re-vet</option>

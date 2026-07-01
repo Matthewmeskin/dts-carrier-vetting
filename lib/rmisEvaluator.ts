@@ -177,9 +177,20 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     info.push('No crash history on record')
   }
 
-  // INFO — RMIS certification notes (surface any notes RMIS itself flagged)
+  // INFO — RMIS certification notes (surface any notes RMIS itself flagged).
+  // Workers' comp / employers-liability is not required for carriers, so its
+  // absence is never a flag (kept as info only).
   for (const note of data.certificationNotes) {
-    if (note.toLowerCase().includes('expired') || note.toLowerCase().includes('no active')) {
+    const lower = note.toLowerCase()
+    const isWorkersComp =
+      lower.includes('workerscomp') ||
+      lower.includes('workers comp') ||
+      lower.includes('empliability') ||
+      lower.includes('employers liability') ||
+      lower.includes("employer's liability")
+    if (isWorkersComp) {
+      info.push(`RMIS note: ${note}`)
+    } else if (lower.includes('expired') || lower.includes('no active')) {
       flags.push(`RMIS certification note: ${note}`)
     } else {
       info.push(`RMIS note: ${note}`)

@@ -2,7 +2,11 @@
 
 import Link from 'next/link'
 import { ScoreRecord } from '@/lib/types'
-import { CATEGORY_FIELDS, getApprovalLevelLabel, ApprovalLevel } from '@/lib/scoringRules'
+import {
+  CATEGORY_THRESHOLD,
+  getApprovalLevelLabel,
+  ApprovalLevel,
+} from '@/lib/scoringRules'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge, BadgeTone } from './ui/Badge'
 import { Table, THead, TBody, TR, TH, TD } from './ui/Table'
@@ -30,6 +34,25 @@ function gapColor(gap: number | null | undefined): string {
   if (gap >= 60) return 'text-amber-600'
   return 'text-red-600'
 }
+
+// All 9 GAP component scores. The first 5 (`counted`) are the safety categories
+// that drive the flag rule (must be above CATEGORY_THRESHOLD); the last 4 are
+// shown for context and don't gate approval.
+const ALL_SCORE_FIELDS: {
+  key: keyof ScoreRecord
+  label: string
+  counted: boolean
+}[] = [
+  { key: 'crash_score', label: 'Crash', counted: true },
+  { key: 'violation_score', label: 'Violation', counted: true },
+  { key: 'csa_basics_score', label: 'CSA Basics', counted: true },
+  { key: 'driver_oos_score', label: 'Driver OOS', counted: true },
+  { key: 'critical_acute_violation_score', label: 'Critical/Acute Violation', counted: true },
+  { key: 'new_entrant_score', label: 'New Entrant', counted: false },
+  { key: 'mcs_150_score', label: 'MCS-150', counted: false },
+  { key: 'judicial_hellholes_score', label: 'Judicial Hellholes', counted: false },
+  { key: 'safety_rating_score', label: 'Safety Rating', counted: false },
+]
 
 export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
   const latest = scores[0]
@@ -117,41 +140,57 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {CATEGORY_FIELDS.map((f) => {
-                const val = latest[f.key as keyof ScoreRecord] as
-                  | number
-                  | null
-                const pass = val !== null && val !== undefined && val > 65
+              {ALL_SCORE_FIELDS.map((f) => {
+                const val = latest[f.key] as number | null
+                const has = val !== null && val !== undefined
+                // Only the 5 safety categories gate approval (threshold 30);
+                // the other 4 are contextual and shown neutrally.
+                const pass = has && val > CATEGORY_THRESHOLD
+                const tone = !f.counted
+                  ? 'border-gray-200 bg-gray-50'
+                  : pass
+                    ? 'border-green-200 bg-green-50'
+                    : 'border-red-200 bg-red-50'
                 return (
                   <div
                     key={f.key}
                     className={cn(
                       'flex items-center justify-between rounded-md border px-3 py-2',
-                      pass
-                        ? 'border-green-200 bg-green-50'
-                        : 'border-red-200 bg-red-50'
+                      tone
                     )}
                   >
                     <div>
                       <div className="text-xs font-medium text-gray-700">
                         {f.label}
+                        {!f.counted && (
+                          <span className="ml-1 text-[10px] font-normal text-gray-400">
+                            info
+                          </span>
+                        )}
                       </div>
                       <div className="text-lg font-bold text-gray-900">
                         {formatScore(val)}
                       </div>
                     </div>
-                    <span
-                      className={cn(
-                        'text-lg font-bold',
-                        pass ? 'text-green-600' : 'text-red-600'
-                      )}
-                    >
-                      {pass ? '✓' : '✕'}
-                    </span>
+                    {f.counted && (
+                      <span
+                        className={cn(
+                          'text-lg font-bold',
+                          pass ? 'text-green-600' : 'text-red-600'
+                        )}
+                      >
+                        {pass ? '✓' : '✕'}
+                      </span>
+                    )}
                   </div>
                 )
               })}
             </div>
+            <p className="mt-2 text-xs text-gray-400">
+              ✓/✕ reflects the 5 safety categories that gate approval (must be
+              above {CATEGORY_THRESHOLD}). New Entrant, MCS-150, Judicial
+              Hellholes, and Safety Rating are shown for context.
+            </p>
 
             {scores.length > 1 && (
               <div className="mt-6">

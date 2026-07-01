@@ -300,7 +300,16 @@ function computeAutoEvaluations(
       ins.common_authority_status ||
       ins.contract_authority_status)
   ) {
-    const opActive = isActiveStatus(ins.operating_status)
+    // Operating status is fine unless RMIS/FMCSA explicitly says otherwise.
+    // Real values are like "AUTHORIZED FOR Property" (active); only flag when it
+    // reports the carrier is not authorized / out of service / inactive.
+    const opStatus = (ins.operating_status || '').toLowerCase()
+    const opBad =
+      opStatus.includes('not authorized') ||
+      opStatus.includes('out-of-service') ||
+      opStatus.includes('out of service') ||
+      opStatus.includes('inactive')
+
     const authTypes: string[] = []
     if (ins.common_authority_status === 'A') authTypes.push('Common')
     if (ins.contract_authority_status === 'A') authTypes.push('Contract')
@@ -312,7 +321,7 @@ function computeAutoEvaluations(
       ins.broker_authority_status != null
     const authActive = authTypes.length > 0 || !haveAuthorityData
     out.authority_active = {
-      status: opActive && authActive ? 'pass' : 'fail',
+      status: authActive && !opBad ? 'pass' : 'fail',
       evidence: `Operating: ${ins.operating_status ?? '—'} · Authority: ${
         authTypes.length > 0 ? authTypes.join(', ') : 'none active'
       }`,

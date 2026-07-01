@@ -95,36 +95,61 @@ function detectContentType(buf: Buffer): { contentType: string; ext: string } {
   if (buf.length >= 2 && buf[0] === 0x50 && buf[1] === 0x4b)
     // PK zip container — modern Office docs (docx/xlsx). Default to docx.
     return { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ext: 'docx' }
+  if (
+    buf.length >= 4 &&
+    ((buf[0] === 0x49 && buf[1] === 0x49 && buf[2] === 0x2a && buf[3] === 0x00) ||
+      (buf[0] === 0x4d && buf[1] === 0x4d && buf[2] === 0x00 && buf[3] === 0x2a))
+  )
+    return { contentType: 'image/tiff', ext: 'tif' }
   return { contentType: 'application/octet-stream', ext: 'bin' }
 }
 
+// A real document base64 payload is large; anything shorter is a status
+// string or error, not a file.
+const MIN_BASE64_LENGTH = 200
+
+function looksBase64(s: string): boolean {
+  const t = s.replace(/\s/g, '')
+  return t.length >= MIN_BASE64_LENGTH && /^[A-Za-z0-9+/=]+$/.test(t)
+}
+
 // Pull the base64 payload out of the DocumentAPI response, which may be a bare
-// string or a JSON object keyed under one of several field names.
-function extractBase64(raw: string): string {
+// string or a JSON object keyed under one of several field names. Returns null
+// when the response carries no plausible document (e.g. an RMIS error or an
+// empty result), so the caller can surface a clear message.
+function extractBase64(raw: string): string | null {
   const text = raw.trim()
   try {
     const parsed = JSON.parse(text)
-    if (typeof parsed === 'string') return parsed
+    if (typeof parsed === 'string') {
+      return looksBase64(parsed) ? parsed : null
+    }
     if (parsed && typeof parsed === 'object') {
       const KNOWN = [
         'document', 'documentdata', 'data', 'filedata', 'file',
         'base64', 'content', 'bytes', 'image',
       ]
       const entries = Object.entries(parsed as Record<string, unknown>)
-      // Prefer a known key, otherwise the longest string value.
       for (const [k, v] of entries) {
-        if (typeof v === 'string' && KNOWN.includes(k.toLowerCase())) return v
+        if (typeof v === 'string' && KNOWN.includes(k.toLowerCase()) && looksBase64(v)) {
+          return v
+        }
       }
-      let best = ''
+      // Fallback: the longest base64-looking string value.
+      let best: string | null = null
       for (const [, v] of entries) {
-        if (typeof v === 'string' && v.length > best.length) best = v
+        if (typeof v === 'string' && looksBase64(v) && (!best || v.length > best.length)) {
+          best = v
+        }
       }
-      if (best) return best
+      return best
     }
   } catch {
-    // Not JSON — treat the whole body as the base64 payload.
+    // Not JSON — the whole body may be the base64 payload.
+    const body = text.replace(/^"|"$/g, '')
+    return looksBase64(body) ? body : null
   }
-  return text.replace(/^"|"$/g, '')
+  return null
 }
 
 /**
@@ -158,12 +183,22 @@ export async function fetchCarrierDocument(params: {
     throw new Error(`RMIS Document API returned ${res.status} ${res.statusText}`)
   }
 
-  const base64 = extractBase64(await res.text())
+  const raw = await res.text()
+  const base64 = extractBase64(raw)
   if (!base64) {
-    throw new Error('RMIS Document API returned no document data')
+    // RMIS answered but there is no real document — usually the carrier has
+    // this document type not on file, or the insured ID is invalid.
+    throw new Error(
+      'RMIS returned no document for this carrier and type ' +
+        '(not on file, or the RMIS insured ID is invalid). ' +
+        `RMIS response: ${raw.slice(0, 300)}`
+    )
   }
 
   const buffer = Buffer.from(base64, 'base64')
+  if (buffer.length < 100) {
+    throw new Error('RMIS document payload was too small to be a valid file')
+  }
   const { contentType, ext } = detectContentType(buffer)
   const fileName = `${params.documentType}-${params.documentID}.${ext}`
   return { buffer, contentType, fileName }

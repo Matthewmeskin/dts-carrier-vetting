@@ -11,6 +11,7 @@ import { parseRMISXML } from '@/lib/rmisParser'
 import { evaluateRMIS } from '@/lib/rmisEvaluator'
 import { sendComplianceAlert } from '@/lib/emailAlerts'
 import { buildInsuranceRow } from '@/app/api/carriers/[dot]/insurance/route'
+import { archiveCarrierDocuments } from '@/lib/rmisArchive'
 import { TablesUpdate } from '@/lib/database.types'
 
 export const dynamic = 'force-dynamic'
@@ -114,6 +115,21 @@ export async function POST(request: Request) {
               .from('carriers')
               .update(carrierUpdates)
               .eq('dot_number', parsed.dotNumber)
+          }
+
+          // Archive any new/changed documents (deduped by content).
+          try {
+            const insId = parsed.rmisCarrierID || insdID
+            if (insId) {
+              await archiveCarrierDocuments({
+                dot: parsed.dotNumber,
+                carrierId: (carrier as any).id,
+                insdID: String(insId),
+                xml,
+              })
+            }
+          } catch (docErr) {
+            console.error(`Delta doc archive failed for ${parsed.dotNumber}:`, docErr)
           }
 
           // Insert delta log

@@ -60,7 +60,28 @@ export async function archiveCarrierDocuments(args: {
     })
   }
 
-  // Uploaded documents (NOA, agreements, etc.) listed in <Documents>.
+  // W-9 — retrieved by its W9ID.
+  const w9ID = tagValue(xml, 'W9ID')
+  if (w9ID) {
+    targets.push({ rmisType: 'W9', docType: 'w9', documentID: w9ID, label: 'W-9' })
+  }
+
+  // Broker-carrier agreement(s) — each with an AgreementID.
+  const agreementsSection =
+    tagValue(xml, 'ClientCarrierAgreements') ?? tagValue(xml, 'CarrierAgreements') ?? ''
+  const agrMatches = agreementsSection.match(/<Agreement>[\s\S]*?<\/Agreement>/gi) ?? []
+  for (const block of agrMatches) {
+    const id = tagValue(block, 'AgreementID')
+    if (!id) continue
+    targets.push({
+      rmisType: 'Agreement',
+      docType: 'broker_carrier_agreement',
+      documentID: id,
+      label: tagValue(block, 'AgreementTitle') ?? 'Broker-Carrier Agreement',
+    })
+  }
+
+  // Uploaded documents (NOA, etc.) listed in <Documents>.
   const docsSection = tagValue(xml, 'Documents') ?? ''
   const docMatches = docsSection.match(/<Document>[\s\S]*?<\/Document>/gi) ?? []
   for (const block of docMatches) {

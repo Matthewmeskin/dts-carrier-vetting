@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { VettingDocumentRecord } from '@/lib/types'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Button } from './ui/Button'
@@ -60,6 +60,17 @@ export function CarrierDocuments({
   const fileRef = useRef<HTMLInputElement>(null)
   const [documents, setDocuments] = useState<VettingDocumentRecord[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Documents arrive newest-first; the first of each type is the current
+  // version, the rest are superseded history.
+  const currentIdByType = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const d of documents) {
+      const key = d.document_type || 'other'
+      if (!m.has(key)) m.set(key, d.id)
+    }
+    return m
+  }, [documents])
   const [docType, setDocType] = useState('broker_carrier_agreement')
   const [uploadedBy, setUploadedBy] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -183,6 +194,11 @@ export function CarrierDocuments({
                       </span>
                       {d.source === 'rmis' && (
                         <Badge tone="green">RMIS</Badge>
+                      )}
+                      {currentIdByType.get(d.document_type || 'other') === d.id ? (
+                        <Badge tone="blue">Current</Badge>
+                      ) : (
+                        <Badge tone="gray">Older</Badge>
                       )}
                     </div>
                     <div className="text-xs text-gray-500">

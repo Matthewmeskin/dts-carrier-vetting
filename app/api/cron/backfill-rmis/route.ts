@@ -35,11 +35,13 @@ export async function POST(request: Request) {
         ? { clientID: body.clientID, clientPassword: body.clientPassword }
         : undefined
 
-    // Oldest-attempted (nulls first) carriers with a DOT.
+    // Never-attempted carriers only — this is a one-time drain of the roster;
+    // the delta poller keeps carriers fresh afterward (so we don't re-insert
+    // unchanged insurance rows on every cycle).
     const { data: carriers, error } = await supabaseAdmin
       .from('carriers')
       .select('id, dot_number, mc_number, rmis_insured_id, safety_rating')
-      .order('rmis_attempted_at', { ascending: true, nullsFirst: true })
+      .is('rmis_attempted_at', null)
       .limit(batchSize)
     if (error) throw error
 

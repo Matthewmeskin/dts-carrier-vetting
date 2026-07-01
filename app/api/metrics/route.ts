@@ -18,6 +18,7 @@ export async function GET() {
       .from('carrier_scores')
       .select('dot_number, requires_revetting, upload_date')
       .order('upload_date', { ascending: false })
+      .limit(100000)
 
     const latestScore = new Map<string, boolean>()
     for (const s of scores ?? []) {
@@ -32,6 +33,7 @@ export async function GET() {
       .from('carrier_insurance')
       .select('dot_number, hard_stops, updated_at')
       .order('updated_at', { ascending: false })
+      .limit(100000)
 
     const latestHardStops = new Map<string, string[]>()
     for (const i of insurance ?? []) {

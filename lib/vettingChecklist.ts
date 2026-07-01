@@ -165,7 +165,7 @@ export function createDefaultChecklist(): VettingChecklist {
         id: 'inspection_history',
         category: 'assessment',
         label: 'Reviewed roadside inspection history',
-        description: 'Check total inspections, vehicle OOS ratio vs 22.26% national average, and driver OOS ratio vs 6.67% national average. Zero inspections requires exception review.',
+        description: 'Confirm the carrier has roadside inspections on record. Zero inspections requires exception review. (Out-of-service performance is already captured by the Bluewire safety scores.)',
         policyRef: 'Section 10',
         required: true,
         completed: false,
@@ -397,7 +397,7 @@ function computeAutoEvaluations(
       status: n > 0 ? 'pass' : 'fail',
       evidence:
         n > 0
-          ? `${n} inspections · Vehicle OOS ${ins.us_vehicle_oos_ratio ?? '—'} · Driver OOS ${ins.us_driver_oos_ratio ?? '—'}`
+          ? `${n} inspection(s) on record`
           : `Zero inspections on record — exception review required`,
     }
   }

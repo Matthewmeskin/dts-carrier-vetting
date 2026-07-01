@@ -13,8 +13,6 @@ const AUTO_LIABILITY_MINIMUM = 1_000_000
 const CARGO_MINIMUM = 100_000
 const AUTHORITY_MINIMUM_DAYS = 365
 const AUTHORITY_NEW_CARRIER_DAYS = 90
-const VEHICLE_OOS_NATIONAL_AVG = 22.26
-const DRIVER_OOS_NATIONAL_AVG = 6.67
 
 export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
   const hardStops: string[] = []
@@ -160,26 +158,10 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     )
   }
 
-  // INFO — OOS ratios vs national averages (Policy Section 10). Out-of-service
-  // risk is already captured by the Bluewire GAP category scores (Driver OOS,
-  // CSA basics, etc.), so we keep these informational only and never flag on
-  // them to avoid double-counting the same signal.
-  const vehicleOOS = parseFloat(data.usVehicleOOSRatio.replace('%', ''))
-  const driverOOS = parseFloat(data.usDriverOOSRatio.replace('%', ''))
-
-  if (!isNaN(vehicleOOS)) {
-    const rel = vehicleOOS > VEHICLE_OOS_NATIONAL_AVG ? 'above' : 'below'
-    info.push(
-      `Vehicle OOS ratio ${data.usVehicleOOSRatio} is ${rel} national average of ${VEHICLE_OOS_NATIONAL_AVG}% (covered by Bluewire scores)`
-    )
-  }
-
-  if (!isNaN(driverOOS)) {
-    const rel = driverOOS > DRIVER_OOS_NATIONAL_AVG ? 'above' : 'below'
-    info.push(
-      `Driver OOS ratio ${data.usDriverOOSRatio} is ${rel} national average of ${DRIVER_OOS_NATIONAL_AVG}% (covered by Bluewire scores)`
-    )
-  }
+  // Out-of-service performance is intentionally NOT surfaced here — it is
+  // already captured by the Bluewire safety scores (Driver OOS Score, CSA
+  // basics, etc.), which are the system of record for safety. Showing RMIS OOS
+  // ratios too would double-count the same signal.
 
   // INFO — Crash history (Policy Section 15)
   if (data.usFatalCrashes > 0) {

@@ -57,7 +57,9 @@ export async function GET(request: NextRequest) {
     const dueForRevet = params.get('dueForRevet') === 'true'
     const activeOnly = params.get('activeOnly') === 'true'
     const search = params.get('search')
-    const limit = Number(params.get('limit')) || 500
+    // Default high enough to return the whole roster (the list view shows all
+    // carriers and sorts/filters client-side); callers can still page explicitly.
+    const limit = Number(params.get('limit')) || 10000
     const offset = Number(params.get('offset')) || 0
 
     // Base carriers query
@@ -79,19 +81,23 @@ export async function GET(request: NextRequest) {
     const { data: carriers, error: carriersError } = await carrierQuery
     if (carriersError) throw carriersError
 
-    // Scores ordered by upload_date desc, latest per dot
+    // Scores ordered by upload_date desc, latest per dot. Explicit high limit so
+    // PostgREST's default 1000-row cap can't silently hide carriers as history
+    // accumulates (multiple score rows per carrier).
     const { data: scores, error: scoresError } = await supabaseAdmin
       .from('carrier_scores')
       .select('*')
       .order('upload_date', { ascending: false })
+      .limit(100000)
     if (scoresError) throw scoresError
     const latestScores = latestPerDot(scores ?? [])
 
-    // Insurance ordered by updated_at desc, latest per dot
+    // Insurance ordered by updated_at desc, latest per dot (same 1000-cap guard).
     const { data: insurance, error: insError } = await supabaseAdmin
       .from('carrier_insurance')
       .select('*')
       .order('updated_at', { ascending: false })
+      .limit(100000)
     if (insError) throw insError
     const latestInsurance = latestPerDot(insurance ?? [])
 

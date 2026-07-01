@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { Logo } from '@/components/Logo'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -20,12 +21,7 @@ export default function RootLayout({
           <header className="bg-white border-b border-gray-200 shadow-sm">
             <div className="mx-auto max-w-[1400px] px-6 py-2.5 flex items-center justify-between">
               <Link href="/carriers" className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/dts-logo.svg"
-                  alt="DTS — Diversified Transportation Services"
-                  className="h-10 w-auto"
-                />
+                <Logo className="h-10 w-auto" />
                 <span className="hidden border-l border-gray-200 pl-3 text-sm font-medium text-gray-500 sm:inline">
                   Carrier Compliance Portal
                 </span>

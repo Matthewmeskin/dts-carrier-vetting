@@ -1,5 +1,5 @@
 import type { InsuranceRecord, ScoreRecord } from './types'
-import { formatCurrency, formatDate, formatScore } from './utils'
+import { formatCurrency, formatDate, formatScore, daysSince } from './utils'
 import { CATEGORY_FIELDS, CATEGORY_THRESHOLD, GAP_THRESHOLD } from './scoringRules'
 
 export type AutoStatus = 'pass' | 'fail' | null
@@ -144,8 +144,8 @@ export function createDefaultChecklist(): VettingChecklist {
       {
         id: 'category_scores',
         category: 'assessment',
-        label: 'Confirmed all 5 safety category scores are above 65',
-        description: 'Crash Score, Violation Score, CSA Basics Score, Driver OOS Score, and Critical Acute Violation Score must each individually be above 65. Any score at or below 65 requires additional vetting on the detail.',
+        label: 'Confirmed all 5 safety category scores are above 30',
+        description: 'Crash Score, Violation Score, CSA Basics Score, Driver OOS Score, and Critical Acute Violation Score must each individually be above 30. Any score at or below 30 requires additional vetting on the detail.',
         policyRef: 'Section 9.3',
         required: true,
         completed: false,
@@ -371,15 +371,22 @@ function computeAutoEvaluations(
     }
   }
 
-  // Continuous authority age ≥ 365 days
-  if (ins && ins.authority_days_active != null) {
-    const d = ins.authority_days_active
+  // Continuous authority age ≥ 365 days — from RMIS OriginalAuthorityGrantDate.
+  // authority_days_active isn't stored, so fall back to the age computed from
+  // the grant date, which we do store.
+  const authDays =
+    ins?.authority_days_active ?? daysSince(ins?.authority_original_date ?? null)
+  if (ins && authDays != null) {
+    const d = authDays
+    const grant = ins.authority_original_date
+      ? ` (granted ${formatDate(ins.authority_original_date)})`
+      : ''
     out.authority_age = {
       status: d >= AUTO_AUTHORITY_MIN_DAYS ? 'pass' : 'fail',
       evidence:
         d >= AUTO_AUTHORITY_MIN_DAYS
-          ? `Authority active ${d} days`
-          : `Authority active ${d} days (under ${AUTO_AUTHORITY_MIN_DAYS} — documented exception required)`,
+          ? `Authority active ${d} days${grant}`
+          : `Authority active ${d} days${grant} — under ${AUTO_AUTHORITY_MIN_DAYS}, documented exception required`,
     }
   }
 

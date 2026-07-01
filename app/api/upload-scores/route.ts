@@ -3,9 +3,13 @@ import * as XLSX from 'xlsx'
 import { supabaseAdmin } from '@/lib/supabase'
 import { evaluateScores } from '@/lib/scoringRules'
 import { sendComplianceAlert } from '@/lib/emailAlerts'
+import { TablesInsert } from '@/lib/database.types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 60
+
+const CHUNK = 500
 
 const COLUMN_MAP: Record<string, string> = {
   'DOT Number': 'dotNumber',
@@ -75,116 +79,121 @@ export async function POST(request: Request) {
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet)
 
-    let total = 0
-    let autoCleared = 0
-    let errors = 0
-    const flagged: FlaggedCarrier[] = []
-
+    // Map + dedupe rows by DOT (last wins).
+    const mapped = new Map<string, Record<string, any>>()
     for (const rawRow of rawRows) {
-      // Map columns to fields
       const r: Record<string, any> = {}
       for (const [header, field] of Object.entries(COLUMN_MAP)) {
         if (header in rawRow) r[field] = rawRow[header]
       }
+      const dot = r.dotNumber != null ? String(r.dotNumber).trim() : ''
+      if (!dot) continue
+      mapped.set(dot, r)
+    }
+    const total = mapped.size
 
-      const dotNumber = r.dotNumber !== undefined && r.dotNumber !== null
-        ? String(r.dotNumber).trim()
-        : ''
-      if (!dotNumber) continue
+    // 1. Bulk upsert carrier identity (chunked).
+    const carrierRows: TablesInsert<'carriers'>[] = Array.from(mapped.entries()).map(
+      ([dot, r]) => ({
+        dot_number: dot,
+        legal_name: r.legalName ?? null,
+        dba_name: r.dbaName ?? null,
+        mc_number: r.mcNumber != null ? String(r.mcNumber) : null,
+        city: r.city ?? null,
+        state: r.state ?? null,
+        street: r.street ?? null,
+        zip: r.zip != null ? String(r.zip) : null,
+        power_units: num(r.powerUnits),
+        safety_rating: r.safetyRating ?? null,
+      })
+    )
+    for (let i = 0; i < carrierRows.length; i += CHUNK) {
+      const { error } = await supabaseAdmin
+        .from('carriers')
+        .upsert(carrierRows.slice(i, i + CHUNK), { onConflict: 'dot_number' })
+      if (error) throw error
+    }
 
-      total++
-
-      try {
-        // 1. Upsert carrier
-        const carrierUpsert = {
-          dot_number: dotNumber,
-          legal_name: r.legalName ?? null,
-          dba_name: r.dbaName ?? null,
-          mc_number: r.mcNumber ?? null,
-          city: r.city ?? null,
-          state: r.state ?? null,
-          street: r.street ?? null,
-          zip: r.zip != null ? String(r.zip) : null,
-          power_units: num(r.powerUnits),
-          safety_rating: r.safetyRating ?? null,
-        }
-
-        const { error: upsertError } = await supabaseAdmin
-          .from('carriers')
-          .upsert([carrierUpsert], { onConflict: 'dot_number' })
-        if (upsertError) throw upsertError
-
-        // Read back carrier id
-        const { data: carrierRow, error: readError } = await supabaseAdmin
-          .from('carriers')
-          .select('id, legal_name')
-          .eq('dot_number', dotNumber)
-          .single()
-        if (readError || !carrierRow) throw readError ?? new Error('Carrier not found after upsert')
-
-        // 2. Evaluate scores
-        const scoresForEval: Record<string, number> = {
-          gap_score: num(r.gapScore) ?? 0,
-          crash_score: num(r.crashScore) ?? 0,
-          violation_score: num(r.violationScore) ?? 0,
-          csa_basics_score: num(r.csaBasicsScore) ?? 0,
-          driver_oos_score: num(r.driverOosScore) ?? 0,
-          critical_acute_violation_score: num(r.criticalAcuteScore) ?? 0,
-        }
-        const evaluation = evaluateScores(scoresForEval)
-
-        // 3. Insert carrier_scores
-        const scoreRow = {
-          carrier_id: (carrierRow as any).id,
-          dot_number: dotNumber,
-          gap_score: num(r.gapScore),
-          crash_score: num(r.crashScore),
-          violation_score: num(r.violationScore),
-          csa_basics_score: num(r.csaBasicsScore),
-          driver_oos_score: num(r.driverOosScore),
-          critical_acute_violation_score: num(r.criticalAcuteScore),
-          new_entrant_score: num(r.newEntrantScore),
-          mcs_150_score: num(r.mcs150Score),
-          judicial_hellholes_score: num(r.judicialHellholesScore),
-          safety_rating_score: num(r.safetyRatingScore),
-          severity_category: r.severityCategory ?? null,
-          rating_label: r.safetyRating ?? null,
-          release_month: releaseMonth(r.releaseMonth),
-          overall_pass: evaluation.overallPass,
-          requires_revetting: evaluation.requiresRevetting,
-          flagged_scores: evaluation.flaggedCategories,
-          approval_level: evaluation.approvalLevel,
-        }
-
-        // Upsert per carrier + release month so re-uploading the same monthly
-        // file updates that month rather than duplicating it. A new Release
-        // Month always adds a new historical row.
-        const { error: scoreError } = await supabaseAdmin
-          .from('carrier_scores')
-          .upsert([scoreRow], { onConflict: 'dot_number,release_month' })
-        if (scoreError) throw scoreError
-
-        // 4. Collect flagged
-        if (evaluation.requiresRevetting) {
-          flagged.push({
-            dotNumber,
-            legalName: (carrierRow as any).legal_name ?? r.legalName ?? '',
-            gapScore: evaluation.gapScore,
-            flaggedCategories: evaluation.flaggedCategories,
-            approvalLevel: evaluation.approvalLevel,
-            alertType: 'score_failure',
-          })
-        } else {
-          autoCleared++
-        }
-      } catch (rowErr) {
-        errors++
-        console.error(`Row error for DOT ${dotNumber}:`, rowErr)
-        continue
+    // 2. Resolve carrier ids in bulk.
+    const idByDot = new Map<string, string>()
+    const dots = Array.from(mapped.keys())
+    for (let i = 0; i < dots.length; i += CHUNK) {
+      const { data, error } = await supabaseAdmin
+        .from('carriers')
+        .select('id, dot_number')
+        .in('dot_number', dots.slice(i, i + CHUNK))
+      if (error) throw error
+      for (const c of data ?? []) {
+        idByDot.set(String((c as any).dot_number), (c as any).id)
       }
     }
 
-    // Send alert + log if any flagged
+    // 3. Evaluate and build score rows in memory.
+    let autoCleared = 0
+    const flagged: FlaggedCarrier[] = []
+    const scoreRows: TablesInsert<'carrier_scores'>[] = []
+    for (const [dot, r] of Array.from(mapped.entries())) {
+      const carrierId = idByDot.get(dot)
+      if (!carrierId) continue
+
+      const evaluation = evaluateScores({
+        gap_score: num(r.gapScore) ?? 0,
+        crash_score: num(r.crashScore) ?? 0,
+        violation_score: num(r.violationScore) ?? 0,
+        csa_basics_score: num(r.csaBasicsScore) ?? 0,
+        driver_oos_score: num(r.driverOosScore) ?? 0,
+        critical_acute_violation_score: num(r.criticalAcuteScore) ?? 0,
+      })
+
+      scoreRows.push({
+        carrier_id: carrierId,
+        dot_number: dot,
+        gap_score: num(r.gapScore),
+        crash_score: num(r.crashScore),
+        violation_score: num(r.violationScore),
+        csa_basics_score: num(r.csaBasicsScore),
+        driver_oos_score: num(r.driverOosScore),
+        critical_acute_violation_score: num(r.criticalAcuteScore),
+        new_entrant_score: num(r.newEntrantScore),
+        mcs_150_score: num(r.mcs150Score),
+        judicial_hellholes_score: num(r.judicialHellholesScore),
+        safety_rating_score: num(r.safetyRatingScore),
+        severity_category: r.severityCategory ?? null,
+        rating_label: r.safetyRating ?? null,
+        release_month: releaseMonth(r.releaseMonth),
+        overall_pass: evaluation.overallPass,
+        requires_revetting: evaluation.requiresRevetting,
+        flagged_scores: evaluation.flaggedCategories,
+        approval_level: evaluation.approvalLevel,
+      })
+
+      if (evaluation.requiresRevetting) {
+        flagged.push({
+          dotNumber: dot,
+          legalName: r.legalName ?? '',
+          gapScore: evaluation.gapScore,
+          flaggedCategories: evaluation.flaggedCategories,
+          approvalLevel: evaluation.approvalLevel,
+          alertType: 'score_failure',
+        })
+      } else {
+        autoCleared++
+      }
+    }
+
+    // 4. Bulk upsert scores (idempotent per carrier + release month).
+    for (let i = 0; i < scoreRows.length; i += CHUNK) {
+      const { error } = await supabaseAdmin
+        .from('carrier_scores')
+        .upsert(scoreRows.slice(i, i + CHUNK), {
+          onConflict: 'dot_number,release_month',
+        })
+      if (error) throw error
+    }
+
+    const errors = total - scoreRows.length
+
+    // Alert + log if any flagged.
     if (flagged.length > 0) {
       const batchLabel = `Monthly Bluewire upload — ${new Date().toLocaleDateString()}`
       try {
@@ -192,7 +201,6 @@ export async function POST(request: Request) {
       } catch (alertErr) {
         console.error('Compliance alert failed:', alertErr)
       }
-
       try {
         const sentTo = (process.env.ALERT_EMAIL_TO ?? '')
           .split(',')

@@ -226,7 +226,12 @@ export async function deltaClear(
     ClientID: clientID,
     ClientPassword: clientPassword,
     APIMode: 'Clear',
-    InsdID: items.map((i) => i.insdID),
+    // Per the Delta API spec, Clear takes ClearInsureds with each insured's id
+    // and the timeStamp from the Expanded Carrier API header response.
+    ClearInsureds: items.map((i) => ({
+      insdID: i.insdID,
+      timeStamp: i.timeStamp,
+    })),
   })
 }
 

@@ -185,6 +185,8 @@ export interface DeltaLogRecord {
   alert_sent: boolean | null
   alert_sent_at: string | null
   processed: boolean | null
+  reviewed_at: string | null
+  reviewed_by: string | null
 }
 
 export interface CarrierDetail {

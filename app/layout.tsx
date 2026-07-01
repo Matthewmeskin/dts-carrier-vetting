@@ -33,6 +33,12 @@ export default function RootLayout({
                   Carriers
                 </Link>
                 <Link
+                  href="/changes"
+                  className="rounded px-3 py-1.5 hover:bg-white/10 transition"
+                >
+                  Changes
+                </Link>
+                <Link
                   href="/upload"
                   className="rounded px-3 py-1.5 hover:bg-white/10 transition"
                 >

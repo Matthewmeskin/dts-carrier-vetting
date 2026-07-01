@@ -63,6 +63,8 @@ export type Database = {
           previous_operating_status: string | null
           previous_safety_rating: string | null
           processed: boolean | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           rmis_insured_id: string | null
         }
         Insert: {
@@ -83,6 +85,8 @@ export type Database = {
           previous_operating_status?: string | null
           previous_safety_rating?: string | null
           processed?: boolean | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           rmis_insured_id?: string | null
         }
         Update: {
@@ -103,6 +107,8 @@ export type Database = {
           previous_operating_status?: string | null
           previous_safety_rating?: string | null
           processed?: boolean | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           rmis_insured_id?: string | null
         }
         Relationships: []

@@ -514,6 +514,7 @@ export type Database = {
           file_size_bytes: number | null
           google_drive_file_id: string | null
           rmis_document_type: string | null
+          rmis_document_id: string | null
           source: string | null
           google_drive_view_url: string | null
           id: string
@@ -531,6 +532,7 @@ export type Database = {
           dot_number: string
           file_name?: string | null
           rmis_document_type?: string | null
+          rmis_document_id?: string | null
           source?: string | null
           file_size_bytes?: number | null
           google_drive_file_id?: string | null

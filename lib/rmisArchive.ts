@@ -98,24 +98,28 @@ export async function archiveCarrierDocuments(args: {
 
   for (const t of targets) {
     try {
+      // Dedupe by the STABLE RMIS document id, not content. RMIS re-wraps
+      // documents on each fetch (same doc, different bytes → different hash), so
+      // a content hash produced duplicates. Skip the fetch entirely if we
+      // already have this document id for this carrier + type.
+      const { data: existing } = await supabaseAdmin
+        .from('vetting_documents')
+        .select('id')
+        .eq('dot_number', dot)
+        .eq('rmis_document_type', t.rmisType)
+        .eq('rmis_document_id', t.documentID)
+        .limit(1)
+      if (existing && existing.length > 0) {
+        result.unchanged++
+        continue
+      }
+
       const doc = await fetchCarrierDocument({
         insdID,
         documentType: t.rmisType,
         documentID: t.documentID,
       })
       const sha256 = createHash('sha256').update(doc.buffer).digest('hex')
-
-      // Dedupe by content across this carrier's documents.
-      const { data: existing } = await supabaseAdmin
-        .from('vetting_documents')
-        .select('id')
-        .eq('dot_number', dot)
-        .eq('content_sha256', sha256)
-        .limit(1)
-      if (existing && existing.length > 0) {
-        result.unchanged++
-        continue
-      }
 
       const ext = doc.fileName.split('.').pop() || 'bin'
       const path = `${dot}/rmis/${t.rmisType}/${t.documentID}-${Date.now()}.${ext}`
@@ -133,6 +137,7 @@ export async function archiveCarrierDocuments(args: {
             dot_number: dot,
             document_type: t.docType,
             rmis_document_type: t.rmisType,
+            rmis_document_id: t.documentID,
             source: 'rmis',
             content_sha256: sha256,
             file_name: doc.fileName,

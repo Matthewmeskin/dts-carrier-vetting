@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import { InsuranceRecord, ScoreRecord, VettingRecord } from '@/lib/types'
+import { InsuranceRecord, ScoreRecord, SosRecord, VettingRecord } from '@/lib/types'
 import {
   createDefaultChecklist,
   checklistCompletionPercent,
@@ -93,6 +93,7 @@ export function VettingChecklist({
   safetyRating,
   insurance,
   score,
+  sos,
   vettingRecords,
   onSaved,
   carrierStatus,
@@ -108,6 +109,7 @@ export function VettingChecklist({
   safetyRating?: string | null
   insurance?: InsuranceRecord | null
   score?: ScoreRecord | null
+  sos?: SosRecord | null
   vettingRecords: VettingRecord[]
   onSaved?: () => void | Promise<void>
   carrierStatus: string | null
@@ -122,8 +124,8 @@ export function VettingChecklist({
 
   const latest = vettingRecords[0]
   const autoInputs = useMemo<ChecklistAutoInputs>(
-    () => ({ safetyRating, insurance, score }),
-    [safetyRating, insurance, score]
+    () => ({ safetyRating, insurance, score, sos }),
+    [safetyRating, insurance, score, sos]
   )
   const [vettingType, setVettingType] = useState(
     latest?.vetting_type || 'initial'

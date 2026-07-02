@@ -13,6 +13,7 @@ import {
 import { Spinner } from '@/components/ui/Spinner'
 import { AlertBanner } from '@/components/AlertBanner'
 import { AuthorityPanel } from '@/components/AuthorityPanel'
+import { SosPanel } from '@/components/SosPanel'
 import { InsurancePanel } from '@/components/InsurancePanel'
 import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
@@ -107,7 +108,7 @@ export default function CarrierDetailPage({
     )
   }
 
-  const { carrier, scores, insurance, vettingRecords, deltaLog } = detail
+  const { carrier, scores, insurance, vettingRecords, deltaLog, sos, factor } = detail
   const revet = computeRevetStatus(
     vettingRecords[0]?.completed_at ?? null,
     carrier.created_at,
@@ -181,6 +182,9 @@ export default function CarrierDetailPage({
 
           {/* Authority & Identity, in the same tile as the carrier header */}
           <AuthorityPanel insurance={insurance} bare />
+
+          {/* Business registration (Secretary of State) + factor */}
+          <SosPanel dot={dot} sos={sos} factor={factor} onRefreshed={load} />
         </CardBody>
       </Card>
 
@@ -202,6 +206,7 @@ export default function CarrierDetailPage({
         safetyRating={carrier.safety_rating}
         insurance={insurance}
         score={scores[0]}
+        sos={sos}
         vettingRecords={vettingRecords}
         onSaved={load}
         carrierStatus={carrier.carrier_status}

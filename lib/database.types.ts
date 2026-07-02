@@ -437,6 +437,7 @@ export type Database = {
           do_not_use: boolean | null
           do_not_use_reason: string | null
           dot_number: string
+          factor_id: string | null
           id: string
           legal_name: string | null
           mc_number: string | null
@@ -463,6 +464,7 @@ export type Database = {
           do_not_use?: boolean | null
           do_not_use_reason?: string | null
           dot_number: string
+          factor_id?: string | null
           id?: string
           legal_name?: string | null
           mc_number?: string | null
@@ -489,6 +491,7 @@ export type Database = {
           do_not_use?: boolean | null
           do_not_use_reason?: string | null
           dot_number?: string
+          factor_id?: string | null
           id?: string
           legal_name?: string | null
           mc_number?: string | null
@@ -501,6 +504,178 @@ export type Database = {
           street?: string | null
           updated_at?: string | null
           zip?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carriers_factor_id_fkey"
+            columns: ["factor_id"]
+            isOneToOne: false
+            referencedRelation: "factors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      carrier_sos: {
+        Row: {
+          address_match: string | null
+          carrier_id: string | null
+          checked_at: string | null
+          created_at: string | null
+          dot_number: string
+          id: string
+          match_confidence: string | null
+          mismatches: Json | null
+          name_match: boolean | null
+          risk_flags: Json | null
+          sos_entity_id: string | null
+          sos_entity_type: string | null
+          sos_formation_date: string | null
+          sos_officers: Json | null
+          sos_principal_address: string | null
+          sos_raw: Json | null
+          sos_registered_agent: string | null
+          sos_registered_agent_address: string | null
+          sos_state: string | null
+          sos_status: string | null
+          sos_status_normalized: string | null
+          sos_summary: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address_match?: string | null
+          carrier_id?: string | null
+          checked_at?: string | null
+          created_at?: string | null
+          dot_number: string
+          id?: string
+          match_confidence?: string | null
+          mismatches?: Json | null
+          name_match?: boolean | null
+          risk_flags?: Json | null
+          sos_entity_id?: string | null
+          sos_entity_type?: string | null
+          sos_formation_date?: string | null
+          sos_officers?: Json | null
+          sos_principal_address?: string | null
+          sos_raw?: Json | null
+          sos_registered_agent?: string | null
+          sos_registered_agent_address?: string | null
+          sos_state?: string | null
+          sos_status?: string | null
+          sos_status_normalized?: string | null
+          sos_summary?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address_match?: string | null
+          carrier_id?: string | null
+          checked_at?: string | null
+          created_at?: string | null
+          dot_number?: string
+          id?: string
+          match_confidence?: string | null
+          mismatches?: Json | null
+          name_match?: boolean | null
+          risk_flags?: Json | null
+          sos_entity_id?: string | null
+          sos_entity_type?: string | null
+          sos_formation_date?: string | null
+          sos_officers?: Json | null
+          sos_principal_address?: string | null
+          sos_raw?: Json | null
+          sos_registered_agent?: string | null
+          sos_registered_agent_address?: string | null
+          sos_state?: string | null
+          sos_status?: string | null
+          sos_status_normalized?: string | null
+          sos_summary?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carrier_sos_carrier_id_fkey"
+            columns: ["carrier_id"]
+            isOneToOne: false
+            referencedRelation: "carriers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factors: {
+        Row: {
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string | null
+          id: string
+          name: string
+          normalized_name: string
+          notes: string | null
+          sos_checked_at: string | null
+          sos_entity_id: string | null
+          sos_entity_type: string | null
+          sos_formation_date: string | null
+          sos_match_confidence: string | null
+          sos_officers: Json | null
+          sos_principal_address: string | null
+          sos_raw: Json | null
+          sos_registered_agent: string | null
+          sos_registered_agent_address: string | null
+          sos_state: string | null
+          sos_status: string | null
+          sos_status_normalized: string | null
+          sos_summary: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          normalized_name: string
+          notes?: string | null
+          sos_checked_at?: string | null
+          sos_entity_id?: string | null
+          sos_entity_type?: string | null
+          sos_formation_date?: string | null
+          sos_match_confidence?: string | null
+          sos_officers?: Json | null
+          sos_principal_address?: string | null
+          sos_raw?: Json | null
+          sos_registered_agent?: string | null
+          sos_registered_agent_address?: string | null
+          sos_state?: string | null
+          sos_status?: string | null
+          sos_status_normalized?: string | null
+          sos_summary?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          normalized_name?: string
+          notes?: string | null
+          sos_checked_at?: string | null
+          sos_entity_id?: string | null
+          sos_entity_type?: string | null
+          sos_formation_date?: string | null
+          sos_match_confidence?: string | null
+          sos_officers?: Json | null
+          sos_principal_address?: string | null
+          sos_raw?: Json | null
+          sos_registered_agent?: string | null
+          sos_registered_agent_address?: string | null
+          sos_state?: string | null
+          sos_status?: string | null
+          sos_status_normalized?: string | null
+          sos_summary?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }

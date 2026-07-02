@@ -230,3 +230,68 @@ create trigger carriers_updated_at
 create trigger carrier_insurance_updated_at
   before update on carrier_insurance
   for each row execute function update_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Secretary-of-State enrichment + approved-factors registry
+-- ---------------------------------------------------------------------------
+
+-- One row per unique factoring company (deduped by normalized_name) so SOS data
+-- is pulled once per factor and reused across every carrier that shares it.
+create table if not exists factors (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  normalized_name text unique not null,
+  approval_status text not null default 'review',   -- review | approved | rejected
+  approved_by text,
+  approved_at timestamptz,
+  notes text,
+  sos_state text,
+  sos_entity_id text,
+  sos_status text,
+  sos_status_normalized text,       -- active | inactive | dissolved | delinquent | unknown
+  sos_entity_type text,
+  sos_formation_date date,
+  sos_registered_agent text,
+  sos_registered_agent_address text,
+  sos_principal_address text,
+  sos_officers jsonb default '[]'::jsonb,
+  sos_match_confidence text,        -- high | medium | low | none
+  sos_summary text,
+  sos_raw jsonb,
+  sos_checked_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Per-carrier Secretary-of-State snapshot (raw payload kept off the hot path).
+create table if not exists carrier_sos (
+  id uuid primary key default gen_random_uuid(),
+  carrier_id uuid references carriers(id) on delete cascade,
+  dot_number text unique not null,
+  sos_state text,
+  sos_entity_id text,
+  sos_status text,
+  sos_status_normalized text,
+  sos_entity_type text,
+  sos_formation_date date,
+  sos_registered_agent text,
+  sos_registered_agent_address text,
+  sos_principal_address text,
+  sos_officers jsonb default '[]'::jsonb,
+  name_match boolean,
+  address_match text,               -- match | partial | mismatch | unknown
+  match_confidence text,            -- high | medium | low | none
+  mismatches jsonb default '[]'::jsonb,
+  risk_flags jsonb default '[]'::jsonb,
+  sos_summary text,
+  sos_raw jsonb,
+  checked_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table carriers add column if not exists factor_id uuid references factors(id);
+
+create index if not exists idx_carrier_sos_dot on carrier_sos (dot_number);
+create index if not exists idx_carriers_factor_id on carriers (factor_id);
+create index if not exists idx_factors_normalized on factors (normalized_name);

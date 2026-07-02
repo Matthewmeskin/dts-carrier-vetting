@@ -197,10 +197,57 @@ export interface DeltaLogRecord {
   reviewed_by: string | null
 }
 
+export interface SosRecord {
+  id: string
+  dot_number: string
+  sos_state: string | null
+  sos_entity_id: string | null
+  sos_status: string | null
+  sos_status_normalized: string | null
+  sos_entity_type: string | null
+  sos_formation_date: string | null
+  sos_registered_agent: string | null
+  sos_registered_agent_address: string | null
+  sos_principal_address: string | null
+  sos_officers: string[] | null
+  name_match: boolean | null
+  address_match: string | null
+  match_confidence: string | null
+  mismatches: string[] | null
+  risk_flags: string[] | null
+  sos_summary: string | null
+  checked_at: string | null
+  updated_at: string | null
+}
+
+export interface FactorRecord {
+  id: string
+  name: string
+  normalized_name: string
+  approval_status: string
+  approved_by: string | null
+  approved_at: string | null
+  notes: string | null
+  sos_state: string | null
+  sos_entity_id: string | null
+  sos_status: string | null
+  sos_status_normalized: string | null
+  sos_entity_type: string | null
+  sos_formation_date: string | null
+  sos_registered_agent: string | null
+  sos_principal_address: string | null
+  sos_match_confidence: string | null
+  sos_summary: string | null
+  sos_checked_at: string | null
+  carrier_count?: number
+}
+
 export interface CarrierDetail {
   carrier: CarrierRecord
   scores: ScoreRecord[]
   insurance: InsuranceRecord | null
   vettingRecords: VettingRecord[]
   deltaLog: DeltaLogRecord[]
+  sos: SosRecord | null
+  factor: FactorRecord | null
 }

@@ -13,7 +13,7 @@ export async function GET(
 
     // Fetch everything the detail page needs in parallel — these are all keyed
     // by dot_number and independent of each other.
-    const [carrierRes, scoresRes, insRes, vetRes, deltaRes] = await Promise.all([
+    const [carrierRes, scoresRes, insRes, vetRes, deltaRes, sosRes] = await Promise.all([
       supabaseAdmin.from('carriers').select('*').eq('dot_number', dot).single(),
       supabaseAdmin
         .from('carrier_scores')
@@ -43,6 +43,15 @@ export async function GET(
         .eq('dot_number', dot)
         .order('detected_at', { ascending: false })
         .limit(30),
+      supabaseAdmin
+        .from('carrier_sos')
+        // Display columns only — never the large sos_raw blob (same lesson as
+        // raw_rmis_response: pulling it back can empty the query).
+        .select(
+          'id, carrier_id, dot_number, sos_state, sos_entity_id, sos_status, sos_status_normalized, sos_entity_type, sos_formation_date, sos_registered_agent, sos_registered_agent_address, sos_principal_address, sos_officers, name_match, address_match, match_confidence, mismatches, risk_flags, sos_summary, checked_at, updated_at'
+        )
+        .eq('dot_number', dot)
+        .limit(1),
     ])
 
     const carrier = carrierRes.data
@@ -55,6 +64,20 @@ export async function GET(
       insRes.data && insRes.data.length > 0 ? insRes.data[0] : null
     const vettingRecords = vetRes.data ?? []
     const deltaLog = deltaRes.data ?? []
+    const sos = sosRes.data && sosRes.data.length > 0 ? sosRes.data[0] : null
+
+    // The linked (deduped) factor, with its SOS + approval status.
+    let factor: any = null
+    if ((carrier as any).factor_id) {
+      const { data: f } = await supabaseAdmin
+        .from('factors')
+        .select(
+          'id, name, normalized_name, approval_status, approved_by, approved_at, notes, sos_state, sos_entity_id, sos_status, sos_status_normalized, sos_entity_type, sos_formation_date, sos_registered_agent, sos_principal_address, sos_match_confidence, sos_summary, sos_checked_at'
+        )
+        .eq('id', (carrier as any).factor_id)
+        .single()
+      factor = f ?? null
+    }
 
     // One query for all documents across these vetting records (no N+1 loop).
     const recordIds = vettingRecords.map((r: any) => r.id)
@@ -81,6 +104,8 @@ export async function GET(
       insurance,
       vettingRecords: recordsWithDocs,
       deltaLog,
+      sos,
+      factor,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

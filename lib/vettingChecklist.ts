@@ -1,4 +1,4 @@
-import type { InsuranceRecord, ScoreRecord } from './types'
+import type { InsuranceRecord, ScoreRecord, SosRecord } from './types'
 import { formatCurrency, formatDate, formatScore, daysSince } from './utils'
 import {
   GATING_FIELDS,
@@ -188,6 +188,26 @@ export function createDefaultChecklist(): VettingChecklist {
         notes: '',
       },
       {
+        id: 'sos_good_standing',
+        category: 'verification',
+        label: 'Confirmed legal entity is active / in good standing (Secretary of State)',
+        description: 'Entity must be Active / Good Standing in its domicile state Secretary of State registry. Dissolved, delinquent, or inactive status requires an exception and senior review.',
+        policyRef: 'Section 11',
+        required: true,
+        completed: false,
+        notes: '',
+      },
+      {
+        id: 'sos_identity_crosscheck',
+        category: 'risk',
+        label: 'Cross-checked SOS registration against carrier identity',
+        description: 'Registered legal name and address should match FMCSA. Watch for a recently-formed entity operating under older/reinstated authority (reincarnation/chameleon), shared principals with DNU carriers, or registered-agent reuse.',
+        policyRef: 'Section 11, 12',
+        required: false,
+        completed: false,
+        notes: '',
+      },
+      {
         id: 'fraud_indicators',
         category: 'risk',
         label: 'No unresolved fraud, double-brokering, or identity concerns',
@@ -272,6 +292,7 @@ export interface ChecklistAutoInputs {
   safetyRating?: string | null
   insurance?: InsuranceRecord | null
   score?: ScoreRecord | null
+  sos?: SosRecord | null
 }
 
 interface StepEval {
@@ -290,6 +311,7 @@ function computeAutoEvaluations(
 ): Record<string, StepEval> {
   const ins = inputs.insurance ?? null
   const score = inputs.score ?? null
+  const sos = inputs.sos ?? null
   const out: Record<string, StepEval> = {}
 
   // Active FMCSA operating authority. A carrier may run on common OR contract
@@ -449,6 +471,41 @@ function computeAutoEvaluations(
       // Optional preference — only auto-check when it clears; never auto-fail.
       status: meetsPreferred ? 'pass' : null,
       evidence: `${formatCurrency(ins.general_occurrence_limit)} / ${formatCurrency(ins.general_aggregate_limit)}${meetsPreferred ? '' : ' (below preferred $1M/$2M)'}`,
+    }
+  }
+
+  // Secretary-of-State — entity in good standing (Verification)
+  if (sos && sos.checked_at) {
+    const norm = (sos.sos_status_normalized || '').toLowerCase()
+    if (norm === 'active') {
+      out.sos_good_standing = {
+        status: 'pass',
+        evidence: `${sos.sos_status ?? 'Active'} in ${sos.sos_state ?? 'SOS'}${
+          sos.sos_formation_date ? ` · formed ${formatDate(sos.sos_formation_date)}` : ''
+        }`,
+      }
+    } else if (norm === 'dissolved' || norm === 'inactive' || norm === 'delinquent') {
+      out.sos_good_standing = {
+        status: 'fail',
+        evidence: `Entity is ${sos.sos_status ?? norm} in ${sos.sos_state ?? 'SOS'} — exception required`,
+      }
+    }
+    // 'unknown' / no match → leave for manual review (no auto status).
+
+    // SOS identity cross-check (Risk)
+    const flags = sos.risk_flags ?? []
+    const mism = sos.mismatches ?? []
+    if (sos.match_confidence && sos.match_confidence !== 'none') {
+      const clean =
+        sos.name_match !== false &&
+        sos.address_match !== 'mismatch' &&
+        flags.length === 0
+      out.sos_identity_crosscheck = {
+        status: clean ? 'pass' : 'fail',
+        evidence: clean
+          ? `SOS matches carrier identity (${sos.match_confidence} confidence)`
+          : `Review: ${[...flags, ...mism].slice(0, 3).join('; ') || 'name/address discrepancy'}`,
+      }
     }
   }
 

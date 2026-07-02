@@ -40,6 +40,12 @@ export default function RootLayout({
                   Changes
                 </Link>
                 <Link
+                  href="/factors"
+                  className="rounded px-3 py-1.5 text-gray-700 transition hover:bg-gray-100"
+                >
+                  Factors
+                </Link>
+                <Link
                   href="/upload"
                   className="rounded px-3 py-1.5 text-gray-700 transition hover:bg-gray-100"
                 >

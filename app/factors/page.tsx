@@ -47,13 +47,33 @@ export default function FactorsPage() {
 
   async function setStatus(id: string, approval_status: string) {
     setSavingId(id)
+    setError(null)
+    // Optimistically update the row so the click gives immediate feedback.
+    setFactors((prev) =>
+      prev.map((f) =>
+        f.id === id
+          ? {
+              ...f,
+              approval_status,
+              approved_by: approval_status === 'approved' ? 'DTS' : null,
+            }
+          : f
+      )
+    )
     try {
-      await fetch('/api/factors', {
+      const res = await fetch('/api/factors', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, approval_status }),
       })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || 'Update failed')
+      }
       await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed')
+      await load() // reconcile from server on failure
     } finally {
       setSavingId(null)
     }

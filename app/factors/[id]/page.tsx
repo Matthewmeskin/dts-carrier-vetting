@@ -93,14 +93,32 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
   }, [load])
 
   async function setStatus(approval_status: string) {
+    if (!factor) return
     setBusy(true)
+    setError(null)
+    const prev = factor
+    // Optimistically flip the badge so the click is never a silent no-op.
+    setFactor({
+      ...factor,
+      approval_status,
+      approved_by: approval_status === 'approved' ? 'DTS' : null,
+      approved_at:
+        approval_status === 'approved' ? new Date().toISOString() : null,
+    })
     try {
-      await fetch('/api/factors', {
+      const res = await fetch('/api/factors', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, approval_status }),
       })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || 'Update failed')
+      }
       await load()
+    } catch (e) {
+      setFactor(prev) // revert on failure
+      setError(e instanceof Error ? e.message : 'Update failed')
     } finally {
       setBusy(false)
     }

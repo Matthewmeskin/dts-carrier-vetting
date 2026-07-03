@@ -11,6 +11,8 @@ export async function GET() {
     const { data: factors, error } = await supabaseAdmin
       .from('factors')
       .select('*')
+      // Only canonical factors; merged spelling-variants roll up into these.
+      .is('merged_into', null)
       .order('name', { ascending: true })
       .limit(2000)
     if (error) throw error

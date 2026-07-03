@@ -611,6 +611,7 @@ export type Database = {
           approved_by: string | null
           created_at: string | null
           id: string
+          merged_into: string | null
           name: string
           normalized_name: string
           notes: string | null
@@ -636,6 +637,7 @@ export type Database = {
           approved_by?: string | null
           created_at?: string | null
           id?: string
+          merged_into?: string | null
           name: string
           normalized_name: string
           notes?: string | null
@@ -661,6 +663,7 @@ export type Database = {
           approved_by?: string | null
           created_at?: string | null
           id?: string
+          merged_into?: string | null
           name?: string
           normalized_name?: string
           notes?: string | null

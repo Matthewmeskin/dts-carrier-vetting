@@ -149,10 +149,15 @@ export async function POST(request: Request) {
       if (fErr) throw fErr
       const { data: fRows } = await supabaseAdmin
         .from('factors')
-        .select('id, normalized_name')
+        .select('id, normalized_name, merged_into')
         .in('normalized_name', Array.from(factorLabelByNorm.keys()))
       for (const f of fRows ?? []) {
-        factorIdByNorm.set((f as any).normalized_name, (f as any).id)
+        // If this spelling was merged into a canonical factor, link carriers to
+        // the canonical one so variants collapse and stay collapsed on re-sync.
+        factorIdByNorm.set(
+          (f as any).normalized_name,
+          (f as any).merged_into ?? (f as any).id
+        )
       }
       // Attach factor_id to each carrier row we're about to upsert.
       for (const [dot, norm] of Array.from(factorByDot.entries())) {

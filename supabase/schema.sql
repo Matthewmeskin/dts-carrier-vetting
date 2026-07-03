@@ -299,3 +299,10 @@ create index if not exists idx_factors_normalized on factors (normalized_name);
 -- Preserve the raw Brokerware "Carrier/Factor" name; the sync parses the clean
 -- carrier name into legal_name and the factor into the factors registry.
 alter table carriers add column if not exists brokerware_raw_name text;
+
+-- A factor spelling-variant can be merged into a canonical factor: the variant
+-- row is kept (so re-sync doesn't recreate it) with a pointer to the canonical,
+-- and carriers are linked to the canonical. The Factors list shows only
+-- canonical rows; the sync follows merged_into when linking carriers.
+alter table factors add column if not exists merged_into uuid references factors(id);
+create index if not exists idx_factors_merged_into on factors (merged_into);

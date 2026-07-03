@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { TablesInsert } from '@/lib/database.types'
+import { parseCarrierAndFactor } from '@/lib/carrierName'
+import { normalizeEntityName } from '@/lib/sosNormalize'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -61,11 +63,19 @@ export async function POST(request: Request) {
     let disabled = 0
     const byDot = new Map<string, TablesInsert<'carriers'>>()
     const skipped: TablesInsert<'brokerware_skipped_carriers'>[] = []
+    // Factor label (from the "Carrier/Factor" name) keyed by DOT, plus the set of
+    // distinct factors to upsert into the deduped registry.
+    const factorByDot = new Map<string, string>() // dot -> normalized factor key
+    const factorLabelByNorm = new Map<string, string>() // norm -> display label
     const now = new Date().toISOString()
 
     for (const c of list) {
       // Skip non-transport / placeholder accounts entirely — not vettable.
       if (isNonCarrier(s(c.carrierName))) continue
+
+      // Brokerware stores factored carriers as "Carrier Name/Factor Name".
+      const rawName = s(c.carrierName)
+      const { carrierName, factorName } = parseCarrierAndFactor(rawName)
 
       const status = s(c.status)
       const isActive = !!status && status.toLowerCase() === 'active'
@@ -100,7 +110,10 @@ export async function POST(request: Request) {
       byDot.set(dot, {
         dot_number: dot,
         mc_number: s(c.mc),
-        legal_name: s(c.carrierName),
+        // Store the clean carrier name; keep the raw "Carrier/Factor" string so
+        // the parse is non-destructive.
+        legal_name: carrierName || rawName,
+        brokerware_raw_name: rawName,
         street: s(c.carrierAddress1),
         city: s(c.carrierCity),
         state: s(c.carrierState),
@@ -112,6 +125,41 @@ export async function POST(request: Request) {
         brokerware_status: status,
         brokerware_synced_at: now,
       })
+
+      if (factorName) {
+        const norm = normalizeEntityName(factorName)
+        if (norm) {
+          factorByDot.set(dot, norm)
+          if (!factorLabelByNorm.has(norm)) factorLabelByNorm.set(norm, factorName)
+        }
+      }
+    }
+
+    // Upsert the deduped factor registry and resolve each factor's id so we can
+    // link carriers. Only name/normalized_name are touched — approval state and
+    // any SOS data on an existing factor are preserved.
+    const factorIdByNorm = new Map<string, string>()
+    if (factorLabelByNorm.size > 0) {
+      const factorRows: TablesInsert<'factors'>[] = Array.from(
+        factorLabelByNorm.entries()
+      ).map(([normalized_name, name]) => ({ name, normalized_name }))
+      const { error: fErr } = await supabaseAdmin
+        .from('factors')
+        .upsert(factorRows, { onConflict: 'normalized_name', ignoreDuplicates: true })
+      if (fErr) throw fErr
+      const { data: fRows } = await supabaseAdmin
+        .from('factors')
+        .select('id, normalized_name')
+        .in('normalized_name', Array.from(factorLabelByNorm.keys()))
+      for (const f of fRows ?? []) {
+        factorIdByNorm.set((f as any).normalized_name, (f as any).id)
+      }
+      // Attach factor_id to each carrier row we're about to upsert.
+      for (const [dot, norm] of Array.from(factorByDot.entries())) {
+        const row = byDot.get(dot)
+        const fid = factorIdByNorm.get(norm)
+        if (row && fid) (row as any).factor_id = fid
+      }
     }
 
     const rows = Array.from(byDot.values())

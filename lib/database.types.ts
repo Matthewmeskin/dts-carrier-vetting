@@ -426,6 +426,7 @@ export type Database = {
       carriers: {
         Row: {
           brokerware_carrier_id: number | null
+          brokerware_raw_name: string | null
           brokerware_status: string | null
           brokerware_synced_at: string | null
           carrier_status: string | null
@@ -453,6 +454,7 @@ export type Database = {
         }
         Insert: {
           brokerware_carrier_id?: number | null
+          brokerware_raw_name?: string | null
           brokerware_status?: string | null
           brokerware_synced_at?: string | null
           carrier_status?: string | null
@@ -480,6 +482,7 @@ export type Database = {
         }
         Update: {
           brokerware_carrier_id?: number | null
+          brokerware_raw_name?: string | null
           brokerware_status?: string | null
           brokerware_synced_at?: string | null
           carrier_status?: string | null

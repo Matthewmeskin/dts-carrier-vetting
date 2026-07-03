@@ -295,3 +295,7 @@ alter table carriers add column if not exists factor_id uuid references factors(
 create index if not exists idx_carrier_sos_dot on carrier_sos (dot_number);
 create index if not exists idx_carriers_factor_id on carriers (factor_id);
 create index if not exists idx_factors_normalized on factors (normalized_name);
+
+-- Preserve the raw Brokerware "Carrier/Factor" name; the sync parses the clean
+-- carrier name into legal_name and the factor into the factors registry.
+alter table carriers add column if not exists brokerware_raw_name text;

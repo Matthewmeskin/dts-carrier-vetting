@@ -7,6 +7,8 @@
 //   POST  {BASE}/_c/std/api/DeltaAPI.aspx
 //   GET   {BASE}/_c/std/api/ExpandedCarrierAPI.aspx
 
+import { withRmisLock } from './rmisLock'
+
 const BASE_URL = process.env.RMIS_BASE_URL || 'https://api.rmissecure.com'
 const CLIENT_ID = process.env.RMIS_CLIENT_ID
 const CLIENT_PASSWORD = process.env.RMIS_CLIENT_PASSWORD
@@ -72,17 +74,17 @@ export async function fetchExpandedCarrierXML(params: {
     version: '13',
   })
 
-  const res = await fetch(`${EXPANDED_URL}?${query.toString()}`, {
-    method: 'GET',
-    headers: { Accept: 'application/xml, text/xml' },
-    cache: 'no-store',
-  })
-
-  if (!res.ok) {
-    throw new Error(`RMIS Expanded Carrier API returned ${res.status} ${res.statusText}`)
-  }
-
-  const xml = await res.text()
+  const xml = await withRmisLock(async () => {
+    const res = await fetch(`${EXPANDED_URL}?${query.toString()}`, {
+      method: 'GET',
+      headers: { Accept: 'application/xml, text/xml' },
+      cache: 'no-store',
+    })
+    if (!res.ok) {
+      throw new Error(`RMIS Expanded Carrier API returned ${res.status} ${res.statusText}`)
+    }
+    return res.text()
+  }, { label: 'expanded' })
   // RMIS returns HTTP 200 with an error envelope on auth/param failures
   // (e.g. "Password could not be validated."). Reject these so callers never
   // parse an empty stub and store it over good data.
@@ -171,16 +173,17 @@ export async function fetchCarrierDocument(params: {
     version: '1',
   })
 
-  const res = await fetch(`${DOCUMENT_URL}?${query.toString()}`, {
-    method: 'GET',
-    headers: { Accept: 'application/xml, text/xml' },
-    cache: 'no-store',
-  })
-  if (!res.ok) {
-    throw new Error(`RMIS Document API returned ${res.status} ${res.statusText}`)
-  }
-
-  const xml = await res.text()
+  const xml = await withRmisLock(async () => {
+    const res = await fetch(`${DOCUMENT_URL}?${query.toString()}`, {
+      method: 'GET',
+      headers: { Accept: 'application/xml, text/xml' },
+      cache: 'no-store',
+    })
+    if (!res.ok) {
+      throw new Error(`RMIS Document API returned ${res.status} ${res.statusText}`)
+    }
+    return res.text()
+  }, { label: 'document' })
   const result = xmlTag(xml, 'Result')?.trim()
   if (result && result.toUpperCase() !== 'SUCCESS') {
     throw new Error(`RMIS Document API: ${xmlTag(xml, 'Error')?.trim() || 'error'}`)
@@ -203,18 +206,18 @@ export async function fetchCarrierDocument(params: {
 }
 
 async function deltaRequest(body: Record<string, unknown>): Promise<any> {
-  const res = await fetch(DELTA_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
-    cache: 'no-store',
-  })
-
-  if (!res.ok) {
-    throw new Error(`RMIS Delta API returned ${res.status} ${res.statusText}`)
-  }
-
-  return res.json()
+  return withRmisLock(async () => {
+    const res = await fetch(DELTA_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    })
+    if (!res.ok) {
+      throw new Error(`RMIS Delta API returned ${res.status} ${res.statusText}`)
+    }
+    return res.json()
+  }, { label: 'delta' })
 }
 
 /** Delta Summary — how many insured IDs are queued as changed. */

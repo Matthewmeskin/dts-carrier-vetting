@@ -306,3 +306,33 @@ alter table carriers add column if not exists brokerware_raw_name text;
 -- canonical rows; the sync follows merged_into when linking carriers.
 alter table factors add column if not exists merged_into uuid references factors(id);
 create index if not exists idx_factors_merged_into on factors (merged_into);
+
+-- RMIS single-session mutex: the backfill and delta pollers (and any interactive
+-- RMIS call) go through withRmisLock so they never hit the RMIS API concurrently
+-- (RMIS allows one session per client; overlap => "Password could not be
+-- validated"). TTL auto-frees a crashed holder's lock.
+create table if not exists rmis_lock (
+  id text primary key default 'rmis',
+  holder text,
+  locked_at timestamptz,
+  expires_at timestamptz
+);
+insert into rmis_lock (id) values ('rmis') on conflict do nothing;
+
+create or replace function acquire_rmis_lock(p_holder text, p_ttl_seconds int)
+returns boolean language plpgsql as $$
+declare ok boolean;
+begin
+  update rmis_lock set holder = p_holder, locked_at = now(),
+         expires_at = now() + make_interval(secs => p_ttl_seconds)
+   where id = 'rmis' and (holder is null or expires_at is null or expires_at < now())
+  returning true into ok;
+  return coalesce(ok, false);
+end; $$;
+
+create or replace function release_rmis_lock(p_holder text)
+returns void language plpgsql as $$
+begin
+  update rmis_lock set holder = null, locked_at = null, expires_at = null
+   where id = 'rmis' and holder = p_holder;
+end; $$;

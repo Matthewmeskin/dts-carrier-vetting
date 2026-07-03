@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { FactorRecord } from '@/lib/types'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
@@ -145,7 +146,12 @@ export default function FactorsPage() {
                 {factors.map((f) => (
                   <tr key={f.id} className="border-b border-gray-100 last:border-0">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{f.name}</div>
+                      <Link
+                        href={`/factors/${f.id}`}
+                        className="font-medium text-dts-blue hover:underline"
+                      >
+                        {f.name}
+                      </Link>
                       {f.sos_summary && (
                         <div className="mt-0.5 max-w-md text-xs text-gray-500">{f.sos_summary}</div>
                       )}

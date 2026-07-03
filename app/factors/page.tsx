@@ -30,6 +30,8 @@ export default function FactorsPage() {
   const [factors, setFactors] = useState<FactorRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [recheckId, setRecheckId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/factors', { cache: 'no-store' })
@@ -56,6 +58,35 @@ export default function FactorsPage() {
     }
   }
 
+  async function recheck(f: FactorRecord) {
+    setError(null)
+    // If we've never resolved a state for this factor, ask for one.
+    let state: string | undefined
+    if (!f.sos_state) {
+      const entered =
+        typeof window !== 'undefined'
+          ? window.prompt(`2-letter state to search for "${f.name}"?`, '')
+          : ''
+      if (!entered) return
+      state = entered
+    }
+    setRecheckId(f.id)
+    try {
+      const res = await fetch(`/api/factors/${f.id}/sos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state ? { state } : {}),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Re-check failed')
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Re-check failed')
+    } finally {
+      setRecheckId(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -78,6 +109,12 @@ export default function FactorsPage() {
           )}
         </p>
       </div>
+
+      {error && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
+          {error}
+        </div>
+      )}
 
       {factors.length === 0 ? (
         <Card>
@@ -140,7 +177,7 @@ export default function FactorsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1.5">
-                        {savingId === f.id ? (
+                        {savingId === f.id || recheckId === f.id ? (
                           <Spinner size={16} />
                         ) : (
                           <>
@@ -159,6 +196,9 @@ export default function FactorsPage() {
                                 Reset
                               </Button>
                             )}
+                            <Button size="sm" variant="ghost" onClick={() => recheck(f)}>
+                              Re-check SOS
+                            </Button>
                           </>
                         )}
                       </div>

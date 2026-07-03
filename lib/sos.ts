@@ -63,6 +63,54 @@ function matchToFactorRow(match: SosMatch, state: string | null) {
   }
 }
 
+/**
+ * Re-pull SOS for a single factor already in the registry (e.g. it may have
+ * been dissolved). Uses the factor's stored state unless one is supplied.
+ * Always stamps sos_checked_at so we record when it was last verified.
+ */
+export async function recheckFactorSos(
+  factorId: string,
+  opts: { state?: string } = {}
+): Promise<any> {
+  const cfg = sosPipelineConfigured()
+  if (!cfg.ok) {
+    throw new Error(`SOS pipeline not configured — missing ${cfg.missing.join(', ')}`)
+  }
+
+  const { data: factor, error } = await supabaseAdmin
+    .from('factors')
+    .select('id, name, sos_state')
+    .eq('id', factorId)
+    .single()
+  if (error || !factor) throw new Error('Factor not found')
+
+  const state = (opts.state || (factor as any).sos_state || '').trim().toUpperCase()
+  if (!state) {
+    throw new Error('No state on file for this factor — provide a 2-letter state to re-check')
+  }
+
+  const { raw } = await lookupEntity({
+    entityName: (factor as any).name,
+    state,
+    fresh: true,
+  })
+  const match = await matchSosRecord(
+    { kind: 'factor', name: (factor as any).name, state },
+    raw
+  )
+  const { data: saved } = await supabaseAdmin
+    .from('factors')
+    .update({
+      ...matchToFactorRow(match, state),
+      sos_raw: raw as any,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', factorId)
+    .select('*')
+    .single()
+  return saved
+}
+
 export interface RunSosResult {
   carrierSos: any | null
   factor: any | null

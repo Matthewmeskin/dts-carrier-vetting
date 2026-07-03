@@ -258,6 +258,13 @@ export function SosPanel({
           {factor.sos_summary && (
             <p className="mt-1.5 text-xs text-gray-500">{factor.sos_summary}</p>
           )}
+          <p className="mt-1 text-xs text-gray-400">
+            {factor.sos_checked_at
+              ? `SOS pulled ${formatDateTime(factor.sos_checked_at)}${
+                  factor.sos_state ? ` · ${factor.sos_state}` : ''
+                } · shared across carriers (not re-pulled)`
+              : 'SOS not pulled yet'}
+          </p>
         </div>
       )}
     </div>

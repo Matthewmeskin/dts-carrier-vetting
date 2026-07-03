@@ -21,6 +21,7 @@ export interface CarrierSummary {
   cargo_status: string | null
   rmis_overall_pass: boolean | null
   rmis_is_certified: boolean | null
+  rmis_status: 'certified' | 'not_certified' | 'not_in_rmis' | 'pending' | null
   hard_stops: string[] | null
   insurance_fetched_at: string | null
   last_reviewed: string | null

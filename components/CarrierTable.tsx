@@ -359,13 +359,14 @@ export function CarrierTable({
                         )}
                       </div>
                       <div className={COL.rmis}>
-                        {c.rmis_is_certified === null ||
-                        c.rmis_is_certified === undefined ? (
-                          <span className="text-xs text-gray-400">—</span>
-                        ) : c.rmis_is_certified ? (
+                        {c.rmis_status === 'certified' ? (
                           <Badge tone="green">Certified</Badge>
-                        ) : (
+                        ) : c.rmis_status === 'not_certified' ? (
                           <Badge tone="gray">Not certified</Badge>
+                        ) : c.rmis_status === 'not_in_rmis' ? (
+                          <Badge tone="amber">Not in RMIS</Badge>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
                         )}
                       </div>
                       <div className={COL.status}>

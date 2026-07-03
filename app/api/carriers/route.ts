@@ -32,6 +32,7 @@ interface CarrierSummary {
   cargo_status: string | null
   rmis_overall_pass: boolean | null
   rmis_is_certified: boolean | null
+  rmis_status: 'certified' | 'not_certified' | 'not_in_rmis' | 'pending'
   hard_stops: string[] | null
   insurance_fetched_at: string | null
   last_reviewed: string | null
@@ -119,6 +120,15 @@ export async function GET(request: NextRequest) {
       const s: any = latestScores[dot]
       const ins: any = latestInsurance[dot]
       const v: any = latestVetting[dot]
+      // Distinguish "not in RMIS" (we looked and RMIS had no record) from
+      // "pending" (not pulled yet) so the dashboard isn't ambiguously blank.
+      const rmisStatus: CarrierSummary['rmis_status'] = ins
+        ? ins.rmis_is_certified
+          ? 'certified'
+          : 'not_certified'
+        : c.rmis_attempted_at && !c.rmis_insured_id
+          ? 'not_in_rmis'
+          : 'pending'
       return {
         id: c.id,
         dot_number: c.dot_number,
@@ -140,6 +150,7 @@ export async function GET(request: NextRequest) {
         cargo_status: ins?.cargo_status ?? null,
         rmis_overall_pass: ins?.rmis_overall_pass ?? null,
         rmis_is_certified: ins?.rmis_is_certified ?? null,
+        rmis_status: rmisStatus,
         hard_stops: ins?.hard_stops ?? null,
         insurance_fetched_at: ins?.fetched_at ?? null,
         last_reviewed: v?.completed_at ?? null,

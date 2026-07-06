@@ -87,6 +87,7 @@ export interface InsuranceRecord {
   auto_effective_date: string | null
   auto_expiration_date: string | null
   auto_underwriter: string | null
+  auto_underwriter_rating: string | null
   auto_confidence: string | null
   auto_policy_number: string | null
   cargo_status: string | null
@@ -94,6 +95,7 @@ export interface InsuranceRecord {
   cargo_effective_date: string | null
   cargo_expiration_date: string | null
   cargo_underwriter: string | null
+  cargo_underwriter_rating: string | null
   cargo_confidence: string | null
   cargo_policy_number: string | null
   general_status: string | null

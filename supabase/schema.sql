@@ -351,3 +351,16 @@ create or replace view latest_carrier_insurance as
 select distinct on (dot_number) *
 from carrier_insurance
 order by dot_number, fetched_at desc nulls last, updated_at desc nulls last, id desc;
+
+-- Insurer AM Best financial-strength rating (per coverage) from RMIS.
+alter table carrier_insurance add column if not exists auto_underwriter_rating text;
+alter table carrier_insurance add column if not exists cargo_underwriter_rating text;
+
+-- Reliable carrier-SOS read (PostgREST column-select on carrier_sos was
+-- intermittently returning zero rows for existing data).
+create or replace function get_carrier_sos(p_dot text)
+returns jsonb language sql stable as $$
+  select to_jsonb(cs) - 'sos_raw' from carrier_sos cs
+  where cs.dot_number = p_dot order by cs.checked_at desc nulls last limit 1;
+$$;
+grant execute on function get_carrier_sos(text) to anon, authenticated, service_role;

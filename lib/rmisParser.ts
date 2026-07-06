@@ -33,6 +33,7 @@ export interface ParsedRMISData {
   autoEffectiveDate: string
   autoExpirationDate: string
   autoUnderwriter: string
+  autoUnderwriterRating: string
   autoConfidence: string
   autoPolicyNumber: string
   cargoStatus: string
@@ -40,6 +41,7 @@ export interface ParsedRMISData {
   cargoEffectiveDate: string
   cargoExpirationDate: string
   cargoUnderwriter: string
+  cargoUnderwriterRating: string
   cargoConfidence: string
   cargoPolicyNumber: string
   generalStatus: string
@@ -201,6 +203,7 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     autoEffectiveDate: String(autoCov.EffectiveDate ?? ''),
     autoExpirationDate: String(autoCov.ExpirationDate ?? ''),
     autoUnderwriter: String(autoCov.Underwriter ?? ''),
+    autoUnderwriterRating: String(autoCov.UnderwriterRating ?? ''),
     autoConfidence: String(autoCov.Confidence ?? ''),
     autoPolicyNumber: String(autoCov.PolicyNumber ?? ''),
 
@@ -209,6 +212,7 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     cargoEffectiveDate: String(cargoCov.EffectiveDate ?? ''),
     cargoExpirationDate: String(cargoCov.ExpirationDate ?? ''),
     cargoUnderwriter: String(cargoCov.Underwriter ?? ''),
+    cargoUnderwriterRating: String(cargoCov.UnderwriterRating ?? ''),
     cargoConfidence: String(cargoCov.Confidence ?? ''),
     cargoPolicyNumber: String(cargoCov.PolicyNumber ?? ''),
 

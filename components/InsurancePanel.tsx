@@ -22,8 +22,18 @@ interface Coverage {
   effective?: string | null
   expiration: string | null
   underwriter?: string | null
+  rating?: string | null
   confidence?: string | null
   policyNumber?: string | null
+}
+
+// AM Best financial-strength rating → tone. A-grades are Excellent/Superior.
+function ratingTone(r: string | null | undefined): string {
+  const v = (r ?? '').trim().toUpperCase()
+  if (!v || v === 'N/A' || v === 'NR') return 'text-gray-400'
+  if (v.startsWith('A')) return 'text-green-700'
+  if (v.startsWith('B')) return 'text-amber-600'
+  return 'text-red-600'
 }
 
 function CoverageCard({ c }: { c: Coverage }) {
@@ -69,6 +79,14 @@ function CoverageCard({ c }: { c: Coverage }) {
           <div className="flex justify-between">
             <dt className="text-gray-400">Underwriter</dt>
             <dd className="text-right">{c.underwriter || '—'}</dd>
+          </div>
+        )}
+        {c.rating !== undefined && (
+          <div className="flex justify-between">
+            <dt className="text-gray-400">Insurer Rating (AM Best)</dt>
+            <dd className={cn('text-right font-medium', ratingTone(c.rating))}>
+              {c.rating || '—'}
+            </dd>
           </div>
         )}
         {c.confidence !== undefined && (
@@ -154,6 +172,7 @@ export function InsurancePanel({
           effective: insurance.auto_effective_date,
           expiration: insurance.auto_expiration_date,
           underwriter: insurance.auto_underwriter,
+          rating: insurance.auto_underwriter_rating,
           confidence: insurance.auto_confidence,
           policyNumber: insurance.auto_policy_number,
         },
@@ -164,6 +183,7 @@ export function InsurancePanel({
           effective: insurance.cargo_effective_date,
           expiration: insurance.cargo_expiration_date,
           underwriter: insurance.cargo_underwriter,
+          rating: insurance.cargo_underwriter_rating,
           confidence: insurance.cargo_confidence,
           policyNumber: insurance.cargo_policy_number,
         },

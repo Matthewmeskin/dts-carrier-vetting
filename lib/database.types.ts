@@ -171,6 +171,7 @@ export type Database = {
           auto_policy_number: string | null
           auto_status: string | null
           auto_underwriter: string | null
+          auto_underwriter_rating: string | null
           broker_carrier_agreement_date: string | null
           broker_carrier_agreement_on_file: boolean | null
           broker_carrier_agreement_title: string | null
@@ -181,6 +182,7 @@ export type Database = {
           cargo_policy_number: string | null
           cargo_status: string | null
           cargo_underwriter: string | null
+          cargo_underwriter_rating: string | null
           carrier_id: string | null
           common_authority_status: string | null
           contract_authority_status: string | null
@@ -233,6 +235,7 @@ export type Database = {
           auto_policy_number?: string | null
           auto_status?: string | null
           auto_underwriter?: string | null
+          auto_underwriter_rating?: string | null
           broker_carrier_agreement_date?: string | null
           broker_carrier_agreement_on_file?: boolean | null
           broker_carrier_agreement_title?: string | null
@@ -243,6 +246,7 @@ export type Database = {
           cargo_policy_number?: string | null
           cargo_status?: string | null
           cargo_underwriter?: string | null
+          cargo_underwriter_rating?: string | null
           carrier_id?: string | null
           common_authority_status?: string | null
           contract_authority_status?: string | null
@@ -295,6 +299,7 @@ export type Database = {
           auto_policy_number?: string | null
           auto_status?: string | null
           auto_underwriter?: string | null
+          auto_underwriter_rating?: string | null
           broker_carrier_agreement_date?: string | null
           broker_carrier_agreement_on_file?: boolean | null
           broker_carrier_agreement_title?: string | null
@@ -305,6 +310,7 @@ export type Database = {
           cargo_policy_number?: string | null
           cargo_status?: string | null
           cargo_underwriter?: string | null
+          cargo_underwriter_rating?: string | null
           carrier_id?: string | null
           common_authority_status?: string | null
           contract_authority_status?: string | null

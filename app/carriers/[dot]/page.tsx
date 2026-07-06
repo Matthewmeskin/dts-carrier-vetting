@@ -10,6 +10,7 @@ import {
   isBrokerwareDisabled,
   type RevetState,
 } from '@/lib/revet'
+import { formatPhone } from '@/lib/utils'
 import { Spinner } from '@/components/ui/Spinner'
 import { AlertBanner } from '@/components/AlertBanner'
 import { AuthorityPanel } from '@/components/AuthorityPanel'
@@ -163,6 +164,44 @@ export default function CarrierDetailPage({
                   </span>
                 </span>
               </div>
+              {(() => {
+                const addr = [
+                  insurance?.rmis_carrier_street,
+                  [
+                    insurance?.rmis_carrier_city,
+                    insurance?.rmis_carrier_state,
+                    insurance?.rmis_carrier_zip,
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
+                ]
+                  .filter((p) => p && p.trim())
+                  .join(', ')
+                if (!addr && !carrier.phone && !carrier.email) return null
+                return (
+                  <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
+                    {addr && (
+                      <span title="Physical address (RMIS/DOT)">{addr}</span>
+                    )}
+                    {carrier.phone && (
+                      <a
+                        href={`tel:${carrier.phone.replace(/[^0-9+]/g, '')}`}
+                        className="text-dts-blue hover:underline"
+                      >
+                        {formatPhone(carrier.phone)}
+                      </a>
+                    )}
+                    {carrier.email && (
+                      <a
+                        href={`mailto:${carrier.email}`}
+                        className="break-all text-dts-blue hover:underline"
+                      >
+                        {carrier.email}
+                      </a>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
             <div className="text-right text-sm text-gray-500">
               {disabled ? (
@@ -181,7 +220,7 @@ export default function CarrierDetailPage({
           </div>
 
           {/* Authority & Identity, in the same tile as the carrier header */}
-          <AuthorityPanel insurance={insurance} carrier={carrier} bare />
+          <AuthorityPanel insurance={insurance} bare />
 
           {/* Business registration (Secretary of State) + factor */}
           <SosPanel dot={dot} sos={sos} factor={factor} onRefreshed={load} />

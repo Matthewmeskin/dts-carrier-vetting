@@ -211,17 +211,12 @@ export async function runCarrierSos(
     }
   }
 
-  // The carrier's factor is already linked by name (from the Brokerware sync).
-  // We deliberately do NOT look up the factor here: the RMIS pay-to string is
-  // messy (e.g. "TBK Bank d/b/a Triumph c/o TBK Bank, SSB Dallas, TX") and its
-  // state is unknown (pay_to_address is often just a PO box, so we'd wrongly
-  // inherit the carrier's state). The factor's SOS is pulled from the Factors
-  // page, which uses the clean factor name and a correct state.
-  if (insurance?.is_factoring && insurance.pay_to_entity) {
-    result.errors.push(
-      'Factor SOS is pulled separately — open the Factors page and use “Re-check SOS” (set the factor’s state there).'
-    )
-  }
+  // The carrier's factor is already linked by name (from the Brokerware sync) and
+  // shown in its own block on the carrier page. We deliberately do NOT look it up
+  // here — the RMIS pay-to string is messy and its state is unknown (pay_to_address
+  // is often just a PO box). Factor SOS is pulled from the Factors page, which uses
+  // the clean factor name and a correct state. No note is surfaced so a successful
+  // carrier run doesn't look like it errored.
 
   return result
 }

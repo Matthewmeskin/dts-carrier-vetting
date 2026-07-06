@@ -77,8 +77,21 @@ export function SosPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fresh }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'SOS lookup failed')
+      // The response can be a non-JSON platform error page (e.g. a timeout), so
+      // parse defensively instead of letting res.json() throw a cryptic error.
+      const text = await res.text()
+      let data: any = {}
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        if (res.status === 504 || res.status === 408) {
+          throw new Error(
+            'The SOS lookup timed out. Try again — results are cached after the first pull, so a retry is usually fast.'
+          )
+        }
+        throw new Error(`Unexpected response from the server (status ${res.status}).`)
+      }
+      if (!res.ok) throw new Error(data.error || `SOS lookup failed (${res.status})`)
       if (data.errors?.length) setError(data.errors.join(' · '))
       await onRefreshed?.()
     } catch (e) {

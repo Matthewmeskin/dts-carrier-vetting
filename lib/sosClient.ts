@@ -28,6 +28,8 @@ export async function lookupEntity(params: {
   entityName: string
   state: string
   fresh?: boolean
+  /** Abort the live scrape after this many ms so we never blow the function limit. */
+  timeoutMs?: number
 }): Promise<SosLookupResult> {
   if (!API_KEY) {
     throw new Error('OpenSOS is not configured (set OPENSOS_API_KEY)')
@@ -40,19 +42,30 @@ export async function lookupEntity(params: {
   }
 
   const url = `${BASE_URL}/v1/lookup${params.fresh ? '?fresh=true' : ''}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'x-api-key': API_KEY,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({
-      entity_name: params.entityName.trim(),
-      state: params.state.trim().toUpperCase(),
-    }),
-    cache: 'no-store',
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'x-api-key': API_KEY,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        entity_name: params.entityName.trim(),
+        state: params.state.trim().toUpperCase(),
+      }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(params.timeoutMs ?? 30_000),
+    })
+  } catch (e: any) {
+    if (e?.name === 'TimeoutError' || e?.name === 'AbortError') {
+      throw new Error(
+        `OpenSOS timed out looking up "${params.entityName}" (${params.state}) — try again; results cache after the first pull`
+      )
+    }
+    throw e
+  }
 
   const text = await res.text()
   let raw: unknown

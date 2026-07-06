@@ -139,6 +139,12 @@ export async function runCarrierSos(
     errors: [],
   }
 
+  // Keep the whole request inside the function limit: the carrier and factor
+  // each involve a live OpenSOS scrape, so cap each and skip the factor if the
+  // carrier scrape already ate most of the budget.
+  const startedAt = Date.now()
+  const OVERALL_BUDGET_MS = 45_000
+
   const { data: carrier, error: carrierErr } = await supabaseAdmin
     .from('carriers')
     .select('id, dot_number, legal_name, street, city, state, zip')
@@ -166,6 +172,7 @@ export async function runCarrierSos(
         entityName: (carrier as any).legal_name,
         state: carrierState,
         fresh: opts.fresh,
+        timeoutMs: 28_000,
       })
       const match = await matchSosRecord(
         {
@@ -202,7 +209,18 @@ export async function runCarrierSos(
   }
 
   // --- Factor SOS record (deduped) ----------------------------------------
-  if (insurance?.is_factoring && insurance.pay_to_entity) {
+  const factorTimeLeft = OVERALL_BUDGET_MS - (Date.now() - startedAt)
+  if (
+    insurance?.is_factoring &&
+    insurance.pay_to_entity &&
+    factorTimeLeft < 8_000
+  ) {
+    // Not enough time budget left for a second live scrape — do the carrier now
+    // and leave the factor to be pulled from the Factors page.
+    result.errors.push(
+      'Factor SOS skipped to stay within the time limit — pull it from the Factors page (Re-check SOS)'
+    )
+  } else if (insurance?.is_factoring && insurance.pay_to_entity) {
     try {
       const factorName: string = insurance.pay_to_entity
       const normalized = normalizeEntityName(factorName)
@@ -235,6 +253,7 @@ export async function runCarrierSos(
             entityName: factorName,
             state: factorState,
             fresh: opts.fresh,
+            timeoutMs: Math.max(8_000, factorTimeLeft),
           })
           const match = await matchSosRecord(
             { kind: 'factor', name: factorName, address: insurance.pay_to_address, state: factorState },

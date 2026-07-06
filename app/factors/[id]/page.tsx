@@ -113,11 +113,25 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, approval_status }),
       })
+      const d = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
         throw new Error(d.error || 'Update failed')
       }
-      await load()
+      // Trust the row the write returned (RETURNING clause) rather than firing a
+      // fresh GET — an immediate re-read can race the write and hand back the
+      // pre-update value, which would revert the badge back to "Needs review".
+      if (d.factor) {
+        setFactor((f) =>
+          f
+            ? {
+                ...f,
+                approval_status: d.factor.approval_status,
+                approved_by: d.factor.approved_by,
+                approved_at: d.factor.approved_at,
+              }
+            : f
+        )
+      }
       setOkMsg(
         approval_status === 'approved'
           ? 'Factor approved.'

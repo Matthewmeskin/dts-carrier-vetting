@@ -68,11 +68,26 @@ export default function FactorsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, approval_status }),
       })
+      const d = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
         throw new Error(d.error || 'Update failed')
       }
-      await load()
+      // Reconcile the row from the write's returned value (not a racy re-GET,
+      // which can read the pre-update state and revert the badge).
+      if (d.factor) {
+        setFactors((prev) =>
+          prev.map((x) =>
+            x.id === id
+              ? {
+                  ...x,
+                  approval_status: d.factor.approval_status,
+                  approved_by: d.factor.approved_by,
+                  approved_at: d.factor.approved_at,
+                }
+              : x
+          )
+        )
+      }
       const f = factors.find((x) => x.id === id)
       setOkMsg(
         `${f?.name ?? 'Factor'} ${

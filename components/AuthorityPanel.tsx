@@ -27,9 +27,11 @@ function Field({
 
 export function AuthorityPanel({
   insurance,
+  carrier,
   bare,
 }: {
   insurance: InsuranceRecord | null
+  carrier?: { legal_name: string | null; dba_name: string | null } | null
   bare?: boolean
 }) {
   const [showNotes, setShowNotes] = useState(false)
@@ -67,8 +69,32 @@ export function AuthorityPanel({
 
   const notes = insurance.rmis_certification_notes ?? []
 
+  const tmsName = carrier?.legal_name
+  const rmisLegal = insurance.rmis_legal_name
+  const rmisDba = insurance.rmis_dba_name
+  const showNames = tmsName || rmisLegal || rmisDba
+
   return wrap(
     <>
+      {showNames && (
+        <div className="mb-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Business Names
+          </p>
+          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Field label="TMS Name (our system)" value={tmsName} />
+            <Field label="Legal Name (RMIS / FMCSA)" value={rmisLegal} />
+            {rmisDba && <Field label="DBA Name (RMIS / FMCSA)" value={rmisDba} />}
+          </dl>
+          {rmisLegal && rmisDba && rmisLegal !== rmisDba && (
+            <p className="mt-2 text-xs text-amber-700">
+              Operates under a DBA — the FMCSA legal entity ({rmisLegal}) differs
+              from the operating name ({rmisDba}).
+            </p>
+          )}
+        </div>
+      )}
+
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <Field
             label="Operating Status"

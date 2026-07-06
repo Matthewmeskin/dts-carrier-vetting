@@ -56,7 +56,15 @@ export function SosPanel({
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [running, setRunning] = useState(false)
   const [removing, setRemoving] = useState(false)
+  const [removed, setRemoved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Reset the optimistic "removed" flag whenever a different SOS record arrives
+  // (e.g. after re-running the check). Once cleared, the parent reload returns a
+  // null record so the block stays hidden.
+  useEffect(() => {
+    setRemoved(false)
+  }, [sos?.id])
 
   useEffect(() => {
     let alive = true
@@ -115,6 +123,8 @@ export function SosPanel({
       const res = await fetch(`/api/carriers/${dot}/sos`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || `Remove failed (${res.status})`)
+      // Hide the block immediately; the parent reload then returns a null record.
+      setRemoved(true)
       await onRefreshed?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Remove failed')
@@ -122,6 +132,10 @@ export function SosPanel({
       setRemoving(false)
     }
   }
+
+  // `removed` optimistically hides the block the moment Remove succeeds, before
+  // the parent reload returns the now-null record.
+  const activeSos = removed ? null : sos
 
   return (
     <div className="mt-5 border-t border-gray-100 pt-4">
@@ -132,9 +146,9 @@ export function SosPanel({
         </div>
         {configured && (
           <div className="flex items-center gap-2">
-            {sos?.sos_source_url && (
+            {activeSos?.sos_source_url && (
               <a
-                href={sos.sos_source_url}
+                href={activeSos.sos_source_url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-medium text-dts-blue hover:underline"
@@ -144,14 +158,14 @@ export function SosPanel({
             )}
             {running && <Spinner size={16} />}
             <Button size="sm" variant="outline" onClick={() => run(false)} disabled={running}>
-              {sos ? 'Re-check' : 'Run SOS check'}
+              {activeSos ? 'Re-check' : 'Run SOS check'}
             </Button>
-            {sos && (
+            {activeSos && (
               <Button size="sm" variant="ghost" onClick={() => run(true)} disabled={running}>
                 Force fresh
               </Button>
             )}
-            {sos && (
+            {activeSos && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -180,14 +194,14 @@ export function SosPanel({
         </div>
       )}
 
-      {configured && !sos && !running && !error && (
+      {configured && !activeSos && !running && !error && (
         <p className="text-sm text-gray-500">
           No SOS record pulled yet. Click “Run SOS check” to verify this carrier’s legal-entity
           registration.
         </p>
       )}
 
-      {sos && (
+      {sos && !removed && (
         <>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <Field

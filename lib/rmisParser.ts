@@ -15,6 +15,10 @@ export interface ParsedRMISData {
   mcNumber: string
   legalName: string
   dbaName: string
+  // Raw FMCSA names with no CompanyName fallback — the DBA is empty for most
+  // carriers and only set when they actually operate under a different name.
+  legalNameRaw: string
+  dbaNameRaw: string
   headerTimestamp: string
   // Authority
   commonAuthorityStatus: string
@@ -185,6 +189,8 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     mcNumber: String(carrier.MCNumber ?? ''),
     legalName: String(dot.dot_LegalName ?? carrier.CompanyName ?? ''),
     dbaName: String(dot.dot_DBAName ?? carrier.CompanyName ?? ''),
+    legalNameRaw: String(dot.dot_LegalName ?? ''),
+    dbaNameRaw: String(dot.dot_DBAName ?? ''),
     headerTimestamp: String(header.TimeStampUTC ?? header.TimeStamp ?? ''),
 
     commonAuthorityStatus: String(dot.dot_CommonAuthority ?? ''),

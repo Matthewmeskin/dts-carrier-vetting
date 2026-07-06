@@ -61,6 +61,8 @@ export function buildInsuranceRow(
     rmis_carrier_city: parsed.rmisCarrierCity || null,
     rmis_carrier_state: parsed.rmisCarrierState || null,
     rmis_carrier_zip: parsed.rmisCarrierZip || null,
+    rmis_legal_name: parsed.legalNameRaw || null,
+    rmis_dba_name: parsed.dbaNameRaw || null,
     operating_status: parsed.operatingStatus,
     common_authority_status: parsed.commonAuthorityStatus,
     contract_authority_status: parsed.contractAuthorityStatus,

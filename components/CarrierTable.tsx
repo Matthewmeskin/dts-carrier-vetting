@@ -137,6 +137,19 @@ export function CarrierTable({
         if (!hay.includes(q)) return false
       }
       if (revettingOnly && !c.requires_revetting) return false
+      // Every filter except the ones that explicitly target the full roster
+      // ("All") or disabled carriers ("Disabled") should show only carriers
+      // Brokerware reports as Active — disabled/inactive carriers are noise for
+      // Needs Review, Hard Stop, etc. Before the sync populates statuses, don't
+      // gate (otherwise the list would be empty).
+      if (
+        status !== 'All' &&
+        status !== 'Disabled' &&
+        hasBrokerwareData &&
+        !isBrokerwareActive(c.brokerware_status)
+      ) {
+        return false
+      }
       switch (status) {
         case 'BrokerwareActive':
           // Show only carriers Brokerware reports as Active. Before the sync has

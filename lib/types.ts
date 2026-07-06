@@ -219,6 +219,7 @@ export interface SosRecord {
   mismatches: string[] | null
   risk_flags: string[] | null
   sos_summary: string | null
+  sos_source_url: string | null
   checked_at: string | null
   updated_at: string | null
 }

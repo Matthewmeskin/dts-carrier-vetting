@@ -110,6 +110,16 @@ export function SosPanel({
         </div>
         {configured && (
           <div className="flex items-center gap-2">
+            {sos?.sos_source_url && (
+              <a
+                href={sos.sos_source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-medium text-dts-blue hover:underline"
+              >
+                View on Secretary of State ↗
+              </a>
+            )}
             {running && <Spinner size={16} />}
             <Button size="sm" variant="outline" onClick={() => run(false)} disabled={running}>
               {sos ? 'Re-check' : 'Run SOS check'}

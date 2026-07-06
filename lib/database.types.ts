@@ -198,6 +198,10 @@ export type Database = {
           pay_to_address: string | null
           pay_to_entity: string | null
           raw_rmis_response: Json | null
+          rmis_carrier_city: string | null
+          rmis_carrier_state: string | null
+          rmis_carrier_street: string | null
+          rmis_carrier_zip: string | null
           rmis_certification_notes: string[] | null
           rmis_flags: string[] | null
           rmis_is_certified: boolean | null
@@ -256,6 +260,10 @@ export type Database = {
           pay_to_address?: string | null
           pay_to_entity?: string | null
           raw_rmis_response?: Json | null
+          rmis_carrier_city?: string | null
+          rmis_carrier_state?: string | null
+          rmis_carrier_street?: string | null
+          rmis_carrier_zip?: string | null
           rmis_certification_notes?: string[] | null
           rmis_flags?: string[] | null
           rmis_is_certified?: boolean | null
@@ -314,6 +322,10 @@ export type Database = {
           pay_to_address?: string | null
           pay_to_entity?: string | null
           raw_rmis_response?: Json | null
+          rmis_carrier_city?: string | null
+          rmis_carrier_state?: string | null
+          rmis_carrier_street?: string | null
+          rmis_carrier_zip?: string | null
           rmis_certification_notes?: string[] | null
           rmis_flags?: string[] | null
           rmis_is_certified?: boolean | null

@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser'
+import { stateFromZip } from './sosNormalize'
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -61,6 +62,11 @@ export interface ParsedRMISData {
   isFactoring: boolean
   payToEntity: string
   payToAddress: string
+  // Carrier's real physical/mailing address (NOT the factor pay-to address)
+  rmisCarrierStreet: string
+  rmisCarrierCity: string
+  rmisCarrierState: string
+  rmisCarrierZip: string
   // Inspections
   usTotalInspections: number
   usVehicleOOSRatio: string
@@ -76,9 +82,22 @@ export interface ParsedRMISData {
   totalPowerUnits: number
 }
 
+// Pull a tag's text value straight from the XML string (robust to nesting).
+function rawTag(xml: string, name: string): string {
+  const m = new RegExp(`<${name}>([^<]*)</${name}>`, 'i').exec(xml)
+  return m ? m[1].trim() : ''
+}
+
 export function parseRMISXML(xmlString: string): ParsedRMISData {
   const parsed = parser.parse(xmlString)
   const root = parsed.RMISCarrierStatusExpanded
+
+  // Carrier's real address: prefer the FMCSA mailing block, then the business
+  // address; derive the state from the ZIP when it isn't given explicitly.
+  const rmisCarrierZip =
+    rawTag(xmlString, 'Mailing_Zip') || rawTag(xmlString, 'dot_Business_Zip')
+  const rmisCarrierState =
+    rawTag(xmlString, 'Mailing_State') || stateFromZip(rmisCarrierZip) || ''
 
   const carrier = root.Carrier ?? {}
   const header = root.Header ?? {}
@@ -216,6 +235,13 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     isFactoring: carrier.IsFactoring === 'Yes',
     payToEntity: String(carrier.Payto ?? ''),
     payToAddress: String(carrier.PaytoAddress ?? ''),
+
+    rmisCarrierStreet:
+      rawTag(xmlString, 'Mailing_Street') || rawTag(xmlString, 'dot_Business_Addr'),
+    rmisCarrierCity:
+      rawTag(xmlString, 'Mailing_City') || rawTag(xmlString, 'dot_Business_City'),
+    rmisCarrierState,
+    rmisCarrierZip,
 
     usTotalInspections: Number(inspections.US_TotalInspections ?? 0),
     usVehicleOOSRatio: String(inspections.US_VehicleOOSRatio ?? '0%'),

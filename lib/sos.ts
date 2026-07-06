@@ -5,7 +5,7 @@
 import { supabaseAdmin } from './supabase'
 import { lookupEntity, sosConfigured } from './sosClient'
 import { matchSosRecord, sosMatchConfigured, type SosMatch } from './sosMatch'
-import { normalizeEntityName, inferStateFromAddress } from './sosNormalize'
+import { normalizeEntityName, inferStateFromAddress, stateFromZip } from './sosNormalize'
 
 function isoDateOrNull(s: string | null | undefined): string | null {
   if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) return s
@@ -155,7 +155,7 @@ export async function runCarrierSos(
   const { data: ins } = await supabaseAdmin
     .from('carrier_insurance')
     .select(
-      'is_factoring, pay_to_entity, pay_to_address, authority_original_date, authority_reinstatement_date'
+      'is_factoring, pay_to_entity, pay_to_address, authority_original_date, authority_reinstatement_date, rmis_carrier_street, rmis_carrier_city, rmis_carrier_state, rmis_carrier_zip'
     )
     .eq('dot_number', dot)
     .order('updated_at', { ascending: false })
@@ -163,9 +163,16 @@ export async function runCarrierSos(
   const insurance = ins && ins.length > 0 ? (ins[0] as any) : null
 
   // --- Carrier's own SOS record -------------------------------------------
-  const carrierState = (carrier as any).state || null
+  // The carrier's Brokerware address is the FACTOR's remittance address, so use
+  // the carrier's real state from RMIS (Mailing_State, else derived from the RMIS
+  // ZIP), falling back to Brokerware only if RMIS has nothing.
+  const carrierState =
+    insurance?.rmis_carrier_state ||
+    stateFromZip(insurance?.rmis_carrier_zip) ||
+    (carrier as any).state ||
+    null
   if (!carrierState) {
-    result.errors.push('Carrier has no domicile state — cannot search SOS')
+    result.errors.push('Carrier has no domicile state (RMIS or Brokerware) — cannot search SOS')
   } else if ((carrier as any).legal_name) {
     try {
       const { raw } = await lookupEntity({
@@ -179,10 +186,10 @@ export async function runCarrierSos(
           kind: 'carrier',
           name: (carrier as any).legal_name,
           address: joinAddress([
-            (carrier as any).street,
-            (carrier as any).city,
-            (carrier as any).state,
-            (carrier as any).zip,
+            insurance?.rmis_carrier_street ?? (carrier as any).street,
+            insurance?.rmis_carrier_city ?? (carrier as any).city,
+            carrierState,
+            insurance?.rmis_carrier_zip ?? (carrier as any).zip,
           ]),
           state: carrierState,
           authorityOriginalDate: insurance?.authority_original_date ?? null,

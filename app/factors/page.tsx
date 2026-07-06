@@ -33,6 +33,7 @@ export default function FactorsPage() {
   const [savingId, setSavingId] = useState<string | null>(null)
   const [recheckId, setRecheckId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [okMsg, setOkMsg] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/factors', { cache: 'no-store' })
@@ -48,6 +49,7 @@ export default function FactorsPage() {
   async function setStatus(id: string, approval_status: string) {
     setSavingId(id)
     setError(null)
+    setOkMsg(null)
     // Optimistically update the row so the click gives immediate feedback.
     setFactors((prev) =>
       prev.map((f) =>
@@ -71,6 +73,16 @@ export default function FactorsPage() {
         throw new Error(d.error || 'Update failed')
       }
       await load()
+      const f = factors.find((x) => x.id === id)
+      setOkMsg(
+        `${f?.name ?? 'Factor'} ${
+          approval_status === 'approved'
+            ? 'approved.'
+            : approval_status === 'rejected'
+              ? 'rejected.'
+              : 'reset to needs-review.'
+        }`
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed')
       await load() // reconcile from server on failure
@@ -134,6 +146,11 @@ export default function FactorsPage() {
       {error && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
           {error}
+        </div>
+      )}
+      {okMsg && !error && (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
+          {okMsg}
         </div>
       )}
 

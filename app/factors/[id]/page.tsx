@@ -74,6 +74,7 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [okMsg, setOkMsg] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/factors/${id}`, { cache: 'no-store' })
@@ -96,6 +97,7 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
     if (!factor) return
     setBusy(true)
     setError(null)
+    setOkMsg(null)
     const prev = factor
     // Optimistically flip the badge so the click is never a silent no-op.
     setFactor({
@@ -116,6 +118,13 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
         throw new Error(d.error || 'Update failed')
       }
       await load()
+      setOkMsg(
+        approval_status === 'approved'
+          ? 'Factor approved.'
+          : approval_status === 'rejected'
+            ? 'Factor rejected.'
+            : 'Factor reset to needs-review.'
+      )
     } catch (e) {
       setFactor(prev) // revert on failure
       setError(e instanceof Error ? e.message : 'Update failed')
@@ -126,6 +135,7 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
 
   async function recheck() {
     setError(null)
+    setOkMsg(null)
     let state: string | undefined
     if (!factor?.sos_state) {
       const entered =
@@ -228,6 +238,11 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
           {error && (
             <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
               {error}
+            </div>
+          )}
+          {okMsg && !error && (
+            <div className="mt-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+              {okMsg}
             </div>
           )}
 

@@ -1,6 +1,13 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -108,6 +115,28 @@ const COL = {
   revet: 'w-28 shrink-0',
 }
 
+// Persisted list view (filters + scroll) so returning from a carrier detail
+// page lands the user back exactly where they were instead of resetting.
+const VIEW_KEY = 'dts.carrierTable.view.v1'
+
+interface PersistedView {
+  search: string
+  status: StatusFilter
+  sort: SortKey
+  revettingOnly: boolean
+  scrollTop: number
+}
+
+function loadView(): Partial<PersistedView> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = sessionStorage.getItem(VIEW_KEY)
+    return raw ? (JSON.parse(raw) as PersistedView) : {}
+  } catch {
+    return {}
+  }
+}
+
 export function CarrierTable({
   carriers,
   lastUpload,
@@ -116,10 +145,18 @@ export function CarrierTable({
   lastUpload: string | null
 }) {
   const router = useRouter()
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<StatusFilter>('BrokerwareActive')
-  const [revettingOnly, setRevettingOnly] = useState(false)
-  const [sort, setSort] = useState<SortKey>('gap')
+  // Read any persisted view once, synchronously, so the initial render already
+  // reflects the restored filters (no flash of the default list).
+  const savedRef = useRef<Partial<PersistedView> | undefined>(undefined)
+  if (savedRef.current === undefined) savedRef.current = loadView()
+  const saved = savedRef.current
+
+  const [search, setSearch] = useState(saved.search ?? '')
+  const [status, setStatus] = useState<StatusFilter>(
+    saved.status ?? 'BrokerwareActive'
+  )
+  const [revettingOnly, setRevettingOnly] = useState(saved.revettingOnly ?? false)
+  const [sort, setSort] = useState<SortKey>(saved.sort ?? 'gap')
 
   // Whether any carrier carries a Brokerware status yet. Until the Brokerware
   // sync has populated it, the "Active in Brokerware" filter falls back to
@@ -219,7 +256,53 @@ export function CarrierTable({
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 68,
     overscan: 12,
+    initialOffset: saved.scrollTop ?? 0,
   })
+
+  // Write the current view (filters + scroll) to sessionStorage so it survives
+  // a round-trip to a carrier detail page.
+  const persistView = useCallback(() => {
+    try {
+      sessionStorage.setItem(
+        VIEW_KEY,
+        JSON.stringify({
+          search,
+          status,
+          sort,
+          revettingOnly,
+          scrollTop: scrollRef.current?.scrollTop ?? 0,
+        })
+      )
+    } catch {
+      /* storage unavailable — non-fatal */
+    }
+  }, [search, status, sort, revettingOnly])
+
+  // Persist whenever a filter changes (covers navigating away via any link).
+  useEffect(() => {
+    persistView()
+  }, [persistView])
+
+  // Restore the saved scroll position once, after the first paint, when we're
+  // returning to a previously-saved view.
+  const restoredRef = useRef(false)
+  useLayoutEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    const top = saved.scrollTop ?? 0
+    if (top > 0 && scrollRef.current) {
+      scrollRef.current.scrollTop = top
+    }
+  }, [saved.scrollTop])
+
+  // Navigate to a carrier, saving scroll position first so Back restores it.
+  const openCarrier = useCallback(
+    (dot: string) => {
+      persistView()
+      router.push(`/carriers/${dot}`)
+    },
+    [persistView, router]
+  )
 
   return (
     <Card>
@@ -323,7 +406,7 @@ export function CarrierTable({
                       key={c.id}
                       data-index={vi.index}
                       ref={rowVirtualizer.measureElement}
-                      onClick={() => router.push(`/carriers/${c.dot_number}`)}
+                      onClick={() => openCarrier(c.dot_number)}
                       className="absolute left-0 top-0 flex w-full cursor-pointer items-start border-b border-gray-100 px-5 py-3 text-sm hover:bg-gray-50"
                       style={{ transform: `translateY(${vi.start}px)` }}
                     >
@@ -331,7 +414,10 @@ export function CarrierTable({
                         <Link
                           href={`/carriers/${c.dot_number}`}
                           className="font-medium text-gray-900 hover:text-dts-blue hover:underline"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            persistView()
+                          }}
                         >
                           {c.legal_name ?? `DOT ${c.dot_number}`}
                         </Link>

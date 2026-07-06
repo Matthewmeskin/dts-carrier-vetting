@@ -43,11 +43,10 @@ export async function GET(
         .eq('dot_number', dot)
         .order('detected_at', { ascending: false })
         .limit(30),
-      supabaseAdmin
-        .from('carrier_sos')
-        .select('*')
-        .eq('dot_number', dot)
-        .limit(1),
+      // Read via a DB function (returns the row as jsonb, minus the raw blob) —
+      // PostgREST's column-select on carrier_sos intermittently returned zero
+      // rows for existing data, so we bypass it.
+      (supabaseAdmin as any).rpc('get_carrier_sos', { p_dot: dot }),
     ])
 
     const carrier = carrierRes.data
@@ -60,12 +59,8 @@ export async function GET(
       insRes.data && insRes.data.length > 0 ? insRes.data[0] : null
     const vettingRecords = vetRes.data ?? []
     const deltaLog = deltaRes.data ?? []
-    // Strip the raw blob from the display object (keep the row otherwise).
-    const sosRow =
-      sosRes.data && sosRes.data.length > 0 ? sosRes.data[0] : null
-    const sos = sosRow
-      ? (({ sos_raw, ...rest }: any) => rest)(sosRow)
-      : null
+    // The function returns the row as a jsonb object (or null when absent).
+    const sos = (sosRes as any).data ?? null
 
     // The linked (deduped) factor, with its SOS + approval status.
     let factor: any = null

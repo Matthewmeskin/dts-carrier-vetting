@@ -5,7 +5,7 @@
 import { supabaseAdmin } from './supabase'
 import { lookupEntity, sosConfigured } from './sosClient'
 import { matchSosRecord, sosMatchConfigured, type SosMatch } from './sosMatch'
-import { normalizeEntityName, inferStateFromAddress, stateFromZip } from './sosNormalize'
+import { stateFromZip } from './sosNormalize'
 
 function isoDateOrNull(s: string | null | undefined): string | null {
   if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) return s
@@ -140,11 +140,6 @@ export async function runCarrierSos(
     errors: [],
   }
 
-  // Keep the whole request inside the function limit: the carrier and factor
-  // each involve a live OpenSOS scrape, so cap each and skip the factor if the
-  // carrier scrape already ate most of the budget.
-  const startedAt = Date.now()
-  const OVERALL_BUDGET_MS = 240_000
 
   const { data: carrier, error: carrierErr } = await supabaseAdmin
     .from('carriers')
@@ -179,8 +174,7 @@ export async function runCarrierSos(
         entityName: (carrier as any).legal_name,
         state: carrierState,
         fresh: opts.fresh,
-        // Give the carrier scrape most of the budget; the factor auto-skips when
-        // the carrier eats it (pull the factor from the Factors page instead).
+        // Slow-state scrapes (CA, IL) can take a minute-plus on the first pull.
         timeoutMs: 200_000,
       })
       const match = await matchSosRecord(
@@ -217,83 +211,16 @@ export async function runCarrierSos(
     }
   }
 
-  // --- Factor SOS record (deduped) ----------------------------------------
-  const factorTimeLeft = OVERALL_BUDGET_MS - (Date.now() - startedAt)
-  if (
-    insurance?.is_factoring &&
-    insurance.pay_to_entity &&
-    factorTimeLeft < 8_000
-  ) {
-    // Not enough time budget left for a second live scrape — do the carrier now
-    // and leave the factor to be pulled from the Factors page.
+  // The carrier's factor is already linked by name (from the Brokerware sync).
+  // We deliberately do NOT look up the factor here: the RMIS pay-to string is
+  // messy (e.g. "TBK Bank d/b/a Triumph c/o TBK Bank, SSB Dallas, TX") and its
+  // state is unknown (pay_to_address is often just a PO box, so we'd wrongly
+  // inherit the carrier's state). The factor's SOS is pulled from the Factors
+  // page, which uses the clean factor name and a correct state.
+  if (insurance?.is_factoring && insurance.pay_to_entity) {
     result.errors.push(
-      'Factor SOS skipped to stay within the time limit — pull it from the Factors page (Re-check SOS)'
+      'Factor SOS is pulled separately — open the Factors page and use “Re-check SOS” (set the factor’s state there).'
     )
-  } else if (insurance?.is_factoring && insurance.pay_to_entity) {
-    try {
-      const factorName: string = insurance.pay_to_entity
-      const normalized = normalizeEntityName(factorName)
-
-      const { data: existing } = await supabaseAdmin
-        .from('factors')
-        .select('*')
-        .eq('normalized_name', normalized)
-        .limit(1)
-      const existingFactor = existing && existing.length > 0 ? (existing[0] as any) : null
-
-      // Reuse a previously-checked factor unless a refresh was requested.
-      if (existingFactor?.sos_checked_at && !opts.refreshFactor) {
-        result.factor = existingFactor
-        result.factorReused = true
-      } else {
-        const factorState =
-          inferStateFromAddress(insurance.pay_to_address) || carrierState || null
-        if (!factorState) {
-          result.errors.push('Factor has no resolvable state — cannot search SOS')
-        }
-
-        let factorRow: any = {
-          name: factorName,
-          normalized_name: normalized,
-          updated_at: new Date().toISOString(),
-        }
-        if (factorState) {
-          const { raw } = await lookupEntity({
-            entityName: factorName,
-            state: factorState,
-            fresh: opts.fresh,
-            timeoutMs: Math.max(8_000, factorTimeLeft),
-          })
-          const match = await matchSosRecord(
-            { kind: 'factor', name: factorName, address: insurance.pay_to_address, state: factorState },
-            raw
-          )
-          factorRow = {
-            ...factorRow,
-            ...matchToFactorRow(match, factorState),
-            sos_raw: raw as any,
-          }
-        }
-        // Insert keeps default approval_status='review'; update preserves the
-        // existing approval decision (we only touch SOS + name columns).
-        const { data: saved } = await supabaseAdmin
-          .from('factors')
-          .upsert(factorRow, { onConflict: 'normalized_name' })
-          .select('*')
-          .single()
-        result.factor = saved ?? factorRow
-      }
-
-      // Link the carrier to the (deduped) factor.
-      if (result.factor?.id) {
-        await supabaseAdmin
-          .from('carriers')
-          .update({ factor_id: result.factor.id })
-          .eq('dot_number', dot)
-      }
-    } catch (e) {
-      result.errors.push(`Factor SOS: ${e instanceof Error ? e.message : 'failed'}`)
-    }
   }
 
   return result

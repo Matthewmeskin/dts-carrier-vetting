@@ -344,3 +344,10 @@ alter table carrier_insurance add column if not exists rmis_carrier_street text;
 alter table carrier_insurance add column if not exists rmis_carrier_city text;
 alter table carrier_insurance add column if not exists rmis_carrier_state text;
 alter table carrier_insurance add column if not exists rmis_carrier_zip text;
+
+-- Latest insurance row per carrier (server-side), so the API pulls ~one row per
+-- carrier instead of the full history and never drops carriers past the row cap.
+create or replace view latest_carrier_insurance as
+select distinct on (dot_number) *
+from carrier_insurance
+order by dot_number, fetched_at desc nulls last, updated_at desc nulls last, id desc;

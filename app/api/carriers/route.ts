@@ -93,12 +93,13 @@ export async function GET(request: NextRequest) {
         )
         .order('upload_date', { ascending: false })
         .limit(100000),
-      supabaseAdmin
-        .from('carrier_insurance')
+      // One row per carrier (server-side latest) so the whole roster fits under
+      // the API row cap — pulling all history could drop carriers past the cap.
+      (supabaseAdmin as any)
+        .from('latest_carrier_insurance')
         .select(
           'dot_number, auto_status, cargo_status, rmis_overall_pass, rmis_is_certified, hard_stops, fetched_at, updated_at'
         )
-        .order('updated_at', { ascending: false })
         .limit(100000),
       supabaseAdmin
         .from('vetting_records')

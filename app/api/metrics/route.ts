@@ -25,10 +25,9 @@ export async function GET() {
           .select('dot_number, requires_revetting, upload_date')
           .order('upload_date', { ascending: false })
           .limit(100000),
-        supabaseAdmin
-          .from('carrier_insurance')
+        (supabaseAdmin as any)
+          .from('latest_carrier_insurance')
           .select('dot_number, hard_stops, updated_at')
-          .order('updated_at', { ascending: false })
           .limit(100000),
         supabaseAdmin
           .from('carrier_delta_log')

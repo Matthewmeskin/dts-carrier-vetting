@@ -76,6 +76,7 @@ type StatusFilter =
   | 'NeedsReview'
   | 'DueForRevet'
   | 'HardStop'
+  | 'NotInRmis'
   | 'DoNotUse'
   | 'Disabled'
 
@@ -150,6 +151,12 @@ export function CarrierTable({
           )
         case 'Disabled':
           return isBrokerwareDisabled(c.brokerware_status)
+        case 'NotInRmis':
+          // Active carriers RMIS has no record for (looked up, nothing found).
+          return (
+            (!hasBrokerwareData || isBrokerwareActive(c.brokerware_status)) &&
+            c.rmis_status === 'not_in_rmis'
+          )
         case 'Approved':
           return c.carrier_status === 'Approved'
         case 'NeedsReview':
@@ -225,6 +232,7 @@ export function CarrierTable({
             <option value="NeedsReview">Needs Review</option>
             <option value="DueForRevet">Due for Re-vet</option>
             <option value="HardStop">Hard Stop</option>
+            <option value="NotInRmis">Not in RMIS</option>
             <option value="DoNotUse">Do Not Use</option>
             <option value="Disabled">Inactive / Disabled (Brokerware)</option>
           </Select>

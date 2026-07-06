@@ -143,7 +143,7 @@ export async function runCarrierSos(
   // each involve a live OpenSOS scrape, so cap each and skip the factor if the
   // carrier scrape already ate most of the budget.
   const startedAt = Date.now()
-  const OVERALL_BUDGET_MS = 45_000
+  const OVERALL_BUDGET_MS = 48_000
 
   const { data: carrier, error: carrierErr } = await supabaseAdmin
     .from('carriers')
@@ -152,13 +152,12 @@ export async function runCarrierSos(
     .single()
   if (carrierErr || !carrier) throw new Error('Carrier not found')
 
-  const { data: ins } = await supabaseAdmin
-    .from('carrier_insurance')
+  const { data: ins } = await (supabaseAdmin as any)
+    .from('latest_carrier_insurance')
     .select(
       'is_factoring, pay_to_entity, pay_to_address, authority_original_date, authority_reinstatement_date, rmis_carrier_street, rmis_carrier_city, rmis_carrier_state, rmis_carrier_zip'
     )
     .eq('dot_number', dot)
-    .order('updated_at', { ascending: false })
     .limit(1)
   const insurance = ins && ins.length > 0 ? (ins[0] as any) : null
 
@@ -179,7 +178,9 @@ export async function runCarrierSos(
         entityName: (carrier as any).legal_name,
         state: carrierState,
         fresh: opts.fresh,
-        timeoutMs: 28_000,
+        // Give the carrier scrape most of the budget; the factor auto-skips when
+        // the carrier eats it (pull the factor from the Factors page instead).
+        timeoutMs: 44_000,
       })
       const match = await matchSosRecord(
         {

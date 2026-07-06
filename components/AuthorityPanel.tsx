@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { InsuranceRecord } from '@/lib/types'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge } from './ui/Badge'
-import { formatDate, daysSince } from '@/lib/utils'
+import { formatDate, daysSince, formatPhone } from '@/lib/utils'
 
 function Field({
   label,
@@ -27,9 +27,11 @@ function Field({
 
 export function AuthorityPanel({
   insurance,
+  carrier,
   bare,
 }: {
   insurance: InsuranceRecord | null
+  carrier?: { phone: string | null; email: string | null } | null
   bare?: boolean
 }) {
   const [showNotes, setShowNotes] = useState(false)
@@ -160,6 +162,12 @@ export function AuthorityPanel({
           {insurance.w9_business_name && (
             <Field label="W-9 Business Name" value={insurance.w9_business_name} />
           )}
+          {insurance.w9_company_type && (
+            <Field
+              label="Business Type (W-9)"
+              value={<Badge tone="blue">{insurance.w9_company_type}</Badge>}
+            />
+          )}
           <Field
             label="Broker-Carrier Agreement"
             value={
@@ -177,6 +185,70 @@ export function AuthorityPanel({
             />
           )}
         </dl>
+
+        {(() => {
+          const addr = [
+            insurance.rmis_carrier_street,
+            [
+              insurance.rmis_carrier_city,
+              insurance.rmis_carrier_state,
+              insurance.rmis_carrier_zip,
+            ]
+              .filter(Boolean)
+              .join(' '),
+          ]
+            .filter((p) => p && p.trim())
+            .join(', ')
+          const phone = carrier?.phone
+          const email = carrier?.email
+          if (!addr && !phone && !email) return null
+          return (
+            <div className="mt-4 border-t border-gray-100 pt-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Carrier Contact (RMIS / DOT)
+              </p>
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {addr && (
+                  <Field
+                    label="Physical Address"
+                    value={addr}
+                    className="col-span-2"
+                  />
+                )}
+                <Field
+                  label="Phone"
+                  value={
+                    phone ? (
+                      <a
+                        href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
+                        className="text-dts-blue hover:underline"
+                      >
+                        {formatPhone(phone)}
+                      </a>
+                    ) : (
+                      '—'
+                    )
+                  }
+                />
+                <Field
+                  label="Email"
+                  value={
+                    email ? (
+                      <a
+                        href={`mailto:${email}`}
+                        className="break-all text-dts-blue hover:underline"
+                      >
+                        {email}
+                      </a>
+                    ) : (
+                      '—'
+                    )
+                  }
+                />
+              </dl>
+            </div>
+          )
+        })()}
 
         {notes.length > 0 && (
           <div className="mt-4 border-t border-gray-100 pt-3">

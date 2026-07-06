@@ -55,6 +55,7 @@ export function SosPanel({
 }) {
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [running, setRunning] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -101,6 +102,27 @@ export function SosPanel({
     }
   }
 
+  async function remove() {
+    if (
+      !window.confirm(
+        'Remove the stored Secretary-of-State record for this carrier? This clears the current match — you can re-run the check afterward.'
+      )
+    )
+      return
+    setRemoving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/carriers/${dot}/sos`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `Remove failed (${res.status})`)
+      await onRefreshed?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Remove failed')
+    } finally {
+      setRemoving(false)
+    }
+  }
+
   return (
     <div className="mt-5 border-t border-gray-100 pt-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -127,6 +149,17 @@ export function SosPanel({
             {sos && (
               <Button size="sm" variant="ghost" onClick={() => run(true)} disabled={running}>
                 Force fresh
+              </Button>
+            )}
+            {sos && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={remove}
+                disabled={running || removing}
+                className="text-red-600 hover:bg-red-50"
+              >
+                {removing ? 'Removing…' : 'Remove'}
               </Button>
             )}
           </div>

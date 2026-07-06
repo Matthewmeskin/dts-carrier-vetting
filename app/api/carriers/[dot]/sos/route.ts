@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runCarrierSos, sosPipelineConfigured } from '@/lib/sos'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -44,6 +45,28 @@ export async function POST(
       refreshFactor: Boolean(body?.refreshFactor),
     })
     return NextResponse.json(result)
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message ?? 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE — remove the stored SOS record for this carrier. Used when the matched
+// entity is wrong (e.g. a same-named but unrelated business) so the reviewer can
+// clear it and, if desired, re-run a fresh lookup.
+export async function DELETE(
+  request: Request,
+  { params }: { params: { dot: string } }
+) {
+  try {
+    const { error } = await supabaseAdmin
+      .from('carrier_sos')
+      .delete()
+      .eq('dot_number', params.dot)
+    if (error) throw error
+    return NextResponse.json({ ok: true })
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message ?? 'Unknown error' },

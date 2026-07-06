@@ -66,3 +66,15 @@ export function formatScore(value: number | null | undefined): string {
   if (value === null || value === undefined || isNaN(value)) return '—'
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }
+
+/** Format a US phone number as (xxx) xxx-xxxx; returns the raw value if it
+ * doesn't look like a 10-digit (or 1+10) number. */
+export function formatPhone(value: string | null | undefined): string {
+  if (!value) return '—'
+  const digits = value.replace(/\D/g, '')
+  const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits
+  if (ten.length === 10) {
+    return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`
+  }
+  return value
+}

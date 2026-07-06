@@ -114,6 +114,10 @@ export interface InsuranceRecord {
   is_factoring: boolean | null
   pay_to_entity: string | null
   pay_to_address: string | null
+  rmis_carrier_street: string | null
+  rmis_carrier_city: string | null
+  rmis_carrier_state: string | null
+  rmis_carrier_zip: string | null
   operating_status: string | null
   common_authority_status: string | null
   contract_authority_status: string | null

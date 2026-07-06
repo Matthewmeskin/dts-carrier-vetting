@@ -181,7 +181,7 @@ export default function CarrierDetailPage({
           </div>
 
           {/* Authority & Identity, in the same tile as the carrier header */}
-          <AuthorityPanel insurance={insurance} bare />
+          <AuthorityPanel insurance={insurance} carrier={carrier} bare />
 
           {/* Business registration (Secretary of State) + factor */}
           <SosPanel dot={dot} sos={sos} factor={factor} onRefreshed={load} />

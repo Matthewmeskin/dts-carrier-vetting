@@ -3,7 +3,7 @@ import { recheckFactorSos, sosPipelineConfigured } from '@/lib/sos'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 300
 
 // POST — re-pull Secretary-of-State data for one factor (stamps sos_checked_at).
 // Body (optional): { state?: "TX" } to override/supply the search state.

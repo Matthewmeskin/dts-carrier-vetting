@@ -3,7 +3,9 @@ import { runCarrierSos, sosPipelineConfigured } from '@/lib/sos'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+// Live SOS scrapes for some states (CA, IL) can take well over a minute on the
+// first, uncached pull. Give the function room so it doesn't die mid-scrape.
+export const maxDuration = 300
 
 // GET — is the SOS pipeline configured? (Lets the UI show/hide the button.)
 export async function GET() {

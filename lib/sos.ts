@@ -93,6 +93,7 @@ export async function recheckFactorSos(
     entityName: (factor as any).name,
     state,
     fresh: true,
+    timeoutMs: 200_000,
   })
   const match = await matchSosRecord(
     { kind: 'factor', name: (factor as any).name, state },
@@ -143,7 +144,7 @@ export async function runCarrierSos(
   // each involve a live OpenSOS scrape, so cap each and skip the factor if the
   // carrier scrape already ate most of the budget.
   const startedAt = Date.now()
-  const OVERALL_BUDGET_MS = 48_000
+  const OVERALL_BUDGET_MS = 240_000
 
   const { data: carrier, error: carrierErr } = await supabaseAdmin
     .from('carriers')
@@ -180,7 +181,7 @@ export async function runCarrierSos(
         fresh: opts.fresh,
         // Give the carrier scrape most of the budget; the factor auto-skips when
         // the carrier eats it (pull the factor from the Factors page instead).
-        timeoutMs: 44_000,
+        timeoutMs: 200_000,
       })
       const match = await matchSosRecord(
         {

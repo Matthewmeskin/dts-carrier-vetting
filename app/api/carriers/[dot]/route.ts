@@ -45,11 +45,7 @@ export async function GET(
         .limit(30),
       supabaseAdmin
         .from('carrier_sos')
-        // Display columns only — never the large sos_raw blob (same lesson as
-        // raw_rmis_response: pulling it back can empty the query).
-        .select(
-          'id, carrier_id, dot_number, sos_state, sos_entity_id, sos_status, sos_status_normalized, sos_entity_type, sos_formation_date, sos_registered_agent, sos_registered_agent_address, sos_principal_address, sos_officers, name_match, address_match, match_confidence, mismatches, risk_flags, sos_summary, checked_at, updated_at'
-        )
+        .select('*')
         .eq('dot_number', dot)
         .limit(1),
     ])
@@ -64,7 +60,12 @@ export async function GET(
       insRes.data && insRes.data.length > 0 ? insRes.data[0] : null
     const vettingRecords = vetRes.data ?? []
     const deltaLog = deltaRes.data ?? []
-    const sos = sosRes.data && sosRes.data.length > 0 ? sosRes.data[0] : null
+    // Strip the raw blob from the display object (keep the row otherwise).
+    const sosRow =
+      sosRes.data && sosRes.data.length > 0 ? sosRes.data[0] : null
+    const sos = sosRow
+      ? (({ sos_raw, ...rest }: any) => rest)(sosRow)
+      : null
 
     // The linked (deduped) factor, with its SOS + approval status.
     let factor: any = null

@@ -91,7 +91,83 @@ function isBrokerwareActive(status: string | null | undefined): boolean {
   return !!status && status.trim().toLowerCase() === 'active'
 }
 
-type SortKey = 'gap' | 'name' | 'reviewed'
+type SortKey =
+  | 'carrier'
+  | 'dot'
+  | 'gap'
+  | 'flagged'
+  | 'insurance'
+  | 'rmis'
+  | 'status'
+  | 'reviewed'
+  | 'revet'
+type SortDir = 'asc' | 'desc'
+
+const RMIS_RANK: Record<string, number> = {
+  certified: 0,
+  not_certified: 1,
+  not_in_rmis: 2,
+  pending: 3,
+}
+
+interface SortColDef {
+  getValue: (c: CarrierSummary) => number | string | null
+  type: 'num' | 'str'
+  defaultDir: SortDir
+}
+
+// How each sortable column extracts its comparison value + its natural first
+// click direction. Null values always sort last regardless of direction.
+const SORT_COLS: Record<SortKey, SortColDef> = {
+  carrier: {
+    getValue: (c) => (c.legal_name ?? '').toLowerCase(),
+    type: 'str',
+    defaultDir: 'asc',
+  },
+  dot: { getValue: (c) => Number(c.dot_number) || 0, type: 'num', defaultDir: 'asc' },
+  gap: { getValue: (c) => c.gap_score ?? null, type: 'num', defaultDir: 'asc' },
+  flagged: {
+    getValue: (c) => c.flagged_scores?.length ?? 0,
+    type: 'num',
+    defaultDir: 'desc',
+  },
+  insurance: {
+    getValue: (c) => c.hard_stops?.length ?? 0,
+    type: 'num',
+    defaultDir: 'desc',
+  },
+  rmis: {
+    getValue: (c) => (c.rmis_status ? RMIS_RANK[c.rmis_status] ?? 9 : 9),
+    type: 'num',
+    defaultDir: 'asc',
+  },
+  status: {
+    getValue: (c) =>
+      (isBrokerwareDisabled(c.brokerware_status)
+        ? c.brokerware_status ?? 'Disabled'
+        : c.carrier_status ?? ''
+      ).toLowerCase(),
+    type: 'str',
+    defaultDir: 'asc',
+  },
+  reviewed: {
+    getValue: (c) => (c.last_reviewed ? Date.parse(c.last_reviewed) : null),
+    type: 'num',
+    defaultDir: 'desc',
+  },
+  revet: {
+    getValue: (c) => {
+      const r = computeRevetStatus(
+        c.last_reviewed,
+        c.created_at,
+        c.revet_interval_days
+      )
+      return r.dueDate ? r.dueDate.getTime() : null
+    },
+    type: 'num',
+    defaultDir: 'asc',
+  },
+}
 
 function gapTone(gap: number | null): { tone: string; label: string } {
   if (gap === null || gap === undefined)
@@ -122,7 +198,8 @@ const VIEW_KEY = 'dts.carrierTable.view.v1'
 interface PersistedView {
   search: string
   status: StatusFilter
-  sort: SortKey
+  sortKey: SortKey
+  sortDir: SortDir
   revettingOnly: boolean
   scrollTop: number
 }
@@ -156,7 +233,21 @@ export function CarrierTable({
     saved.status ?? 'BrokerwareActive'
   )
   const [revettingOnly, setRevettingOnly] = useState(saved.revettingOnly ?? false)
-  const [sort, setSort] = useState<SortKey>(saved.sort ?? 'gap')
+  const [sortKey, setSortKey] = useState<SortKey>(saved.sortKey ?? 'gap')
+  const [sortDir, setSortDir] = useState<SortDir>(saved.sortDir ?? 'asc')
+
+  // Clicking a column header sorts by it; clicking the active column flips the
+  // direction. A fresh column starts in its natural direction.
+  const toggleSort = useCallback((col: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === col) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+        return prev
+      }
+      setSortDir(SORT_COLS[col].defaultDir)
+      return col
+    })
+  }, [])
 
   // Whether any carrier carries a Brokerware status yet. Until the Brokerware
   // sync has populated it, the "Active in Brokerware" filter falls back to
@@ -231,22 +322,25 @@ export function CarrierTable({
       }
     })
 
+    const def = SORT_COLS[sortKey]
+    const dir = sortDir === 'asc' ? 1 : -1
     rows = [...rows].sort((a, b) => {
-      if (sort === 'name')
-        return (a.legal_name ?? '').localeCompare(b.legal_name ?? '')
-      if (sort === 'reviewed') {
-        const av = a.last_reviewed ? Date.parse(a.last_reviewed) : 0
-        const bv = b.last_reviewed ? Date.parse(b.last_reviewed) : 0
-        return bv - av
-      }
-      // gap ascending, nulls last
-      const ag = a.gap_score ?? Infinity
-      const bg = b.gap_score ?? Infinity
-      return ag - bg
+      const av = def.getValue(a)
+      const bv = def.getValue(b)
+      const an = av === null || av === undefined
+      const bn = bv === null || bv === undefined
+      if (an && bn) return 0
+      if (an) return 1 // nulls always last, regardless of direction
+      if (bn) return -1
+      const cmp =
+        def.type === 'str'
+          ? String(av).localeCompare(String(bv))
+          : (av as number) - (bv as number)
+      return cmp * dir
     })
 
     return rows
-  }, [carriers, search, status, revettingOnly, sort, hasBrokerwareData])
+  }, [carriers, search, status, revettingOnly, sortKey, sortDir, hasBrokerwareData])
 
   // Virtualize the rows so only what's on screen is rendered — smooth scrolling
   // even with the full 700+ carrier roster.
@@ -268,7 +362,8 @@ export function CarrierTable({
         JSON.stringify({
           search,
           status,
-          sort,
+          sortKey,
+          sortDir,
           revettingOnly,
           scrollTop: scrollRef.current?.scrollTop ?? 0,
         })
@@ -276,7 +371,7 @@ export function CarrierTable({
     } catch {
       /* storage unavailable — non-fatal */
     }
-  }, [search, status, sort, revettingOnly])
+  }, [search, status, sortKey, sortDir, revettingOnly])
 
   // Persist whenever a filter changes (covers navigating away via any link).
   useEffect(() => {
@@ -303,6 +398,39 @@ export function CarrierTable({
     },
     [persistView, router]
   )
+
+  const th = (
+    col: SortKey,
+    label: string,
+    className: string,
+    alignRight = false
+  ) => {
+    const active = sortKey === col
+    return (
+      <div className={className}>
+        <button
+          type="button"
+          onClick={() => toggleSort(col)}
+          title={`Sort by ${label}`}
+          className={cn(
+            'group flex w-full items-center gap-1 uppercase tracking-wide transition hover:text-gray-700',
+            alignRight ? 'justify-end' : 'justify-start',
+            active && 'text-dts-blue'
+          )}
+        >
+          <span>{label}</span>
+          <span
+            className={cn(
+              'text-[9px] leading-none',
+              active ? 'text-dts-blue' : 'text-gray-300 group-hover:text-gray-500'
+            )}
+          >
+            {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+          </span>
+        </button>
+      </div>
+    )
+  }
 
   return (
     <Card>
@@ -333,17 +461,6 @@ export function CarrierTable({
             <option value="Disabled">Inactive / Disabled (Brokerware)</option>
           </Select>
         </div>
-        <div className="w-44">
-          <Select
-            label="Sort by"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-          >
-            <option value="gap">GAP score (low → high)</option>
-            <option value="name">Carrier name</option>
-            <option value="reviewed">Last reviewed</option>
-          </Select>
-        </div>
         <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">
           <input
             type="checkbox"
@@ -367,16 +484,16 @@ export function CarrierTable({
       <div className="overflow-x-auto">
         <div className="min-w-[1180px]">
           {/* Header row */}
-          <div className="flex items-center border-b border-gray-100 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            <div className={COL.carrier}>Carrier</div>
-            <div className={COL.dot}>DOT</div>
-            <div className={COL.gap}>GAP</div>
-            <div className={COL.flagged}>Flagged Scores</div>
-            <div className={COL.insurance}>Insurance</div>
-            <div className={COL.rmis}>RMIS</div>
-            <div className={COL.status}>Status</div>
-            <div className={COL.reviewed}>Last Reviewed</div>
-            <div className={COL.revet}>Re-vet</div>
+          <div className="flex items-center border-b border-gray-100 px-5 py-2 text-xs font-semibold text-gray-500">
+            {th('carrier', 'Carrier', COL.carrier)}
+            {th('dot', 'DOT', COL.dot)}
+            {th('gap', 'GAP', COL.gap, true)}
+            {th('flagged', 'Flagged Scores', COL.flagged)}
+            {th('insurance', 'Insurance', COL.insurance)}
+            {th('rmis', 'RMIS', COL.rmis)}
+            {th('status', 'Status', COL.status)}
+            {th('reviewed', 'Last Reviewed', COL.reviewed)}
+            {th('revet', 'Re-vet', COL.revet)}
           </div>
 
           {filtered.length === 0 ? (

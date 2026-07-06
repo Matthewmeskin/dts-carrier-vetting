@@ -106,6 +106,13 @@ export async function GET(
       deltaLog,
       sos,
       factor,
+      _sosDebug: {
+        error: (sosRes as any)?.error ?? null,
+        count: Array.isArray((sosRes as any)?.data)
+          ? (sosRes as any).data.length
+          : null,
+        status: (sosRes as any)?.status ?? null,
+      },
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

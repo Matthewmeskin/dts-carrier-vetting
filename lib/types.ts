@@ -30,6 +30,10 @@ export interface CarrierSummary {
   brokerware_status: string | null
   business_type: string | null
   eld_enrolled: boolean | null
+  w9_on_file: boolean | null
+  agreement_on_file: boolean | null
+  is_factoring: boolean | null
+  noa_on_file: boolean
 }
 
 export interface CarrierRecord {

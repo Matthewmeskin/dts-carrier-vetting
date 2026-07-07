@@ -45,6 +45,22 @@ function businessTypeLabel(key: string): string {
   return key
 }
 
+// Documents a carrier is missing (that we'd chase for upload). Only counts a doc
+// as missing when we affirmatively know it's absent (=== false), not when the
+// underlying data is simply unknown (null).
+const MISSING_DOC_LABELS: Record<string, string> = {
+  w9: 'W-9',
+  agreement: 'Broker-Carrier Agreement',
+  noa: 'NOA (factoring)',
+}
+function carrierMissingDocs(c: CarrierSummary): string[] {
+  const missing: string[] = []
+  if (c.w9_on_file === false) missing.push('w9')
+  if (c.agreement_on_file === false) missing.push('agreement')
+  if (c.is_factoring === true && !c.noa_on_file) missing.push('noa')
+  return missing
+}
+
 const ACTIVE_STATUSES = [
   'Approved',
   'Approved with Restrictions',
@@ -221,6 +237,7 @@ interface PersistedView {
   revettingOnly: boolean
   problems: string[]
   businessTypes: string[]
+  missingDocs: string[]
   scrollTop: number
 }
 
@@ -256,6 +273,9 @@ export function CarrierTable({
   const [problems, setProblems] = useState<string[]>(saved.problems ?? [])
   const [businessTypes, setBusinessTypes] = useState<string[]>(
     saved.businessTypes ?? []
+  )
+  const [missingDocs, setMissingDocs] = useState<string[]>(
+    saved.missingDocs ?? []
   )
   const [sortKey, setSortKey] = useState<SortKey>(saved.sortKey ?? 'gap')
   const [sortDir, setSortDir] = useState<SortDir>(saved.sortDir ?? 'asc')
@@ -366,6 +386,19 @@ export function CarrierTable({
       .sort((a, b) => b.count - a.count)
   }, [base])
 
+  // Per-missing-document counts, over the base set.
+  const missingDocFacets = useMemo<FacetOption[]>(() => {
+    const map = new Map<string, number>()
+    for (const c of base) {
+      for (const k of carrierMissingDocs(c)) {
+        map.set(k, (map.get(k) ?? 0) + 1)
+      }
+    }
+    return Object.keys(MISSING_DOC_LABELS)
+      .filter((k) => map.has(k))
+      .map((k) => ({ key: k, label: MISSING_DOC_LABELS[k], count: map.get(k)! }))
+  }, [base])
+
   // Apply the selected problems (ANY match) and business types (membership),
   // then sort by the active column/direction.
   const filtered = useMemo(() => {
@@ -378,6 +411,12 @@ export function CarrierTable({
     }
     if (businessTypes.length > 0) {
       rows = rows.filter((c) => businessTypes.includes(businessTypeKey(c)))
+    }
+    if (missingDocs.length > 0) {
+      rows = rows.filter((c) => {
+        const missing = carrierMissingDocs(c)
+        return missingDocs.some((k) => missing.includes(k))
+      })
     }
 
     const def = SORT_COLS[sortKey]
@@ -398,7 +437,7 @@ export function CarrierTable({
     })
 
     return rows
-  }, [base, problems, businessTypes, sortKey, sortDir])
+  }, [base, problems, businessTypes, missingDocs, sortKey, sortDir])
 
   // Virtualize the rows so only what's on screen is rendered — smooth scrolling
   // even with the full 700+ carrier roster.
@@ -435,13 +474,23 @@ export function CarrierTable({
           revettingOnly,
           problems,
           businessTypes,
+          missingDocs,
           scrollTop: scrollRef.current?.scrollTop ?? 0,
         })
       )
     } catch {
       /* storage unavailable — non-fatal */
     }
-  }, [search, status, sortKey, sortDir, revettingOnly, problems, businessTypes])
+  }, [
+    search,
+    status,
+    sortKey,
+    sortDir,
+    revettingOnly,
+    problems,
+    businessTypes,
+    missingDocs,
+  ])
 
   // Persist whenever a filter changes (covers navigating away via any link).
   useEffect(() => {
@@ -546,6 +595,16 @@ export function CarrierTable({
             options={businessTypeFacets}
             selected={businessTypes}
             onChange={setBusinessTypes}
+          />
+        </div>
+        <div className="pb-[1px]">
+          <FacetFilter
+            label="Missing Documents"
+            emptyText="Any documents"
+            noun="missing document"
+            options={missingDocFacets}
+            selected={missingDocs}
+            onChange={setMissingDocs}
           />
         </div>
         <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">

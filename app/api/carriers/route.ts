@@ -41,6 +41,10 @@ interface CarrierSummary {
   brokerware_status: string | null
   business_type: string | null
   eld_enrolled: boolean | null
+  w9_on_file: boolean | null
+  agreement_on_file: boolean | null
+  is_factoring: boolean | null
+  noa_on_file: boolean
 }
 
 /** The later of two ISO timestamps (either may be null). */
@@ -93,7 +97,7 @@ export async function GET(request: NextRequest) {
     // which is a ~40KB XML blob per row and would balloon the payload to tens of
     // MB across the roster. Explicit high limit avoids PostgREST's 1000-row cap
     // silently hiding carriers as history accumulates.
-    const [carriersRes, scoresRes, insRes, vetRes] = await Promise.all([
+    const [carriersRes, scoresRes, insRes, vetRes, noaRes] = await Promise.all([
       carrierQuery,
       supabaseAdmin
         .from('carrier_scores')
@@ -107,13 +111,19 @@ export async function GET(request: NextRequest) {
       (supabaseAdmin as any)
         .from('latest_carrier_insurance')
         .select(
-          'dot_number, auto_status, cargo_status, rmis_overall_pass, rmis_is_certified, hard_stops, w9_company_type, rmis_eld_enrolled, fetched_at, updated_at'
+          'dot_number, auto_status, cargo_status, rmis_overall_pass, rmis_is_certified, hard_stops, w9_company_type, rmis_eld_enrolled, w9_on_file, broker_carrier_agreement_on_file, is_factoring, fetched_at, updated_at'
         )
         .limit(100000),
       supabaseAdmin
         .from('vetting_records')
         .select('dot_number, completed_at')
         .order('completed_at', { ascending: false }),
+      // Which carriers have a Notice of Assignment archived.
+      supabaseAdmin
+        .from('vetting_documents')
+        .select('dot_number')
+        .eq('document_type', 'noa')
+        .limit(100000),
     ])
     if (carriersRes.error) throw carriersRes.error
     if (scoresRes.error) throw scoresRes.error
@@ -124,6 +134,9 @@ export async function GET(request: NextRequest) {
     const latestScores = latestPerDot(scoresRes.data ?? [])
     const latestInsurance = latestPerDot(insRes.data ?? [])
     const latestVetting = latestPerDot(vetRes.data ?? [])
+    const noaDots = new Set<string>(
+      (noaRes.data ?? []).map((r: any) => String(r.dot_number))
+    )
 
     let merged: CarrierSummary[] = (carriers ?? []).map((c: any) => {
       const dot = String(c.dot_number)
@@ -171,6 +184,10 @@ export async function GET(request: NextRequest) {
         brokerware_status: c.brokerware_status ?? null,
         business_type: ins?.w9_company_type ?? null,
         eld_enrolled: ins?.rmis_eld_enrolled ?? null,
+        w9_on_file: ins?.w9_on_file ?? null,
+        agreement_on_file: ins?.broker_carrier_agreement_on_file ?? null,
+        is_factoring: ins?.is_factoring ?? null,
+        noa_on_file: noaDots.has(dot),
       }
     })
 

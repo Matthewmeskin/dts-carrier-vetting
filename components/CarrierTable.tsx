@@ -26,6 +26,8 @@ import {
   type RevetState,
 } from '@/lib/revet'
 import type { BadgeTone } from './ui/Badge'
+import { ProblemFilter } from './ProblemFilter'
+import { carrierProblems, problemFacets } from '@/lib/problems'
 
 const ACTIVE_STATUSES = [
   'Approved',
@@ -201,6 +203,7 @@ interface PersistedView {
   sortKey: SortKey
   sortDir: SortDir
   revettingOnly: boolean
+  problems: string[]
   scrollTop: number
 }
 
@@ -233,6 +236,7 @@ export function CarrierTable({
     saved.status ?? 'BrokerwareActive'
   )
   const [revettingOnly, setRevettingOnly] = useState(saved.revettingOnly ?? false)
+  const [problems, setProblems] = useState<string[]>(saved.problems ?? [])
   const [sortKey, setSortKey] = useState<SortKey>(saved.sortKey ?? 'gap')
   const [sortDir, setSortDir] = useState<SortDir>(saved.sortDir ?? 'asc')
 
@@ -257,9 +261,12 @@ export function CarrierTable({
     [carriers]
   )
 
-  const filtered = useMemo(() => {
+  // Base set: everything the search + status + revetting filters allow, before
+  // the problem facet is applied. Facet counts are computed over this set so
+  // they reflect the current view but aren't reduced by the problem selection.
+  const base = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let rows = carriers.filter((c) => {
+    const rows = carriers.filter((c) => {
       if (q) {
         const hay = `${c.legal_name ?? ''} ${c.dba_name ?? ''} ${c.dot_number}`.toLowerCase()
         if (!hay.includes(q)) return false
@@ -321,6 +328,22 @@ export function CarrierTable({
           return true
       }
     })
+    return rows
+  }, [carriers, search, status, revettingOnly, hasBrokerwareData])
+
+  // Per-problem carrier counts for the multi-select, over the base set.
+  const facets = useMemo(() => problemFacets(base), [base])
+
+  // Apply the selected problems (carrier matches if it has ANY of them), then
+  // sort by the active column/direction.
+  const filtered = useMemo(() => {
+    let rows =
+      problems.length > 0
+        ? base.filter((c) => {
+            const keys = carrierProblems(c).map((p) => p.key)
+            return problems.some((k) => keys.includes(k))
+          })
+        : base
 
     const def = SORT_COLS[sortKey]
     const dir = sortDir === 'asc' ? 1 : -1
@@ -340,7 +363,7 @@ export function CarrierTable({
     })
 
     return rows
-  }, [carriers, search, status, revettingOnly, sortKey, sortDir, hasBrokerwareData])
+  }, [base, problems, sortKey, sortDir])
 
   // Virtualize the rows so only what's on screen is rendered — smooth scrolling
   // even with the full 700+ carrier roster.
@@ -365,13 +388,14 @@ export function CarrierTable({
           sortKey,
           sortDir,
           revettingOnly,
+          problems,
           scrollTop: scrollRef.current?.scrollTop ?? 0,
         })
       )
     } catch {
       /* storage unavailable — non-fatal */
     }
-  }, [search, status, sortKey, sortDir, revettingOnly])
+  }, [search, status, sortKey, sortDir, revettingOnly, problems])
 
   // Persist whenever a filter changes (covers navigating away via any link).
   useEffect(() => {
@@ -460,6 +484,13 @@ export function CarrierTable({
             <option value="DoNotUse">Do Not Use</option>
             <option value="Disabled">Inactive / Disabled (Brokerware)</option>
           </Select>
+        </div>
+        <div className="pb-[1px]">
+          <ProblemFilter
+            facets={facets}
+            selected={problems}
+            onChange={setProblems}
+          />
         </div>
         <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">
           <input

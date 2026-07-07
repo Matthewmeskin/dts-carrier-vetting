@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { TablesUpdate } from '@/lib/database.types'
 import { REVET_INTERVAL_OPTIONS } from '@/lib/revet'
+import { logCarrierEvent } from '@/lib/auditLog'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -59,6 +60,23 @@ export async function PATCH(
 
     if (error || !data) {
       return NextResponse.json({ error: 'Carrier not found' }, { status: 404 })
+    }
+
+    // Audit trail — record what changed.
+    const parts: string[] = []
+    if (carrier_status !== undefined) parts.push(`status → ${carrier_status}`)
+    if (do_not_use !== undefined) parts.push(`do-not-use → ${do_not_use ? 'yes' : 'no'}`)
+    if (revet_interval_days !== undefined)
+      parts.push(`re-vet interval → ${revet_interval_days}d`)
+    if (parts.length > 0) {
+      await logCarrierEvent({
+        dot,
+        carrierId: (data as any).id ?? null,
+        type: 'status_change',
+        summary: `Carrier updated: ${parts.join(', ')}.`,
+        detail: { carrier_status, do_not_use, do_not_use_reason, revet_interval_days },
+        actor: 'DTS',
+      })
     }
 
     return NextResponse.json({ carrier: data })

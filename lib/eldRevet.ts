@@ -12,6 +12,7 @@
 import { supabaseAdmin } from './supabase'
 import { isBrokerwareDisabled } from './revet'
 import { sendComplianceAlert } from './emailAlerts'
+import { logCarrierEvent } from './auditLog'
 import type { EldFleetAnalysis } from './eldAnalysis'
 
 const ELD_MARKER = 'ELD fleet-integrity fraud signal — auto-flagged for re-vet'
@@ -85,6 +86,17 @@ export async function maybeFlagForRevet(params: {
         processed: false,
       } as any,
     ])
+
+    await logCarrierEvent({
+      dot: params.dot,
+      carrierId: c.id ?? null,
+      type: 'eld_flag',
+      summary: alreadyPending
+        ? `ELD fraud signal recorded (already in Pending Review).`
+        : `ELD fraud signal — auto-flagged for re-vet (→ Pending Review).`,
+      detail: { reasons },
+      actor: 'ELD monitor',
+    })
 
     // Best-effort email alert.
     try {

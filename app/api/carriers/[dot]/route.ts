@@ -13,7 +13,7 @@ export async function GET(
 
     // Fetch everything the detail page needs in parallel — these are all keyed
     // by dot_number and independent of each other.
-    const [carrierRes, scoresRes, insRes, vetRes, deltaRes, sosRes] = await Promise.all([
+    const [carrierRes, scoresRes, insRes, vetRes, deltaRes, sosRes, eventsRes] = await Promise.all([
       supabaseAdmin.from('carriers').select('*').eq('dot_number', dot).single(),
       supabaseAdmin
         .from('carrier_scores')
@@ -47,6 +47,12 @@ export async function GET(
       // PostgREST's column-select on carrier_sos intermittently returned zero
       // rows for existing data, so we bypass it.
       (supabaseAdmin as any).rpc('get_carrier_sos', { p_dot: dot }),
+      (supabaseAdmin as any)
+        .from('carrier_events')
+        .select('id, event_type, summary, detail, actor, created_at')
+        .eq('dot_number', dot)
+        .order('created_at', { ascending: false })
+        .limit(50),
     ])
 
     const carrier = carrierRes.data
@@ -102,6 +108,7 @@ export async function GET(
       deltaLog,
       sos,
       factor,
+      events: (eventsRes as any).data ?? [],
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

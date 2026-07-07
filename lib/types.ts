@@ -49,6 +49,7 @@ export interface CarrierRecord {
   do_not_use: boolean | null
   do_not_use_reason: string | null
   revet_interval_days: number | null
+  revet_reset_at: string | null
   phone: string | null
   email: string | null
   brokerware_carrier_id: number | null
@@ -255,6 +256,15 @@ export interface FactorRecord {
   carrier_count?: number
 }
 
+export interface CarrierEventRecord {
+  id: string
+  event_type: string
+  summary: string
+  detail: Record<string, unknown> | null
+  actor: string | null
+  created_at: string
+}
+
 export interface CarrierDetail {
   carrier: CarrierRecord
   scores: ScoreRecord[]
@@ -263,4 +273,5 @@ export interface CarrierDetail {
   deltaLog: DeltaLogRecord[]
   sos: SosRecord | null
   factor: FactorRecord | null
+  events: CarrierEventRecord[]
 }

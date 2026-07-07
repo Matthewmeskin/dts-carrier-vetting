@@ -3,7 +3,15 @@ import * as XLSX from 'xlsx'
 import { supabaseAdmin } from '@/lib/supabase'
 import { evaluateScores } from '@/lib/scoringRules'
 import { sendComplianceAlert } from '@/lib/emailAlerts'
+import { isBrokerwareDisabled } from '@/lib/revet'
+import { logCarrierEvents, type CarrierEventInput } from '@/lib/auditLog'
 import { TablesInsert } from '@/lib/database.types'
+
+const GOOD_STANDING_STATUSES = [
+  'Approved',
+  'Approved with Restrictions',
+  'Exception Approved',
+]
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -114,17 +122,28 @@ export async function POST(request: Request) {
       if (error) throw error
     }
 
-    // 2. Resolve carrier ids in bulk.
+    // 2. Resolve carrier ids + standing in bulk.
     const idByDot = new Map<string, string>()
+    const metaByDot = new Map<
+      string,
+      { id: string; status: string | null; doNotUse: boolean | null; brokerware: string | null }
+    >()
     const dots = Array.from(mapped.keys())
     for (let i = 0; i < dots.length; i += CHUNK) {
       const { data, error } = await supabaseAdmin
         .from('carriers')
-        .select('id, dot_number')
+        .select('id, dot_number, carrier_status, do_not_use, brokerware_status')
         .in('dot_number', dots.slice(i, i + CHUNK))
       if (error) throw error
       for (const c of data ?? []) {
-        idByDot.set(String((c as any).dot_number), (c as any).id)
+        const dot = String((c as any).dot_number)
+        idByDot.set(dot, (c as any).id)
+        metaByDot.set(dot, {
+          id: (c as any).id,
+          status: (c as any).carrier_status ?? null,
+          doNotUse: (c as any).do_not_use ?? null,
+          brokerware: (c as any).brokerware_status ?? null,
+        })
       }
     }
 
@@ -132,6 +151,8 @@ export async function POST(request: Request) {
     let autoCleared = 0
     const flagged: FlaggedCarrier[] = []
     const scoreRows: TablesInsert<'carrier_scores'>[] = []
+    // Per-dot pass result for the recertification pass below.
+    const evalByDot = new Map<string, { passed: boolean; gap: number | null }>()
     for (const [dot, r] of Array.from(mapped.entries())) {
       const carrierId = idByDot.get(dot)
       if (!carrierId) continue
@@ -170,6 +191,11 @@ export async function POST(request: Request) {
         approval_level: evaluation.approvalLevel,
       })
 
+      evalByDot.set(dot, {
+        passed: !evaluation.requiresRevetting,
+        gap: evaluation.gapScore ?? null,
+      })
+
       if (evaluation.requiresRevetting) {
         flagged.push({
           dotNumber: dot,
@@ -195,10 +221,76 @@ export async function POST(request: Request) {
     }
 
     const errors = total - scoreRows.length
+    const batchLabel = `Monthly Bluewire upload — ${new Date().toLocaleDateString()}`
+
+    // 5. Auto-recertification — reset the re-vet timer for carriers that are in
+    // good standing AND still pass this month's scores AND remain RMIS-certified
+    // with no hard stops. This is the recurring compliance checkpoint.
+    const insByDot = new Map<string, { certified: boolean; hardStops: number }>()
+    for (let i = 0; i < dots.length; i += CHUNK) {
+      const { data } = await (supabaseAdmin as any)
+        .from('latest_carrier_insurance')
+        .select('dot_number, rmis_is_certified, hard_stops')
+        .in('dot_number', dots.slice(i, i + CHUNK))
+      for (const row of data ?? []) {
+        insByDot.set(String(row.dot_number), {
+          certified: row.rmis_is_certified === true,
+          hardStops: Array.isArray(row.hard_stops) ? row.hard_stops.length : 0,
+        })
+      }
+    }
+
+    const nowIso = new Date().toISOString()
+    const recertDots: string[] = []
+    const events: CarrierEventInput[] = []
+    let recertified = 0
+    for (const [dot] of Array.from(mapped.entries())) {
+      const meta = metaByDot.get(dot)
+      const ev = evalByDot.get(dot)
+      if (!meta || !ev) continue
+
+      const goodStanding =
+        !!meta.status &&
+        GOOD_STANDING_STATUSES.includes(meta.status) &&
+        !meta.doNotUse &&
+        !isBrokerwareDisabled(meta.brokerware)
+      const ins = insByDot.get(dot)
+      const rmisOk = ins?.certified === true && ins.hardStops === 0
+
+      if (ev.passed && goodStanding && rmisOk) {
+        recertDots.push(dot)
+        events.push({
+          dot,
+          carrierId: meta.id,
+          type: 'recertification',
+          summary: `Auto re-certified — scores pass and RMIS certified; re-vet timer reset.`,
+          detail: { gap: ev.gap, batch: batchLabel },
+          actor: 'Bluewire upload',
+        })
+        recertified++
+      } else if (!ev.passed) {
+        events.push({
+          dot,
+          carrierId: meta.id,
+          type: 'score_flag',
+          summary: `Scores flagged for re-vet on ${batchLabel} (GAP ${ev.gap ?? '—'}).`,
+          detail: { gap: ev.gap, batch: batchLabel },
+          actor: 'Bluewire upload',
+        })
+      }
+    }
+
+    // Reset the re-vet clock in bulk for recertified carriers.
+    for (let i = 0; i < recertDots.length; i += CHUNK) {
+      await supabaseAdmin
+        .from('carriers')
+        .update({ revet_reset_at: nowIso } as any)
+        .in('dot_number', recertDots.slice(i, i + CHUNK))
+    }
+    await logCarrierEvents(events)
 
     // Alert + log if any flagged.
     if (flagged.length > 0) {
-      const batchLabel = `Monthly Bluewire upload — ${new Date().toLocaleDateString()}`
       try {
         await sendComplianceAlert(flagged, batchLabel)
       } catch (alertErr) {
@@ -223,7 +315,13 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ total, flagged: flagged.length, autoCleared, errors })
+    return NextResponse.json({
+      total,
+      flagged: flagged.length,
+      autoCleared,
+      recertified,
+      errors,
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })
   }

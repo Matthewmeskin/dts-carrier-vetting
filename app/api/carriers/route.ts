@@ -43,6 +43,13 @@ interface CarrierSummary {
   eld_enrolled: boolean | null
 }
 
+/** The later of two ISO timestamps (either may be null). */
+function maxIso(a: string | null, b: string | null): string | null {
+  if (!a) return b
+  if (!b) return a
+  return a >= b ? a : b
+}
+
 function latestPerDot<T extends Record<string, any>>(rows: T[]): Record<string, T> {
   const map: Record<string, T> = {}
   for (const row of rows) {
@@ -156,7 +163,9 @@ export async function GET(request: NextRequest) {
         rmis_status: rmisStatus,
         hard_stops: ins?.hard_stops ?? null,
         insurance_fetched_at: ins?.fetched_at ?? null,
-        last_reviewed: v?.completed_at ?? null,
+        // The re-vet clock anchors to the later of the last completed vetting and
+        // any auto-recertification (score upload + RMIS still certified).
+        last_reviewed: maxIso(v?.completed_at ?? null, c.revet_reset_at ?? null),
         revet_interval_days: c.revet_interval_days ?? null,
         created_at: c.created_at ?? null,
         brokerware_status: c.brokerware_status ?? null,

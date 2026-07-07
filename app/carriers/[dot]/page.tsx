@@ -21,6 +21,7 @@ import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
 import { DeltaTimeline } from '@/components/DeltaTimeline'
+import { ActivityLog } from '@/components/ActivityLog'
 
 const REVET_TONE: Record<RevetState, BadgeTone> = {
   overdue: 'red',
@@ -110,9 +111,17 @@ export default function CarrierDetailPage({
     )
   }
 
-  const { carrier, scores, insurance, vettingRecords, deltaLog, sos, factor } = detail
+  const { carrier, scores, insurance, vettingRecords, deltaLog, sos, factor, events } =
+    detail
+  const lastVetting = vettingRecords[0]?.completed_at ?? null
+  const revetAnchor =
+    lastVetting && carrier.revet_reset_at
+      ? lastVetting >= carrier.revet_reset_at
+        ? lastVetting
+        : carrier.revet_reset_at
+      : lastVetting || carrier.revet_reset_at
   const revet = computeRevetStatus(
-    vettingRecords[0]?.completed_at ?? null,
+    revetAnchor,
     carrier.created_at,
     carrier.revet_interval_days
   )
@@ -266,6 +275,9 @@ export default function CarrierDetailPage({
 
       {/* Change History */}
       <DeltaTimeline entries={deltaLog} />
+
+      {/* Activity Log */}
+      <ActivityLog events={events ?? []} />
     </div>
   )
 }

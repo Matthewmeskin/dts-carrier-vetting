@@ -178,6 +178,26 @@ export async function GET(
       }
     }
 
+    try {
+      const { logCarrierEvent } = await import('@/lib/auditLog')
+      await logCarrierEvent({
+        dot,
+        carrierId: (carrier as any).id ?? null,
+        type: 'rmis_refresh',
+        summary: `RMIS refreshed — ${
+          parsed.rmisIsCertified ? 'certified' : 'not certified'
+        }${evaluation.hardStops.length > 0 ? `, ${evaluation.hardStops.length} hard stop(s)` : ''}.`,
+        detail: {
+          certified: parsed.rmisIsCertified,
+          hardStops: evaluation.hardStops,
+          flags: evaluation.flags,
+        },
+        actor: 'Manual RMIS refresh',
+      })
+    } catch {
+      /* best-effort */
+    }
+
     return NextResponse.json({ parsed, evaluation, documents })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

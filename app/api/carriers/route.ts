@@ -39,6 +39,7 @@ interface CarrierSummary {
   revet_interval_days: number | null
   created_at: string | null
   brokerware_status: string | null
+  business_type: string | null
 }
 
 function latestPerDot<T extends Record<string, any>>(rows: T[]): Record<string, T> {
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
       (supabaseAdmin as any)
         .from('latest_carrier_insurance')
         .select(
-          'dot_number, auto_status, cargo_status, rmis_overall_pass, rmis_is_certified, hard_stops, fetched_at, updated_at'
+          'dot_number, auto_status, cargo_status, rmis_overall_pass, rmis_is_certified, hard_stops, w9_company_type, fetched_at, updated_at'
         )
         .limit(100000),
       supabaseAdmin
@@ -158,6 +159,7 @@ export async function GET(request: NextRequest) {
         revet_interval_days: c.revet_interval_days ?? null,
         created_at: c.created_at ?? null,
         brokerware_status: c.brokerware_status ?? null,
+        business_type: ins?.w9_company_type ?? null,
       }
     })
 

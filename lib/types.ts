@@ -28,6 +28,7 @@ export interface CarrierSummary {
   revet_interval_days: number | null
   created_at: string | null
   brokerware_status: string | null
+  business_type: string | null
 }
 
 export interface CarrierRecord {

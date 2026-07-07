@@ -28,6 +28,22 @@ import {
 import type { BadgeTone } from './ui/Badge'
 import { ProblemFilter } from './ProblemFilter'
 import { carrierProblems, problemFacets } from '@/lib/problems'
+import { FacetFilter, type FacetOption } from './FacetFilter'
+
+const UNKNOWN_BIZ = 'Unknown'
+
+/** The carrier's business type key (W-9 company type), 'Unknown' when absent. */
+function businessTypeKey(c: CarrierSummary): string {
+  const v = (c.business_type ?? '').trim()
+  return v || UNKNOWN_BIZ
+}
+
+/** Shorten the verbose FMCSA labels for display. */
+function businessTypeLabel(key: string): string {
+  if (key === 'Individual/Sole Proprietor or single-member LLC')
+    return 'Sole Proprietor / single-member LLC'
+  return key
+}
 
 const ACTIVE_STATUSES = [
   'Approved',
@@ -204,6 +220,7 @@ interface PersistedView {
   sortDir: SortDir
   revettingOnly: boolean
   problems: string[]
+  businessTypes: string[]
   scrollTop: number
 }
 
@@ -237,6 +254,9 @@ export function CarrierTable({
   )
   const [revettingOnly, setRevettingOnly] = useState(saved.revettingOnly ?? false)
   const [problems, setProblems] = useState<string[]>(saved.problems ?? [])
+  const [businessTypes, setBusinessTypes] = useState<string[]>(
+    saved.businessTypes ?? []
+  )
   const [sortKey, setSortKey] = useState<SortKey>(saved.sortKey ?? 'gap')
   const [sortDir, setSortDir] = useState<SortDir>(saved.sortDir ?? 'asc')
 
@@ -334,16 +354,31 @@ export function CarrierTable({
   // Per-problem carrier counts for the multi-select, over the base set.
   const facets = useMemo(() => problemFacets(base), [base])
 
-  // Apply the selected problems (carrier matches if it has ANY of them), then
-  // sort by the active column/direction.
+  // Per-business-type counts, over the base set, most-common first.
+  const businessTypeFacets = useMemo<FacetOption[]>(() => {
+    const map = new Map<string, number>()
+    for (const c of base) {
+      const k = businessTypeKey(c)
+      map.set(k, (map.get(k) ?? 0) + 1)
+    }
+    return Array.from(map.entries())
+      .map(([key, count]) => ({ key, label: businessTypeLabel(key), count }))
+      .sort((a, b) => b.count - a.count)
+  }, [base])
+
+  // Apply the selected problems (ANY match) and business types (membership),
+  // then sort by the active column/direction.
   const filtered = useMemo(() => {
-    let rows =
-      problems.length > 0
-        ? base.filter((c) => {
-            const keys = carrierProblems(c).map((p) => p.key)
-            return problems.some((k) => keys.includes(k))
-          })
-        : base
+    let rows = base
+    if (problems.length > 0) {
+      rows = rows.filter((c) => {
+        const keys = carrierProblems(c).map((p) => p.key)
+        return problems.some((k) => keys.includes(k))
+      })
+    }
+    if (businessTypes.length > 0) {
+      rows = rows.filter((c) => businessTypes.includes(businessTypeKey(c)))
+    }
 
     const def = SORT_COLS[sortKey]
     const dir = sortDir === 'asc' ? 1 : -1
@@ -363,7 +398,7 @@ export function CarrierTable({
     })
 
     return rows
-  }, [base, problems, sortKey, sortDir])
+  }, [base, problems, businessTypes, sortKey, sortDir])
 
   // Virtualize the rows so only what's on screen is rendered — smooth scrolling
   // even with the full 700+ carrier roster.
@@ -389,13 +424,14 @@ export function CarrierTable({
           sortDir,
           revettingOnly,
           problems,
+          businessTypes,
           scrollTop: scrollRef.current?.scrollTop ?? 0,
         })
       )
     } catch {
       /* storage unavailable — non-fatal */
     }
-  }, [search, status, sortKey, sortDir, revettingOnly, problems])
+  }, [search, status, sortKey, sortDir, revettingOnly, problems, businessTypes])
 
   // Persist whenever a filter changes (covers navigating away via any link).
   useEffect(() => {
@@ -490,6 +526,16 @@ export function CarrierTable({
             facets={facets}
             selected={problems}
             onChange={setProblems}
+          />
+        </div>
+        <div className="pb-[1px]">
+          <FacetFilter
+            label="Business Type"
+            emptyText="Any business type"
+            noun="business type"
+            options={businessTypeFacets}
+            selected={businessTypes}
+            onChange={setBusinessTypes}
           />
         </div>
         <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">

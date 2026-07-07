@@ -154,9 +154,10 @@ function LocationTable({
   )
 
   return (
-    <div className="overflow-x-auto">
+    <div>
+      <div className="max-h-96 overflow-auto rounded-md border border-gray-100">
       <table className="w-full text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-white">
           <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
             {th('vehicle', 'Vehicle')}
             {th('vin', 'VIN / Plate')}
@@ -241,6 +242,7 @@ function LocationTable({
           })}
         </tbody>
       </table>
+      </div>
       {footer}
     </div>
   )

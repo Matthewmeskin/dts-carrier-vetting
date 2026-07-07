@@ -345,7 +345,11 @@ export function EldPanel({
                 }
                 sub={analysis.powerUnits != null ? 'vs power units' : undefined}
               />
-              <Stat label="Moving now" value={String(analysis.movingNow)} />
+              <Stat
+                label="Moving"
+                value={String(analysis.movingNow)}
+                sub="at last report"
+              />
               <Stat
                 label="Freshest report"
                 value={

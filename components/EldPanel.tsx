@@ -361,8 +361,9 @@ export function EldPanel({
             </div>
             {autoRevet && (
               <div className="mt-3 rounded-md border border-dts-maroon/30 bg-[#fbe7ee] px-2.5 py-2 text-xs font-medium text-dts-maroon">
-                Auto-flagged for re-vetting — carrier moved to “Pending Review.”
-                Reload to see the updated status.
+                ELD fraud signal recorded — carrier is in “Pending Review” for
+                re-vet, and the reason is logged to its change history. Reload to
+                see the updated status.
               </div>
             )}
             {analysis.flags.length > 0 ? (

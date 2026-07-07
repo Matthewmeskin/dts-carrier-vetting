@@ -65,18 +65,25 @@ export async function POST(request: Request) {
       }
     }
 
+    // Skip carriers refreshed within the last 7 days so a carrier that genuinely
+    // has no NOA in RMIS isn't re-pulled every run once the backlog is drained.
+    const staleBefore = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
+
     // Least-recently-refreshed carriers that are in RMIS (have an insured id).
     const { data: candidates, error } = await supabaseAdmin
       .from('carriers')
-      .select('id, dot_number, rmis_insured_id')
+      .select('id, dot_number, rmis_insured_id, docs_refreshed_at')
       .not('rmis_insured_id', 'is', null)
       .order('docs_refreshed_at', { ascending: true, nullsFirst: true })
       .limit(targetDots ? 5000 : batchSize)
     if (error) throw error
 
-    // Apply the target-dot filter (missing_noa) client-side, then take the batch.
+    // Apply the target-dot filter (missing_noa) + recency guard, then batch.
     const picked = (candidates ?? [])
       .filter((c: any) => !targetDots || targetDots.has(String(c.dot_number)))
+      .filter(
+        (c: any) => !c.docs_refreshed_at || c.docs_refreshed_at < staleBefore
+      )
       .slice(0, batchSize)
 
     let succeeded = 0

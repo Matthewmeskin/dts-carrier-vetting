@@ -6,8 +6,9 @@ import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge } from './ui/Badge'
 import { Button } from './ui/Button'
 import { Spinner } from './ui/Spinner'
-import { formatDateTime, formatRelative } from '@/lib/utils'
+import { cn, formatDateTime, formatRelative } from '@/lib/utils'
 import type { MapVehicle } from './FleetMap'
+import type { EldFleetAnalysis, EldFlag } from '@/lib/eldAnalysis'
 
 // Leaflet touches `window` on import, so load the map only on the client.
 const FleetMap = dynamic(() => import('./FleetMap').then((m) => m.FleetMap), {
@@ -42,6 +43,41 @@ interface EldLocation {
   speed: EldMeasurement | null
   odometer: EldMeasurement | null
   vehicle: EldVehicle | null
+}
+
+function Stat({
+  label,
+  value,
+  sub,
+}: {
+  label: string
+  value: string
+  sub?: string
+}) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-gray-500">
+        {label}
+      </div>
+      <div className="mt-0.5 text-lg font-bold text-gray-900">{value}</div>
+      {sub && <div className="text-[10px] text-gray-400">{sub}</div>}
+    </div>
+  )
+}
+
+function flagTone(level: EldFlag['level']): string {
+  switch (level) {
+    case 'red':
+      return 'border-red-200 bg-red-50 text-red-700'
+    case 'amber':
+      return 'border-amber-200 bg-amber-50 text-amber-700'
+    default:
+      return 'border-gray-200 bg-gray-50 text-gray-600'
+  }
+}
+
+function flagIcon(level: EldFlag['level']): string {
+  return level === 'red' ? '⛔' : level === 'amber' ? '⚠️' : 'ℹ️'
 }
 
 function vehicleName(v: EldVehicle | null): string {
@@ -167,6 +203,7 @@ export function EldPanel({
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [vehicles, setVehicles] = useState<EldLocation[]>([])
+  const [analysis, setAnalysis] = useState<EldFleetAnalysis | null>(null)
   const [fetchedAt, setFetchedAt] = useState<string | null>(null)
 
   // Single-VIN lookup
@@ -197,6 +234,7 @@ export function EldPanel({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `ELD lookup failed (${res.status})`)
       setVehicles(Array.isArray(data.vehicles) ? data.vehicles : [])
+      setAnalysis(data.analysis ?? null)
       // The API returns Success:false with a Message when the carrier isn't
       // ELD-enrolled or isn't attached to our RMIS client.
       if (!data.success && data.message) setMessage(data.message)
@@ -284,6 +322,63 @@ export function EldPanel({
         {message && (
           <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
             {message}
+          </div>
+        )}
+
+        {analysis && (
+          <div className="mb-4 rounded-lg border border-gray-200 p-3">
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <h4 className="text-sm font-semibold text-gray-900">
+                Fleet Integrity
+              </h4>
+              <span className="text-xs text-gray-400">signal, not proof</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat
+                label="Trucks reporting"
+                value={
+                  analysis.powerUnits != null
+                    ? `${analysis.trucksReporting} / ${analysis.powerUnits}`
+                    : String(analysis.trucksReporting)
+                }
+                sub={analysis.powerUnits != null ? 'vs power units' : undefined}
+              />
+              <Stat label="Moving now" value={String(analysis.movingNow)} />
+              <Stat
+                label="Freshest report"
+                value={
+                  analysis.freshestReportAt
+                    ? formatRelative(analysis.freshestReportAt)
+                    : '—'
+                }
+              />
+              <Stat
+                label={`Stale (>24h)`}
+                value={String(analysis.staleCount)}
+              />
+            </div>
+            {analysis.flags.length > 0 ? (
+              <ul className="mt-3 space-y-1.5">
+                {analysis.flags.map((f, i) => (
+                  <li
+                    key={i}
+                    className={cn(
+                      'flex items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs',
+                      flagTone(f.level)
+                    )}
+                  >
+                    <span className="leading-none">{flagIcon(f.level)}</span>
+                    <span>{f.text}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              analysis.trucksReporting > 0 && (
+                <p className="mt-2 text-xs text-green-700">
+                  No fleet-integrity concerns from this snapshot.
+                </p>
+              )
+            )}
           </div>
         )}
 

@@ -10,7 +10,7 @@ import {
 } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { useVirtualizer, useWindowVirtualizer } from '@tanstack/react-virtual'
 import { CarrierSummary } from '@/lib/types'
 import { Card } from './ui/Card'
 import { Input, Select } from './ui/Input'
@@ -411,6 +411,16 @@ export function CarrierTable({
     initialOffset: saved.scrollTop ?? 0,
   })
 
+  // Mobile renders a stacked card list that scrolls with the page, so it uses a
+  // window virtualizer instead of the desktop table's inner-scroll one.
+  const mobileListRef = useRef<HTMLDivElement>(null)
+  const mobileVirtualizer = useWindowVirtualizer({
+    count: filtered.length,
+    estimateSize: () => 132,
+    overscan: 6,
+    scrollMargin: mobileListRef.current?.offsetTop ?? 0,
+  })
+
   // Write the current view (filters + scroll) to sessionStorage so it survives
   // a round-trip to a carrier detail page.
   const persistView = useCallback(() => {
@@ -558,7 +568,8 @@ export function CarrierTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Desktop / tablet: full wide table (horizontal scroll if needed) */}
+      <div className="hidden overflow-x-auto md:block">
         <div className="min-w-[1180px]">
           {/* Header row */}
           <div className="flex items-center border-b border-gray-100 px-5 py-2 text-xs font-semibold text-gray-500">
@@ -710,6 +721,127 @@ export function CarrierTable({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Mobile: stacked card list that scrolls with the page */}
+      <div ref={mobileListRef} className="md:hidden">
+        {filtered.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-gray-400">
+            No carriers match the current filters.
+          </div>
+        ) : (
+          <div
+            style={{
+              height: mobileVirtualizer.getTotalSize(),
+              position: 'relative',
+              width: '100%',
+            }}
+          >
+            {mobileVirtualizer.getVirtualItems().map((vi) => {
+              const c = filtered[vi.index]
+              const g = gapTone(c.gap_score)
+              const rv = computeRevetStatus(
+                c.last_reviewed,
+                c.created_at,
+                c.revet_interval_days
+              )
+              const disabled = isBrokerwareDisabled(c.brokerware_status)
+              return (
+                <div
+                  key={c.id}
+                  data-index={vi.index}
+                  ref={mobileVirtualizer.measureElement}
+                  className="absolute left-0 top-0 w-full"
+                  style={{
+                    transform: `translateY(${
+                      vi.start - mobileVirtualizer.options.scrollMargin
+                    }px)`,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => openCarrier(c.dot_number)}
+                    className="block w-full border-b border-gray-100 px-4 py-3 text-left active:bg-gray-50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-gray-900">
+                          {c.legal_name ?? `DOT ${c.dot_number}`}
+                        </div>
+                        {c.dba_name && c.dba_name !== c.legal_name && (
+                          <div className="truncate text-xs text-gray-500">
+                            dba {c.dba_name}
+                          </div>
+                        )}
+                        <div className="mt-0.5 text-xs text-gray-400">
+                          DOT {c.dot_number}
+                          {c.city || c.state
+                            ? ` · ${[c.city, c.state]
+                                .filter(Boolean)
+                                .join(', ')}`
+                            : ''}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div
+                          className={cn(
+                            'text-lg font-bold leading-none',
+                            g.tone
+                          )}
+                        >
+                          {g.label}
+                        </div>
+                        <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                          GAP
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {disabled ? (
+                        <Badge tone="gray">
+                          {c.brokerware_status || 'Disabled'}
+                        </Badge>
+                      ) : (
+                        <Badge tone={carrierStatusTone(c.carrier_status)}>
+                          {c.carrier_status ?? '—'}
+                        </Badge>
+                      )}
+                      {c.rmis_status === 'certified' ? (
+                        <Badge tone="green">RMIS Certified</Badge>
+                      ) : c.rmis_status === 'not_in_rmis' ? (
+                        <Badge tone="amber">Not in RMIS</Badge>
+                      ) : c.rmis_status === 'not_certified' ? (
+                        <Badge tone="gray">Not certified</Badge>
+                      ) : null}
+                      {(c.hard_stops?.length ?? 0) > 0 ? (
+                        <Badge tone="red">
+                          {c.hard_stops!.length} hard stop(s)
+                        </Badge>
+                      ) : (
+                        <>
+                          <Badge tone={coverageStatusTone(c.auto_status)}>
+                            Auto: {c.auto_status ?? '—'}
+                          </Badge>
+                          <Badge tone={coverageStatusTone(c.cargo_status)}>
+                            Cargo: {c.cargo_status ?? '—'}
+                          </Badge>
+                        </>
+                      )}
+                      {!disabled && (
+                        <Badge tone={REVET_TONE[rv.state]}>{rv.label}</Badge>
+                      )}
+                      {c.flagged_scores && c.flagged_scores.length > 0 && (
+                        <Badge tone="amber">
+                          {c.flagged_scores.length} flag(s)
+                        </Badge>
+                      )}
+                    </div>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </Card>
   )

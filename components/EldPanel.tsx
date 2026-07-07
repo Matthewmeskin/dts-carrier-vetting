@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge } from './ui/Badge'
@@ -90,6 +90,8 @@ function mapsUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps?q=${lat},${lng}`
 }
 
+type EldSortKey = 'vehicle' | 'vin' | 'speed' | 'report'
+
 function LocationTable({
   rows,
   footer,
@@ -97,20 +99,74 @@ function LocationTable({
   rows: EldLocation[]
   footer?: React.ReactNode
 }) {
+  const [sortKey, setSortKey] = useState<EldSortKey>('report')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  function toggle(k: EldSortKey) {
+    if (k === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(k)
+      setSortDir(k === 'vehicle' || k === 'vin' ? 'asc' : 'desc')
+    }
+  }
+
+  const sorted = useMemo(() => {
+    const val = (v: EldLocation): string | number => {
+      switch (sortKey) {
+        case 'vehicle':
+          return vehicleName(v.vehicle).toLowerCase()
+        case 'vin':
+          return (v.vehicle?.vin ?? '').toLowerCase()
+        case 'speed':
+          return v.speed?.value ?? -1
+        case 'report':
+          return v.dateTime ? Date.parse(v.dateTime) : -1
+      }
+    }
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => {
+      const av = val(a)
+      const bv = val(b)
+      if (typeof av === 'string' && typeof bv === 'string') {
+        return av.localeCompare(bv) * dir
+      }
+      return ((av as number) - (bv as number)) * dir
+    })
+  }, [rows, sortKey, sortDir])
+
+  const th = (k: EldSortKey, label: string, className?: string) => (
+    <th className={cn('px-3 py-2', className)}>
+      <button
+        type="button"
+        onClick={() => toggle(k)}
+        className={cn(
+          'inline-flex items-center gap-1 uppercase tracking-wide hover:text-gray-700',
+          sortKey === k && 'text-dts-blue'
+        )}
+      >
+        {label}
+        <span className="text-[9px] text-gray-400">
+          {sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+        </span>
+      </button>
+    </th>
+  )
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
-            <th className="px-3 py-2">Vehicle</th>
-            <th className="px-3 py-2">VIN / Plate</th>
+            {th('vehicle', 'Vehicle')}
+            {th('vin', 'VIN / Plate')}
             <th className="px-3 py-2">Location</th>
-            <th className="px-3 py-2">Speed</th>
-            <th className="px-3 py-2">Last Report</th>
+            {th('speed', 'Speed')}
+            {th('report', 'Last Report')}
           </tr>
         </thead>
         <tbody>
-          {rows.map((v, i) => {
+          {sorted.map((v, i) => {
             const hasCoords = v.latitude != null && v.longitude != null
             return (
               <tr

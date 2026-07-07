@@ -509,6 +509,45 @@ function computeAutoEvaluations(
     }
   }
 
+  // Carrier identity verified — auto-pass unless an identity discrepancy is
+  // detected. FMCSA identity is always present; SOS (when pulled) is the
+  // discriminator, so a clean or absent SOS clears it and a mismatch fails it.
+  {
+    const checked = !!sos?.checked_at
+    const sosClean =
+      !checked ||
+      (sos!.name_match !== false &&
+        sos!.address_match !== 'mismatch' &&
+        (sos!.risk_flags?.length ?? 0) === 0)
+    out.identity_verification = {
+      status: sosClean ? 'pass' : 'fail',
+      evidence: checked
+        ? sosClean
+          ? 'FMCSA identity consistent with SOS registration — no discrepancies'
+          : `Identity discrepancy: ${
+              [...(sos!.risk_flags ?? []), ...(sos!.mismatches ?? [])]
+                .slice(0, 2)
+                .join('; ') || 'name/address mismatch'
+            }`
+        : 'No identity discrepancies detected in FMCSA/RMIS data',
+    }
+  }
+
+  // No unresolved fraud / double-brokering / identity concerns — auto-pass when
+  // no signals are detected; fails to manual review when SOS surfaces fraud /
+  // chameleon / reincarnation flags or name/address mismatches.
+  {
+    const flags = sos?.risk_flags ?? []
+    const mism = sos?.mismatches ?? []
+    const clean = flags.length === 0 && mism.length === 0
+    out.fraud_indicators = {
+      status: clean ? 'pass' : 'fail',
+      evidence: clean
+        ? 'No fraud, double-brokering, or identity signals detected'
+        : `Signals to review: ${[...flags, ...mism].slice(0, 2).join('; ')}`,
+    }
+  }
+
   return out
 }
 

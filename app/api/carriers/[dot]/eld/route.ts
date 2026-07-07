@@ -65,14 +65,9 @@ export async function GET(
       (ins && ins.length > 0 ? ins[0].rmis_carrier_state : null) ??
       (carrier as any)?.state ??
       null
-    const analysis = analyzeFleet({
-      vehicles: result.vehicles,
-      powerUnits: (carrier as any)?.power_units ?? null,
-      domicileState,
-    })
 
     // Persist the snapshot (best-effort) so it feeds history + cross-carrier
-    // equipment checks.
+    // equipment checks. (Records failed pulls too, for audit.)
     await persistFleetPull({
       dot: params.dot,
       carrierId: (carrier as any)?.id ?? null,
@@ -80,15 +75,28 @@ export async function GET(
       source: 'manual',
     })
 
-    // Strong (red) fraud signals auto-flag the carrier for re-vetting.
-    const revet = await maybeFlagForRevet({ dot: params.dot, analysis })
+    // Only run fleet-integrity analysis + auto-revet when the API actually
+    // returned fleet data. A Success:false response (provider error, not
+    // attached, not enrolled) is NOT "0 trucks reporting" — treating it as fraud
+    // would false-flag the carrier.
+    let analysis = null
+    let autoRevet = false
+    if (result.success) {
+      analysis = analyzeFleet({
+        vehicles: result.vehicles,
+        powerUnits: (carrier as any)?.power_units ?? null,
+        domicileState,
+      })
+      const revet = await maybeFlagForRevet({ dot: params.dot, analysis })
+      autoRevet = revet.flagged
+    }
 
     return NextResponse.json({
       configured: true,
       mode: 'fleet',
       ...result,
       analysis,
-      autoRevet: revet.flagged,
+      autoRevet,
     })
   } catch (err: any) {
     return NextResponse.json(

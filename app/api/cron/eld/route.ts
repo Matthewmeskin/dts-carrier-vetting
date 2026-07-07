@@ -89,14 +89,17 @@ export async function POST(request: Request) {
         })
         vehicles += result.vehicles.length
 
-        // Same fraud-signal analysis + auto-revet as the on-demand path.
-        const analysis = analyzeFleet({
-          vehicles: result.vehicles,
-          powerUnits: (c as any).power_units ?? null,
-          domicileState: domicileByDot[dot] ?? (c as any).state ?? null,
-        })
-        const revet = await maybeFlagForRevet({ dot, analysis })
-        if (revet.flagged) flaggedForRevet++
+        // Only analyze + auto-revet on a successful pull. A Success:false
+        // response is a provider error, not "0 trucks = fraud".
+        if (result.success) {
+          const analysis = analyzeFleet({
+            vehicles: result.vehicles,
+            powerUnits: (c as any).power_units ?? null,
+            domicileState: domicileByDot[dot] ?? (c as any).state ?? null,
+          })
+          const revet = await maybeFlagForRevet({ dot, analysis })
+          if (revet.flagged) flaggedForRevet++
+        }
 
         succeeded++
       } catch {

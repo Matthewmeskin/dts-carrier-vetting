@@ -13,6 +13,7 @@ const TYPE_META: Record<string, { label: string; tone: BadgeTone }> = {
   rmis_refresh: { label: 'RMIS', tone: 'blue' },
   eld_flag: { label: 'ELD', tone: 'red' },
   sos_check: { label: 'SOS', tone: 'gray' },
+  noa_check: { label: 'NOA', tone: 'blue' },
   insurance_change: { label: 'Insurance', tone: 'amber' },
 }
 

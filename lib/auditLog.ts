@@ -11,6 +11,7 @@ export type CarrierEventType =
   | 'rmis_refresh'
   | 'eld_flag'
   | 'sos_check'
+  | 'noa_check'
   | 'insurance_change'
 
 export interface CarrierEventInput {

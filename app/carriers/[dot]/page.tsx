@@ -17,6 +17,7 @@ import { AuthorityPanel } from '@/components/AuthorityPanel'
 import { SosPanel } from '@/components/SosPanel'
 import { InsurancePanel } from '@/components/InsurancePanel'
 import { EldPanel } from '@/components/EldPanel'
+import { NoaPanel } from '@/components/NoaPanel'
 import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
@@ -244,6 +245,9 @@ export default function CarrierDetailPage({
 
       {/* Insurance */}
       <InsurancePanel insurance={insurance} dot={dot} onRefreshed={load} />
+
+      {/* Notice of Assignment — factoring carriers only */}
+      {insurance?.is_factoring && <NoaPanel dot={dot} />}
 
       {/* ELD — live fleet location */}
       <EldPanel dot={dot} eldEnrolled={insurance?.rmis_eld_enrolled ?? null} />

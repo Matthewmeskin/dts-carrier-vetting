@@ -30,6 +30,8 @@ export interface EldFleetAnalysis {
 }
 
 const STALE_HOURS = 24
+const GOING_DARK_DAYS = 30
+const DARK_FLEET_DAYS = 90
 
 // Approximate geographic centroids (lat, lng) per US state + DC. Precise enough
 // for a "is any truck within ~hundreds of miles of home base" heuristic.
@@ -134,17 +136,33 @@ export function analyzeFleet(params: {
     })
   }
 
-  // Dormancy.
-  if (trucksReporting > 0 && staleCount === trucksReporting) {
-    flags.push({
-      level: 'red',
-      text: `All ${trucksReporting} reporting truck(s) are stale (no position in over ${STALE_HOURS}h).`,
-    })
-  } else if (dormantCount > 0) {
-    flags.push({
-      level: 'amber',
-      text: `${dormantCount} truck(s) parked and stale (stopped, no report in over ${STALE_HOURS}h).`,
-    })
+  // Dormancy — tiered by how long the *whole fleet* has been dark. ELDs report
+  // position over cellular near-continuously, so a fleet with no valid position
+  // in months is effectively abandoned / nonexistent. Judged on the freshest
+  // report across all trucks so ordinary per-truck attrition doesn't misfire.
+  const freshestAgeDays =
+    freshest != null ? (now - freshest) / (24 * 3600 * 1000) : null
+  if (trucksReporting > 0 && freshestAgeDays != null) {
+    if (freshestAgeDays > DARK_FLEET_DAYS) {
+      flags.push({
+        level: 'red',
+        text: `No valid ELD position from any truck in ${Math.round(
+          freshestAgeDays
+        )} days (over ${DARK_FLEET_DAYS}) — likely an abandoned or nonexistent fleet.`,
+      })
+    } else if (freshestAgeDays > GOING_DARK_DAYS) {
+      flags.push({
+        level: 'amber',
+        text: `No fresh ELD activity across the fleet in ${Math.round(
+          freshestAgeDays
+        )} days.`,
+      })
+    } else if (dormantCount > 0) {
+      flags.push({
+        level: 'amber',
+        text: `${dormantCount} truck(s) parked and stale (stopped, no report in over ${STALE_HOURS}h).`,
+      })
+    }
   }
 
   // Domicile distance (soft signal).

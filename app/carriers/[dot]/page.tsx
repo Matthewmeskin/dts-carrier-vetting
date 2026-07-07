@@ -16,6 +16,7 @@ import { AlertBanner } from '@/components/AlertBanner'
 import { AuthorityPanel } from '@/components/AuthorityPanel'
 import { SosPanel } from '@/components/SosPanel'
 import { InsurancePanel } from '@/components/InsurancePanel'
+import { EldPanel } from '@/components/EldPanel'
 import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
@@ -234,6 +235,9 @@ export default function CarrierDetailPage({
 
       {/* Insurance */}
       <InsurancePanel insurance={insurance} dot={dot} onRefreshed={load} />
+
+      {/* ELD — live fleet location */}
+      <EldPanel dot={dot} />
 
       {/* Safety Scores */}
       <ScorePanel scores={scores} />

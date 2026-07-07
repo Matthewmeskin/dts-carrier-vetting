@@ -5,12 +5,47 @@ import { CarrierSummary } from './types'
 // statuses), so we bucket them into canonical categories by keyword; flagged
 // scores are already clean labels and pass through as-is.
 
-export type ProblemGroup = 'Hard Stop' | 'Flagged Score'
+export type ProblemGroup = 'Hard Stop' | 'Insurance' | 'Flagged Score'
 
 export interface Problem {
   key: string
   label: string
   group: ProblemGroup
+}
+
+// Coverage within this many days of its expiration date counts as "expiring
+// soon" — the renewal watch list. Kept in sync with the evaluator's flag window.
+export const COVERAGE_EXPIRING_SOON_DAYS = 30
+
+/** Whole days from today (UTC) until a plain date string, or null if invalid. */
+function daysUntilDate(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null
+  const t = Date.parse(dateStr)
+  if (Number.isNaN(t)) return null
+  const MS_PER_DAY = 24 * 60 * 60 * 1000
+  return Math.floor((t - Date.now()) / MS_PER_DAY)
+}
+
+// Synthetic insurance problems derived from the coverage expiration dates, so a
+// carrier whose auto/cargo policy has expired or is about to lapse can be pulled
+// up as a renewal list — independent of the categorized hard stops.
+function insuranceProblems(c: CarrierSummary): Problem[] {
+  const out: Problem[] = []
+  const auto = daysUntilDate(c.auto_expiration_date)
+  const cargo = daysUntilDate(c.cargo_expiration_date)
+  const days = [auto, cargo].filter((d): d is number => d !== null)
+  if (days.length === 0) return out
+  const min = Math.min(...days)
+  if (min < 0) {
+    out.push({ key: 'ins:expired', label: 'Insurance expired', group: 'Insurance' })
+  } else if (min <= COVERAGE_EXPIRING_SOON_DAYS) {
+    out.push({
+      key: 'ins:expiring',
+      label: `Insurance expiring within ${COVERAGE_EXPIRING_SOON_DAYS} days`,
+      group: 'Insurance',
+    })
+  }
+  return out
 }
 
 const HARD_STOP_CATEGORIES: {
@@ -40,6 +75,9 @@ export function carrierProblems(c: CarrierSummary): Problem[] {
     const p = categorizeHardStop(hs)
     byKey.set(p.key, p)
   }
+  for (const p of insuranceProblems(c)) {
+    byKey.set(p.key, p)
+  }
   for (const label of c.flagged_scores ?? []) {
     const key = `fs:${label}`
     byKey.set(key, { key, label, group: 'Flagged Score' })
@@ -61,10 +99,12 @@ export function problemFacets(rows: CarrierSummary[]): ProblemFacet[] {
       else map.set(p.key, { ...p, count: 1 })
     }
   }
-  // Hard stops first, then flagged scores; within a group, most-common first.
+  // Hard stops first, then insurance renewals, then flagged scores; within a
+  // group, most-common first.
   const groupOrder: Record<ProblemGroup, number> = {
     'Hard Stop': 0,
-    'Flagged Score': 1,
+    'Insurance': 1,
+    'Flagged Score': 2,
   }
   return Array.from(map.values()).sort(
     (a, b) => groupOrder[a.group] - groupOrder[b.group] || b.count - a.count

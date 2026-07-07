@@ -13,6 +13,17 @@ const AUTO_LIABILITY_MINIMUM = 1_000_000
 const CARGO_MINIMUM = 100_000
 const AUTHORITY_MINIMUM_DAYS = 365
 const AUTHORITY_NEW_CARRIER_DAYS = 90
+// Coverage within this many days of its expiration date is flagged for renewal
+// (not a hard stop) so we can chase new certificates before it actually lapses.
+const COVERAGE_EXPIRING_SOON_DAYS = 30
+
+/** Whole days from today until an ISO/RMIS date, or null if unparseable. */
+function daysUntil(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null
+  const d = parseISO(dateStr)
+  if (!isValid(d)) return null
+  return differenceInDays(d, new Date())
+}
 
 export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
   const hardStops: string[] = []
@@ -44,25 +55,50 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     )
   }
 
-  // HARD STOP — Auto liability insurance (Policy Section 5 + 8)
+  // HARD STOP — Auto liability insurance (Policy Section 5 + 8). Coverage that is
+  // still valid but nearing its expiration date is a renewal FLAG, not a hard
+  // stop — it only becomes a hard stop once the policy has actually expired.
+  const autoDaysLeft = daysUntil(data.autoExpirationDate)
   if (data.autoStatus !== 'Valid') {
     hardStops.push(
       `Auto liability coverage status is "${data.autoStatus}" — must be Valid`
+    )
+  } else if (autoDaysLeft !== null && autoDaysLeft < 0) {
+    hardStops.push(
+      `Auto liability coverage expired ${Math.abs(autoDaysLeft)} day(s) ago ` +
+      `(${data.autoExpirationDate}) — must be renewed`
     )
   } else if (data.autoLimit < AUTO_LIABILITY_MINIMUM) {
     hardStops.push(
       `Auto liability limit $${data.autoLimit.toLocaleString()} is below the $1,000,000 minimum`
     )
+  } else if (autoDaysLeft !== null && autoDaysLeft <= COVERAGE_EXPIRING_SOON_DAYS) {
+    flags.push(
+      `Auto liability coverage expires in ${autoDaysLeft} day(s) ` +
+      `(${data.autoExpirationDate}) — request an updated certificate before it lapses`
+    )
   }
 
-  // HARD STOP — Cargo coverage (Policy Section 5 + 8)
+  // HARD STOP — Cargo coverage (Policy Section 5 + 8). Same treatment: expiring
+  // soon is a renewal flag; only an actually-expired policy is a hard stop.
+  const cargoDaysLeft = daysUntil(data.cargoExpirationDate)
   if (data.cargoStatus !== 'Valid') {
     hardStops.push(
       `Cargo coverage status is "${data.cargoStatus}" — must be Valid`
     )
+  } else if (cargoDaysLeft !== null && cargoDaysLeft < 0) {
+    hardStops.push(
+      `Cargo coverage expired ${Math.abs(cargoDaysLeft)} day(s) ago ` +
+      `(${data.cargoExpirationDate}) — must be renewed`
+    )
   } else if (data.cargoLimit < CARGO_MINIMUM) {
     hardStops.push(
       `Cargo limit $${data.cargoLimit.toLocaleString()} is below the $100,000 minimum`
+    )
+  } else if (cargoDaysLeft !== null && cargoDaysLeft <= COVERAGE_EXPIRING_SOON_DAYS) {
+    flags.push(
+      `Cargo coverage expires in ${cargoDaysLeft} day(s) ` +
+      `(${data.cargoExpirationDate}) — request an updated certificate before it lapses`
     )
   }
 

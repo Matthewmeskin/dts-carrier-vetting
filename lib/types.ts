@@ -19,6 +19,8 @@ export interface CarrierSummary {
   score_upload_date: string | null
   auto_status: string | null
   cargo_status: string | null
+  auto_expiration_date: string | null
+  cargo_expiration_date: string | null
   rmis_overall_pass: boolean | null
   rmis_is_certified: boolean | null
   rmis_status: 'certified' | 'not_certified' | 'not_in_rmis' | 'pending' | null

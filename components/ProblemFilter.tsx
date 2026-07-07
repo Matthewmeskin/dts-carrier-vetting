@@ -35,7 +35,12 @@ export function ProblemFilter({
     )
   }
 
-  const groups: ProblemGroup[] = ['Hard Stop', 'Flagged Score']
+  const groups: ProblemGroup[] = ['Hard Stop', 'Insurance', 'Flagged Score']
+  const groupHeading: Record<ProblemGroup, string> = {
+    'Hard Stop': 'Hard Stops',
+    'Insurance': 'Insurance Renewal',
+    'Flagged Score': 'Flagged Scores',
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -82,7 +87,7 @@ export function ProblemFilter({
               return (
                 <div key={g} className="mb-1">
                   <div className="px-1 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                    {g === 'Hard Stop' ? 'Hard Stops' : 'Flagged Scores'}
+                    {groupHeading[g]}
                   </div>
                   {items.map((o) => (
                     <label

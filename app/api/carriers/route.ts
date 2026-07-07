@@ -30,6 +30,8 @@ interface CarrierSummary {
   score_upload_date: string | null
   auto_status: string | null
   cargo_status: string | null
+  auto_expiration_date: string | null
+  cargo_expiration_date: string | null
   rmis_overall_pass: boolean | null
   rmis_is_certified: boolean | null
   rmis_status: 'certified' | 'not_certified' | 'not_in_rmis' | 'pending'
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest) {
       (supabaseAdmin as any)
         .from('latest_carrier_insurance')
         .select(
-          'dot_number, auto_status, cargo_status, rmis_overall_pass, rmis_is_certified, hard_stops, w9_company_type, rmis_eld_enrolled, w9_on_file, broker_carrier_agreement_on_file, is_factoring, fetched_at, updated_at'
+          'dot_number, auto_status, cargo_status, auto_expiration_date, cargo_expiration_date, rmis_overall_pass, rmis_is_certified, hard_stops, w9_company_type, rmis_eld_enrolled, w9_on_file, broker_carrier_agreement_on_file, is_factoring, fetched_at, updated_at'
         )
         .limit(100000),
       supabaseAdmin
@@ -171,6 +173,8 @@ export async function GET(request: NextRequest) {
         score_upload_date: s?.upload_date ?? null,
         auto_status: ins?.auto_status ?? null,
         cargo_status: ins?.cargo_status ?? null,
+        auto_expiration_date: ins?.auto_expiration_date ?? null,
+        cargo_expiration_date: ins?.cargo_expiration_date ?? null,
         rmis_overall_pass: ins?.rmis_overall_pass ?? null,
         rmis_is_certified: ins?.rmis_is_certified ?? null,
         rmis_status: rmisStatus,

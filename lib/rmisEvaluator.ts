@@ -163,12 +163,10 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
   // basics, etc.), which are the system of record for safety. Showing RMIS OOS
   // ratios too would double-count the same signal.
 
-  // INFO — Crash history (Policy Section 15)
-  if (data.usFatalCrashes > 0) {
-    flags.push(
-      `${data.usFatalCrashes} fatal crash(es) on record — review before use`
-    )
-  } else if (data.usTotalCrashes > 0) {
+  // INFO — Crash history (Policy Section 15). Crash severity is already captured
+  // by the Bluewire safety scores, so RMIS reports crash counts as informational
+  // only — never as a flag.
+  if (data.usTotalCrashes > 0 || data.usFatalCrashes > 0) {
     info.push(
       `${data.usTotalCrashes} total crash(es) on record (${data.usTowCrashes} tow, ` +
       `${data.usInjuryCrashes} injury, ${data.usFatalCrashes} fatal)`

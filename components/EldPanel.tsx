@@ -1,11 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge } from './ui/Badge'
 import { Button } from './ui/Button'
 import { Spinner } from './ui/Spinner'
 import { formatDateTime, formatRelative } from '@/lib/utils'
+import type { MapVehicle } from './FleetMap'
+
+// Leaflet touches `window` on import, so load the map only on the client.
+const FleetMap = dynamic(() => import('./FleetMap').then((m) => m.FleetMap), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-80 items-center justify-center rounded-lg border border-gray-200 text-sm text-gray-400">
+      Loading map…
+    </div>
+  ),
+})
 
 // Local mirrors of the eldClient shapes (kept here so this client component
 // doesn't import server-only code).
@@ -301,16 +313,37 @@ export function EldPanel({
         )}
 
         {vehicles.length > 0 && (
-          <LocationTable
-            rows={vehicles}
-            footer={
-              <p className="mt-2 text-xs text-gray-400">
-                {vehicles.length} vehicle{vehicles.length === 1 ? '' : 's'}{' '}
-                reporting. Positions come directly from the carrier’s ELD
-                provider and can lag or omit fields depending on the provider.
-              </p>
-            }
-          />
+          <>
+            {(() => {
+              const mapVehicles: MapVehicle[] = vehicles
+                .filter((v) => v.latitude != null && v.longitude != null)
+                .map((v) => ({
+                  latitude: v.latitude!,
+                  longitude: v.longitude!,
+                  name: vehicleName(v.vehicle),
+                  vin: v.vehicle?.vin ?? null,
+                  speed: v.speed,
+                  dateTime: v.dateTime,
+                  address: v.address,
+                }))
+              if (mapVehicles.length === 0) return null
+              return (
+                <div className="mb-4">
+                  <FleetMap vehicles={mapVehicles} />
+                </div>
+              )
+            })()}
+            <LocationTable
+              rows={vehicles}
+              footer={
+                <p className="mt-2 text-xs text-gray-400">
+                  {vehicles.length} vehicle{vehicles.length === 1 ? '' : 's'}{' '}
+                  reporting. Positions come directly from the carrier’s ELD
+                  provider and can lag or omit fields depending on the provider.
+                </p>
+              }
+            />
+          </>
         )}
 
         {/* Single-VIN lookup */}

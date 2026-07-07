@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { eldConfigured, fetchFleetLocations } from '@/lib/eldClient'
 import { persistFleetPull } from '@/lib/eldStore'
+import { analyzeFleet } from '@/lib/eldAnalysis'
+import { maybeFlagForRevet } from '@/lib/eldRevet'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -44,13 +46,18 @@ export async function POST(request: Request) {
     const batchSize =
       Number(body?.batchSize) > 0 ? Number(body.batchSize) : DEFAULT_BATCH
 
-    // ELD-enrolled dots (from the latest RMIS snapshot).
+    // ELD-enrolled dots (from the latest RMIS snapshot) + their true domicile
+    // state (for the fleet-integrity analysis).
     const { data: enrolled } = await (supabaseAdmin as any)
       .from('latest_carrier_insurance')
-      .select('dot_number')
+      .select('dot_number, rmis_carrier_state')
       .eq('rmis_eld_enrolled', true)
       .limit(100000)
     const dots: string[] = (enrolled ?? []).map((r: any) => String(r.dot_number))
+    const domicileByDot: Record<string, string | null> = {}
+    for (const r of enrolled ?? []) {
+      domicileByDot[String(r.dot_number)] = r.rmis_carrier_state ?? null
+    }
     if (dots.length === 0) {
       return NextResponse.json({ processed: 0, note: 'No ELD-enrolled carriers.' })
     }
@@ -58,7 +65,7 @@ export async function POST(request: Request) {
     // Least-recently-polled first so we cycle the whole enrolled set over time.
     const { data: carriers, error } = await supabaseAdmin
       .from('carriers')
-      .select('id, dot_number, eld_polled_at')
+      .select('id, dot_number, power_units, state, eld_polled_at')
       .in('dot_number', dots)
       .order('eld_polled_at', { ascending: true, nullsFirst: true })
       .limit(batchSize)
@@ -67,6 +74,7 @@ export async function POST(request: Request) {
     let succeeded = 0
     let failed = 0
     let vehicles = 0
+    let flaggedForRevet = 0
     const now = new Date().toISOString()
 
     for (const c of carriers ?? []) {
@@ -80,6 +88,16 @@ export async function POST(request: Request) {
           source: 'poller',
         })
         vehicles += result.vehicles.length
+
+        // Same fraud-signal analysis + auto-revet as the on-demand path.
+        const analysis = analyzeFleet({
+          vehicles: result.vehicles,
+          powerUnits: (c as any).power_units ?? null,
+          domicileState: domicileByDot[dot] ?? (c as any).state ?? null,
+        })
+        const revet = await maybeFlagForRevet({ dot, analysis })
+        if (revet.flagged) flaggedForRevet++
+
         succeeded++
       } catch {
         failed++
@@ -96,6 +114,7 @@ export async function POST(request: Request) {
       succeeded,
       failed,
       vehicles,
+      flaggedForRevet,
       enrolledTotal: dots.length,
     })
   } catch (err: any) {

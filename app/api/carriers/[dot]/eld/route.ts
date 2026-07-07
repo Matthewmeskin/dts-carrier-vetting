@@ -6,6 +6,7 @@ import {
 } from '@/lib/eldClient'
 import { analyzeFleet } from '@/lib/eldAnalysis'
 import { persistFleetPull } from '@/lib/eldStore'
+import { maybeFlagForRevet } from '@/lib/eldRevet'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -79,11 +80,15 @@ export async function GET(
       source: 'manual',
     })
 
+    // Strong (red) fraud signals auto-flag the carrier for re-vetting.
+    const revet = await maybeFlagForRevet({ dot: params.dot, analysis })
+
     return NextResponse.json({
       configured: true,
       mode: 'fleet',
       ...result,
       analysis,
+      autoRevet: revet.flagged,
     })
   } catch (err: any) {
     return NextResponse.json(

@@ -204,6 +204,7 @@ export function EldPanel({
   const [message, setMessage] = useState<string | null>(null)
   const [vehicles, setVehicles] = useState<EldLocation[]>([])
   const [analysis, setAnalysis] = useState<EldFleetAnalysis | null>(null)
+  const [autoRevet, setAutoRevet] = useState(false)
   const [fetchedAt, setFetchedAt] = useState<string | null>(null)
 
   // Single-VIN lookup
@@ -235,6 +236,7 @@ export function EldPanel({
       if (!res.ok) throw new Error(data.error || `ELD lookup failed (${res.status})`)
       setVehicles(Array.isArray(data.vehicles) ? data.vehicles : [])
       setAnalysis(data.analysis ?? null)
+      setAutoRevet(Boolean(data.autoRevet))
       // The API returns Success:false with a Message when the carrier isn't
       // ELD-enrolled or isn't attached to our RMIS client.
       if (!data.success && data.message) setMessage(data.message)
@@ -357,6 +359,12 @@ export function EldPanel({
                 value={String(analysis.staleCount)}
               />
             </div>
+            {autoRevet && (
+              <div className="mt-3 rounded-md border border-dts-maroon/30 bg-[#fbe7ee] px-2.5 py-2 text-xs font-medium text-dts-maroon">
+                Auto-flagged for re-vetting — carrier moved to “Pending Review.”
+                Reload to see the updated status.
+              </div>
+            )}
             {analysis.flags.length > 0 ? (
               <ul className="mt-3 space-y-1.5">
                 {analysis.flags.map((f, i) => (

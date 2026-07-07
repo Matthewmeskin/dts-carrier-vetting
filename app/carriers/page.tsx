@@ -6,6 +6,7 @@ import { SummaryCards, Metrics } from '@/components/SummaryCards'
 import { CarrierTable } from '@/components/CarrierTable'
 import { NoDotCarriers } from '@/components/NoDotCarriers'
 import { Spinner } from '@/components/ui/Spinner'
+import { Button } from '@/components/ui/Button'
 
 export default function CarriersPage() {
   const [carriers, setCarriers] = useState<CarrierSummary[]>([])
@@ -40,6 +41,21 @@ export default function CarriersPage() {
     load()
   }, [load])
 
+  // Also refresh when the tab regains focus / becomes visible, so returning to
+  // the page picks up documents/statuses that changed while it was in the
+  // background.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') load()
+    }
+    window.addEventListener('focus', load)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', load)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [load])
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -49,7 +65,12 @@ export default function CarriersPage() {
             Compliance status across every carrier in the DTS network.
           </p>
         </div>
-        {loading && <Spinner />}
+        <div className="flex items-center gap-2">
+          {loading && <Spinner />}
+          <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        </div>
       </div>
 
       <SummaryCards metrics={metrics} loading={loading} />

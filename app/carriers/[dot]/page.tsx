@@ -237,7 +237,7 @@ export default function CarrierDetailPage({
       <InsurancePanel insurance={insurance} dot={dot} onRefreshed={load} />
 
       {/* ELD — live fleet location */}
-      <EldPanel dot={dot} />
+      <EldPanel dot={dot} eldEnrolled={insurance?.rmis_eld_enrolled ?? null} />
 
       {/* Safety Scores */}
       <ScorePanel scores={scores} />

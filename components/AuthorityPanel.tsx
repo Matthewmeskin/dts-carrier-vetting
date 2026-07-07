@@ -131,6 +131,18 @@ export function AuthorityPanel({
             }
           />
           <Field
+            label="ELD Connected"
+            value={
+              insurance.rmis_eld_enrolled === true ? (
+                <Badge tone="green">Yes</Badge>
+              ) : insurance.rmis_eld_enrolled === false ? (
+                <Badge tone="gray">No</Badge>
+              ) : (
+                '—'
+              )
+            }
+          />
+          <Field
             label="Authority Granted"
             value={formatDate(insurance.authority_original_date)}
           />

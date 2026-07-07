@@ -206,6 +206,7 @@ export type Database = {
           rmis_carrier_zip: string | null
           rmis_legal_name: string | null
           rmis_dba_name: string | null
+          rmis_eld_enrolled: boolean | null
           rmis_certification_notes: string[] | null
           rmis_flags: string[] | null
           rmis_is_certified: boolean | null
@@ -272,6 +273,7 @@ export type Database = {
           rmis_carrier_zip?: string | null
           rmis_legal_name?: string | null
           rmis_dba_name?: string | null
+          rmis_eld_enrolled?: boolean | null
           rmis_certification_notes?: string[] | null
           rmis_flags?: string[] | null
           rmis_is_certified?: boolean | null
@@ -338,6 +340,7 @@ export type Database = {
           rmis_carrier_zip?: string | null
           rmis_legal_name?: string | null
           rmis_dba_name?: string | null
+          rmis_eld_enrolled?: boolean | null
           rmis_certification_notes?: string[] | null
           rmis_flags?: string[] | null
           rmis_is_certified?: boolean | null

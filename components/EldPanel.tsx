@@ -142,7 +142,13 @@ function LocationTable({
   )
 }
 
-export function EldPanel({ dot }: { dot: string }) {
+export function EldPanel({
+  dot,
+  eldEnrolled,
+}: {
+  dot: string
+  eldEnrolled?: boolean | null
+}) {
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -219,7 +225,16 @@ export function EldPanel({ dot }: { dot: string }) {
   return (
     <Card>
       <CardHeader
-        title="Fleet Location (ELD)"
+        title={
+          <span className="inline-flex items-center gap-2">
+            Fleet Location (ELD)
+            {eldEnrolled === true ? (
+              <Badge tone="green">ELD Connected</Badge>
+            ) : eldEnrolled === false ? (
+              <Badge tone="gray">Not ELD-enrolled</Badge>
+            ) : null}
+          </span>
+        }
         subtitle={
           fetchedAt
             ? `Live from RMIS · pulled ${formatRelative(fetchedAt)}`
@@ -262,9 +277,19 @@ export function EldPanel({ dot }: { dot: string }) {
 
         {configured && !loaded && !loading && !error && (
           <p className="text-sm text-gray-500">
-            Click “Load live locations” to pull this carrier’s current fleet
-            positions from their ELD provider. The carrier must be ELD-enrolled
-            and attached to our RMIS client.
+            {eldEnrolled === false ? (
+              <>
+                RMIS reports this carrier is{' '}
+                <span className="font-medium">not ELD-enrolled</span>, so a live
+                pull likely won’t return positions. You can still try below.
+              </>
+            ) : (
+              <>
+                Click “Load live locations” to pull this carrier’s current fleet
+                positions from their ELD provider. The carrier must be
+                ELD-enrolled and attached to our RMIS client.
+              </>
+            )}
           </p>
         )}
 

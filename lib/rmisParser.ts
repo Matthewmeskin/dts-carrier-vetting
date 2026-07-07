@@ -19,6 +19,7 @@ export interface ParsedRMISData {
   // carriers and only set when they actually operate under a different name.
   legalNameRaw: string
   dbaNameRaw: string
+  eldEnrolled: boolean | null
   headerTimestamp: string
   // Authority
   commonAuthorityStatus: string
@@ -191,6 +192,10 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     dbaName: String(dot.dot_DBAName ?? carrier.CompanyName ?? ''),
     legalNameRaw: String(dot.dot_LegalName ?? ''),
     dbaNameRaw: String(dot.dot_DBAName ?? ''),
+    eldEnrolled: (() => {
+      const v = rawTag(xmlString, 'IsELDEnrolled').trim().toLowerCase()
+      return v === 'true' ? true : v === 'false' ? false : null
+    })(),
     headerTimestamp: String(header.TimeStampUTC ?? header.TimeStamp ?? ''),
 
     commonAuthorityStatus: String(dot.dot_CommonAuthority ?? ''),

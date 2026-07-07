@@ -29,6 +29,7 @@ export interface CarrierSummary {
   created_at: string | null
   brokerware_status: string | null
   business_type: string | null
+  eld_enrolled: boolean | null
 }
 
 export interface CarrierRecord {

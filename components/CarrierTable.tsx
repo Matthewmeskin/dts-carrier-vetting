@@ -671,15 +671,18 @@ export function CarrierTable({
                         )}
                       </div>
                       <div className={COL.rmis}>
-                        {c.rmis_status === 'certified' ? (
-                          <Badge tone="green">Certified</Badge>
-                        ) : c.rmis_status === 'not_certified' ? (
-                          <Badge tone="gray">Not certified</Badge>
-                        ) : c.rmis_status === 'not_in_rmis' ? (
-                          <Badge tone="amber">Not in RMIS</Badge>
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {c.rmis_status === 'certified' ? (
+                            <Badge tone="green">Certified</Badge>
+                          ) : c.rmis_status === 'not_certified' ? (
+                            <Badge tone="gray">Not certified</Badge>
+                          ) : c.rmis_status === 'not_in_rmis' ? (
+                            <Badge tone="amber">Not in RMIS</Badge>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                          {c.eld_enrolled && <Badge tone="blue">ELD</Badge>}
+                        </div>
                       </div>
                       <div className={COL.status}>
                         {disabled ? (
@@ -813,6 +816,7 @@ export function CarrierTable({
                       ) : c.rmis_status === 'not_certified' ? (
                         <Badge tone="gray">Not certified</Badge>
                       ) : null}
+                      {c.eld_enrolled && <Badge tone="blue">ELD</Badge>}
                       {(c.hard_stops?.length ?? 0) > 0 ? (
                         <Badge tone="red">
                           {c.hard_stops!.length} hard stop(s)

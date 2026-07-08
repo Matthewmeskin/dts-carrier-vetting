@@ -162,7 +162,27 @@ export default function CarrierDetailPage({
                 )}
               <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
                 <span>DOT {carrier.dot_number}</span>
-                {carrier.mc_number && <span>MC {carrier.mc_number}</span>}
+                {carrier.mc_number &&
+                  (() => {
+                    const mc = String(carrier.mc_number).replace(/\D/g, '')
+                    return mc ? (
+                      <a
+                        href={
+                          'https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY' +
+                          '&query_type=queryCarrierSnapshot&query_param=MC_MX' +
+                          `&query_string=${mc}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Look up on FMCSA SAFER"
+                        className="text-dts-blue hover:underline"
+                      >
+                        MC {carrier.mc_number}
+                      </a>
+                    ) : (
+                      <span>MC {carrier.mc_number}</span>
+                    )
+                  })()}
                 <span>
                   {[carrier.city, carrier.state].filter(Boolean).join(', ') ||
                     '—'}

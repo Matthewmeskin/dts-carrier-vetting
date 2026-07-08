@@ -12,11 +12,16 @@ const DEFAULT_BATCH = 10
 // POST — re-pull RMIS documents for a batch of carriers so any documents on file
 // in RMIS (notably NOAs for factoring carriers) get archived into the portal.
 //
-// Default target: factoring carriers that are in RMIS but have no NOA archived.
-// Cycles least-recently-refreshed first via carriers.docs_refreshed_at, so a
-// carrier that genuinely has no NOA in RMIS is stamped and skipped next run
-// rather than reprocessed forever. Pass {"mode":"all"} to refresh docs for any
-// in-RMIS carrier regardless of NOA status.
+// Default target ("missing_noa"): factoring carriers in RMIS with no NOA
+// archived. Cycles least-recently-refreshed first via carriers.docs_refreshed_at,
+// so a carrier that genuinely has no doc in RMIS is stamped and skipped next run
+// rather than reprocessed forever. Modes:
+//   {"mode":"missing_docs"} — any carrier RMIS says has a W-9 / broker-carrier
+//        agreement / NOA on file but for which we have no archived copy.
+//   {"mode":"all"}          — refresh docs for any in-RMIS carrier.
+//   {"dots":["123","456"]}  — force-refresh exactly these carriers (bypasses the
+//        recency guard); use when a specific carrier shows a doc on file but has
+//        nothing archived.
 export async function POST(request: Request) {
   try {
     const auth = request.headers.get('authorization')
@@ -32,8 +37,19 @@ export async function POST(request: Request) {
     }
     const batchSize =
       Number(body?.batchSize) > 0 ? Number(body.batchSize) : DEFAULT_BATCH
-    const mode: 'missing_noa' | 'all' =
-      body?.mode === 'all' ? 'all' : 'missing_noa'
+    const mode: 'missing_noa' | 'missing_docs' | 'all' =
+      body?.mode === 'all'
+        ? 'all'
+        : body?.mode === 'missing_docs'
+          ? 'missing_docs'
+          : 'missing_noa'
+    // Explicit target DOTs — force-refresh exactly these (skips the recency
+    // guard and mode filtering). Useful when a specific carrier shows a document
+    // "on file" in RMIS but has none archived here.
+    const explicitDots: string[] | null =
+      Array.isArray(body?.dots) && body.dots.length > 0
+        ? body.dots.map((d: any) => String(d).trim()).filter(Boolean).slice(0, 100)
+        : null
     const creds: RMISCredentials | undefined =
       body?.clientID || body?.clientPassword
         ? { clientID: body.clientID, clientPassword: body.clientPassword }
@@ -41,7 +57,9 @@ export async function POST(request: Request) {
 
     // Build the target dot set.
     let targetDots: Set<string> | null = null
-    if (mode === 'missing_noa') {
+    if (explicitDots) {
+      targetDots = new Set(explicitDots)
+    } else if (mode === 'missing_noa') {
       const [{ data: factoring }, { data: noa }] = await Promise.all([
         (supabaseAdmin as any)
           .from('latest_carrier_insurance')
@@ -63,6 +81,39 @@ export async function POST(request: Request) {
       if (targetDots.size === 0) {
         return NextResponse.json({ processed: 0, note: 'No factoring carriers missing an NOA.' })
       }
+    } else if (mode === 'missing_docs') {
+      // Carriers RMIS reports as having a W-9 / broker-carrier agreement / NOA
+      // (factoring) on file, but for which we have no archived copy of that type.
+      const [{ data: ins }, { data: docs }] = await Promise.all([
+        (supabaseAdmin as any)
+          .from('latest_carrier_insurance')
+          .select('dot_number, w9_on_file, broker_carrier_agreement_on_file, is_factoring')
+          .limit(100000),
+        supabaseAdmin
+          .from('vetting_documents')
+          .select('dot_number, document_type')
+          .eq('source', 'rmis')
+          .limit(100000),
+      ])
+      const haveByDot = new Map<string, Set<string>>()
+      for (const d of docs ?? []) {
+        const k = String((d as any).dot_number)
+        if (!haveByDot.has(k)) haveByDot.set(k, new Set())
+        haveByDot.get(k)!.add(String((d as any).document_type))
+      }
+      targetDots = new Set<string>()
+      for (const r of ins ?? []) {
+        const dot = String((r as any).dot_number)
+        const have = haveByDot.get(dot) ?? new Set<string>()
+        const need: string[] = []
+        if ((r as any).w9_on_file) need.push('w9')
+        if ((r as any).broker_carrier_agreement_on_file) need.push('broker_carrier_agreement')
+        if ((r as any).is_factoring) need.push('noa')
+        if (need.some((t) => !have.has(t))) targetDots.add(dot)
+      }
+      if (targetDots.size === 0) {
+        return NextResponse.json({ processed: 0, note: 'No carriers missing an on-file document.' })
+      }
     }
 
     // Skip carriers refreshed within the last 7 days so a carrier that genuinely
@@ -78,13 +129,15 @@ export async function POST(request: Request) {
       .limit(targetDots ? 5000 : batchSize)
     if (error) throw error
 
-    // Apply the target-dot filter (missing_noa) + recency guard, then batch.
+    // Apply the target-dot filter + recency guard, then batch. Explicit DOTs
+    // bypass the recency guard so a just-refreshed carrier can still be forced.
     const picked = (candidates ?? [])
       .filter((c: any) => !targetDots || targetDots.has(String(c.dot_number)))
       .filter(
-        (c: any) => !c.docs_refreshed_at || c.docs_refreshed_at < staleBefore
+        (c: any) =>
+          explicitDots || !c.docs_refreshed_at || c.docs_refreshed_at < staleBefore
       )
-      .slice(0, batchSize)
+      .slice(0, explicitDots ? explicitDots.length : batchSize)
 
     let succeeded = 0
     let failed = 0
@@ -117,15 +170,15 @@ export async function POST(request: Request) {
       }
     }
 
-    // How many targets remain (missing_noa mode).
+    // How many targets remain (target-set modes).
     let remaining: number | null = null
-    if (mode === 'missing_noa' && targetDots) {
+    if (!explicitDots && targetDots) {
       const stampedThisRun = new Set(picked.map((c: any) => String(c.dot_number)))
       remaining = Array.from(targetDots).filter((d) => !stampedThisRun.has(d)).length
     }
 
     return NextResponse.json({
-      mode,
+      mode: explicitDots ? 'explicit_dots' : mode,
       processed: picked.length,
       succeeded,
       failed,

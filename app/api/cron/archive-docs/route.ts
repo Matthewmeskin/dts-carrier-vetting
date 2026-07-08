@@ -101,13 +101,18 @@ export async function POST(request: Request) {
         if (!haveByDot.has(k)) haveByDot.set(k, new Set())
         haveByDot.get(k)!.add(String((d as any).document_type))
       }
+      // Target only on the reliably-fetchable document types (W-9 + NOA). Broker-
+      // carrier agreements are excluded as a *trigger* because RMIS only returns a
+      // file for agreements uploaded as a document, not for ones e-signed inside
+      // RMIS — using them as a trigger would re-attempt those carriers forever
+      // without ever archiving anything. Any agreement PDF that does exist is
+      // still archived incidentally when the carrier is pulled for a W-9/NOA.
       targetDots = new Set<string>()
       for (const r of ins ?? []) {
         const dot = String((r as any).dot_number)
         const have = haveByDot.get(dot) ?? new Set<string>()
         const need: string[] = []
         if ((r as any).w9_on_file) need.push('w9')
-        if ((r as any).broker_carrier_agreement_on_file) need.push('broker_carrier_agreement')
         if ((r as any).is_factoring) need.push('noa')
         if (need.some((t) => !have.has(t))) targetDots.add(dot)
       }

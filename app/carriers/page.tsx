@@ -56,16 +56,6 @@ export default function CarriersPage() {
     }
   }, [load])
 
-  // Poll every 5 minutes while the tab is visible so a long-open list self-heals
-  // when a sync flips a carrier (e.g. disabled in Brokerware) — no manual
-  // refresh needed. Paused while hidden to avoid needless background fetches.
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') load()
-    }, 5 * 60 * 1000)
-    return () => clearInterval(id)
-  }, [load])
-
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">

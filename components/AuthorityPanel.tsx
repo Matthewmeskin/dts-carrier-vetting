@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { InsuranceRecord } from '@/lib/types'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge } from './ui/Badge'
@@ -28,13 +28,82 @@ function Field({
 export function AuthorityPanel({
   insurance,
   carrier,
+  dot,
   bare,
 }: {
   insurance: InsuranceRecord | null
   carrier?: { legal_name: string | null; dba_name: string | null } | null
+  dot?: string
   bare?: boolean
 }) {
   const [showNotes, setShowNotes] = useState(false)
+
+  // Which document types we hold an actual, downloadable copy of (vs. RMIS just
+  // reporting the item "on file"). Lets the badges below distinguish a viewable
+  // document from an RMIS flag with no retrievable file behind it.
+  const [docByType, setDocByType] = useState<Map<string, { url: string | null }>>(
+    new Map()
+  )
+  const [docsLoaded, setDocsLoaded] = useState(false)
+  useEffect(() => {
+    if (!dot) return
+    let cancelled = false
+    fetch(`/api/carriers/${dot}/documents`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        const m = new Map<string, { url: string | null }>()
+        for (const d of data.documents ?? []) {
+          const t = d.document_type || 'other'
+          if (!m.has(t)) m.set(t, { url: d.url ?? null })
+        }
+        setDocByType(m)
+        setDocsLoaded(true)
+      })
+      .catch(() => {
+        if (!cancelled) setDocsLoaded(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [dot])
+
+  // Render a document's status honestly: a viewable copy links out (green); an
+  // item RMIS reports on file but we can't retrieve a file for shows amber
+  // ("no downloadable copy" — e.g. agreements e-signed inside RMIS); otherwise
+  // it's missing (red).
+  const renderDocStatus = (
+    onFile: boolean | null | undefined,
+    type: string,
+    missingLabel: string
+  ) => {
+    const archived = docByType.get(type)
+    if (archived) {
+      return archived.url ? (
+        <a
+          href={archived.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex"
+          title="View archived document"
+        >
+          <Badge tone="green">On file — view</Badge>
+        </a>
+      ) : (
+        <Badge tone="green">On file</Badge>
+      )
+    }
+    if (onFile) {
+      return docsLoaded ? (
+        <span title="RMIS reports this on file, but there is no downloadable copy in the portal. Agreements e-signed inside RMIS have no file to retrieve; a W-9/NOA on file will appear once the document backfill pulls it.">
+          <Badge tone="amber">On file in RMIS · no copy</Badge>
+        </span>
+      ) : (
+        <Badge tone="gray">On file (RMIS)</Badge>
+      )
+    }
+    return <Badge tone="red">{missingLabel}</Badge>
+  }
 
   // In `bare` mode, render inside the parent tile (no own Card) with a divider
   // and small heading; otherwise render as a standalone card.
@@ -187,13 +256,7 @@ export function AuthorityPanel({
           )}
           <Field
             label="W-9 on File"
-            value={
-              insurance.w9_on_file ? (
-                <Badge tone="green">Yes</Badge>
-              ) : (
-                <Badge tone="red">No</Badge>
-              )
-            }
+            value={renderDocStatus(insurance.w9_on_file, 'w9', 'No')}
           />
           {insurance.w9_business_name && (
             <Field label="W-9 Business Name" value={insurance.w9_business_name} />
@@ -206,13 +269,11 @@ export function AuthorityPanel({
           )}
           <Field
             label="Broker-Carrier Agreement"
-            value={
-              insurance.broker_carrier_agreement_on_file ? (
-                <Badge tone="green">On file</Badge>
-              ) : (
-                <Badge tone="red">Missing</Badge>
-              )
-            }
+            value={renderDocStatus(
+              insurance.broker_carrier_agreement_on_file,
+              'broker_carrier_agreement',
+              'Missing'
+            )}
           />
           {insurance.broker_carrier_agreement_date && (
             <Field

@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { useVirtualizer, useWindowVirtualizer } from '@tanstack/react-virtual'
 import { CarrierSummary } from '@/lib/types'
 import { Card } from './ui/Card'
+import { Button } from './ui/Button'
 import { Input, Select } from './ui/Input'
 import {
   Badge,
@@ -59,6 +60,67 @@ function carrierMissingDocs(c: CarrierSummary): string[] {
   if (c.agreement_on_file === false) missing.push('agreement')
   if (c.is_factoring === true && !c.noa_on_file) missing.push('noa')
   return missing
+}
+
+/** MC number digits only (Brokerware/RMIS may carry prefixes or spacing). */
+function mcDigits(mc: string | null | undefined): string {
+  return (mc ?? '').replace(/\D/g, '')
+}
+
+/** FMCSA SAFER carrier-snapshot lookup for an MC number. */
+function saferMcUrl(mc: string): string {
+  return (
+    'https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY&query_type=queryCarrierSnapshot' +
+    `&query_param=MC_MX&query_string=${mcDigits(mc)}`
+  )
+}
+
+/** Quote a CSV cell when it contains a comma, quote, or newline. */
+function csvCell(v: unknown): string {
+  const s = v == null ? '' : String(v)
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+// Build a CSV of the currently-visible rows for the "Export to Excel" button.
+// Excel opens .csv natively; the leading BOM keeps UTF-8 names intact.
+function buildCarrierCsv(rows: CarrierSummary[]): string {
+  const headers = [
+    'Carrier', 'DBA', 'DOT', 'MC', 'City', 'State', 'GAP', 'Flagged Scores',
+    'Hard Stops', 'Auto Status', 'Auto Expiration', 'Cargo Status',
+    'Cargo Expiration', 'RMIS', 'ELD Enrolled', 'Brokerware Status',
+    'Vetting Status', 'Last Reviewed', 'Re-vet',
+  ]
+  const lines = [headers.join(',')]
+  for (const c of rows) {
+    const rv = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days)
+    const disabled = isBrokerwareDisabled(c.brokerware_status)
+    const rmis =
+      c.rmis_status === 'certified' ? 'Certified'
+      : c.rmis_status === 'not_certified' ? 'Not certified'
+      : c.rmis_status === 'not_in_rmis' ? 'Not in RMIS' : ''
+    lines.push([
+      c.legal_name ?? '',
+      c.dba_name && c.dba_name !== c.legal_name ? c.dba_name : '',
+      c.dot_number,
+      mcDigits(c.mc_number),
+      c.city ?? '',
+      c.state ?? '',
+      c.gap_score ?? '',
+      (c.flagged_scores ?? []).map(prettyScoreLabel).join('; '),
+      (c.hard_stops ?? []).join('; '),
+      c.auto_status ?? '',
+      c.auto_expiration_date ?? '',
+      c.cargo_status ?? '',
+      c.cargo_expiration_date ?? '',
+      rmis,
+      c.eld_enrolled ? 'Yes' : '',
+      disabled ? c.brokerware_status ?? 'Disabled' : c.brokerware_status ?? '',
+      c.carrier_status ?? '',
+      c.last_reviewed ? formatDate(c.last_reviewed) : '',
+      disabled ? 'Not required' : rv.label,
+    ].map(csvCell).join(','))
+  }
+  return lines.join('\n')
 }
 
 const ACTIVE_STATUSES = [
@@ -518,6 +580,41 @@ export function CarrierTable({
     [persistView, router]
   )
 
+  // Whether any filter differs from the default view (controls the Clear button).
+  const hasActiveFilters =
+    search.trim() !== '' ||
+    status !== 'BrokerwareActive' ||
+    revettingOnly ||
+    problems.length > 0 ||
+    businessTypes.length > 0 ||
+    missingDocs.length > 0
+
+  // Reset every filter back to the default view (sort is left untouched).
+  const clearFilters = useCallback(() => {
+    setSearch('')
+    setStatus('BrokerwareActive')
+    setRevettingOnly(false)
+    setProblems([])
+    setBusinessTypes([])
+    setMissingDocs([])
+  }, [])
+
+  // Download the currently-visible rows as a CSV (opens in Excel).
+  const exportCsv = useCallback(() => {
+    const csv = buildCarrierCsv(filtered)
+    const blob = new Blob(['﻿' + csv], {
+      type: 'text/csv;charset=utf-8;',
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `carriers-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [filtered])
+
   const th = (
     col: SortKey,
     label: string,
@@ -616,14 +713,31 @@ export function CarrierTable({
           />
           Requires revetting
         </label>
-        <div className="ml-auto pb-2 text-right text-xs text-gray-500">
-          <div>
-            Last upload:{' '}
-            <span className="font-medium text-gray-700">
-              {lastUpload ? formatDate(lastUpload) : '—'}
-            </span>
+        <div className="ml-auto flex items-end gap-3 pb-2">
+          <div className="flex items-center gap-2">
+            {hasActiveFilters && (
+              <Button size="sm" variant="ghost" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+            >
+              Export to Excel
+            </Button>
           </div>
-          <div>{filtered.length} carrier(s) shown</div>
+          <div className="text-right text-xs text-gray-500">
+            <div>
+              Last upload:{' '}
+              <span className="font-medium text-gray-700">
+                {lastUpload ? formatDate(lastUpload) : '—'}
+              </span>
+            </div>
+            <div>{filtered.length} carrier(s) shown</div>
+          </div>
         </div>
       </div>
 
@@ -694,8 +808,20 @@ export function CarrierTable({
                           {[c.city, c.state].filter(Boolean).join(', ')}
                         </div>
                       </div>
-                      <div className={cn(COL.dot, 'whitespace-nowrap text-gray-600')}>
-                        {c.dot_number}
+                      <div className={cn(COL.dot, 'text-gray-600')}>
+                        <div className="whitespace-nowrap">{c.dot_number}</div>
+                        {mcDigits(c.mc_number) && (
+                          <a
+                            href={saferMcUrl(c.mc_number!)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            title="Look up on FMCSA SAFER"
+                            className="whitespace-nowrap text-xs text-dts-blue hover:underline"
+                          >
+                            MC {mcDigits(c.mc_number)}
+                          </a>
+                        )}
                       </div>
                       <div className={cn(COL.gap, 'text-base font-bold', g.tone)}>
                         {g.label}
@@ -820,10 +946,11 @@ export function CarrierTable({
                     }px)`,
                   }}
                 >
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => openCarrier(c.dot_number)}
-                    className="block w-full border-b border-gray-100 px-4 py-3 text-left active:bg-gray-50"
+                    className="block w-full cursor-pointer border-b border-gray-100 px-4 py-3 text-left active:bg-gray-50"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -843,6 +970,17 @@ export function CarrierTable({
                                 .join(', ')}`
                             : ''}
                         </div>
+                        {mcDigits(c.mc_number) && (
+                          <a
+                            href={saferMcUrl(c.mc_number!)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-0.5 inline-block text-xs text-dts-blue hover:underline"
+                          >
+                            MC {mcDigits(c.mc_number)} · SAFER
+                          </a>
+                        )}
                       </div>
                       <div className="shrink-0 text-right">
                         <div
@@ -899,7 +1037,7 @@ export function CarrierTable({
                         </Badge>
                       )}
                     </div>
-                  </button>
+                  </div>
                 </div>
               )
             })}

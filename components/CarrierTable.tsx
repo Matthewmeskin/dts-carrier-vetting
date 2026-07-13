@@ -184,6 +184,13 @@ type StatusFilter =
   | 'DoNotUse'
   | 'Disabled'
 
+// Valid status values, used to validate a persisted view before applying it so
+// a stale/corrupt saved value can never put the filter into a bad state.
+const STATUS_VALUES = new Set<StatusFilter>([
+  'BrokerwareActive', 'All', 'Active', 'Approved', 'NeedsReview',
+  'DueForRevet', 'HardStop', 'NotInRmis', 'DoNotUse', 'Disabled',
+])
+
 function isBrokerwareActive(status: string | null | undefined): boolean {
   return !!status && status.trim().toLowerCase() === 'active'
 }
@@ -322,26 +329,44 @@ export function CarrierTable({
   lastUpload: string | null
 }) {
   const router = useRouter()
-  // Read any persisted view once, synchronously, so the initial render already
-  // reflects the restored filters (no flash of the default list).
+  // Hold the persisted view in a ref (reading sessionStorage in a ref is safe —
+  // it doesn't affect rendered output). State is initialized to DEFAULTS so the
+  // server-rendered HTML and the first client render are identical (no hydration
+  // mismatch); the saved view is applied after mount, below. Initializing state
+  // directly from sessionStorage caused the first render to diverge from the
+  // server markup, which could break hydration on a stale/odd saved value.
   const savedRef = useRef<Partial<PersistedView> | undefined>(undefined)
   if (savedRef.current === undefined) savedRef.current = loadView()
   const saved = savedRef.current
 
-  const [search, setSearch] = useState(saved.search ?? '')
-  const [status, setStatus] = useState<StatusFilter>(
-    saved.status ?? 'BrokerwareActive'
-  )
-  const [revettingOnly, setRevettingOnly] = useState(saved.revettingOnly ?? false)
-  const [problems, setProblems] = useState<string[]>(saved.problems ?? [])
-  const [businessTypes, setBusinessTypes] = useState<string[]>(
-    saved.businessTypes ?? []
-  )
-  const [missingDocs, setMissingDocs] = useState<string[]>(
-    saved.missingDocs ?? []
-  )
-  const [sortKey, setSortKey] = useState<SortKey>(saved.sortKey ?? 'gap')
-  const [sortDir, setSortDir] = useState<SortDir>(saved.sortDir ?? 'asc')
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState<StatusFilter>('BrokerwareActive')
+  const [revettingOnly, setRevettingOnly] = useState(false)
+  const [problems, setProblems] = useState<string[]>([])
+  const [businessTypes, setBusinessTypes] = useState<string[]>([])
+  const [missingDocs, setMissingDocs] = useState<string[]>([])
+  const [sortKey, setSortKey] = useState<SortKey>('gap')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  // Apply the persisted view once, right after mount (before paint), so filters
+  // and sort are restored without a visible flash — but crucially not during the
+  // hydration render. Each value is validated so a corrupt entry is ignored.
+  const appliedViewRef = useRef(false)
+  useLayoutEffect(() => {
+    if (appliedViewRef.current) return
+    appliedViewRef.current = true
+    const v = saved
+    if (typeof v.search === 'string') setSearch(v.search)
+    if (v.status && STATUS_VALUES.has(v.status)) setStatus(v.status)
+    if (typeof v.revettingOnly === 'boolean') setRevettingOnly(v.revettingOnly)
+    if (Array.isArray(v.problems)) setProblems(v.problems.filter((x) => typeof x === 'string'))
+    if (Array.isArray(v.businessTypes))
+      setBusinessTypes(v.businessTypes.filter((x) => typeof x === 'string'))
+    if (Array.isArray(v.missingDocs))
+      setMissingDocs(v.missingDocs.filter((x) => typeof x === 'string'))
+    if (v.sortKey && v.sortKey in SORT_COLS) setSortKey(v.sortKey)
+    if (v.sortDir === 'asc' || v.sortDir === 'desc') setSortDir(v.sortDir)
+  }, [saved])
 
   // Clicking a column header sorts by it; clicking the active column flips the
   // direction. A fresh column starts in its natural direction.

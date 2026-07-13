@@ -47,6 +47,9 @@ const AUTHORITY_NEW_CARRIER_DAYS = 90
 // Coverage within this many days of its expiration date is flagged for renewal
 // (not a hard stop) so we can chase new certificates before it actually lapses.
 const COVERAGE_EXPIRING_SOON_DAYS = 30
+// Only a reasonably recent authority revocation is a review flag; older ones
+// (long since reinstated) are informational so they don't clutter the queue.
+const AUTHORITY_REVOCATION_RECENT_DAYS = 3 * 365
 
 /** Whole days from today until an ISO/RMIS date, or null if unparseable. */
 function daysUntil(dateStr: string | null | undefined): number | null {
@@ -162,12 +165,32 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     )
   }
 
-  // FLAG — Prior authority revocation on record (Policy Section 7)
+  // FLAG — Recent authority revocation (Policy Section 7). Only revocations
+  // within the last few years are a review signal; an old revocation that was
+  // reinstated long ago (the carrier currently holds active authority) is
+  // informational, not a flag.
   if (data.authorityRevocationDate) {
-    flags.push(
-      `Prior authority revocation on record: ${data.authorityRevocationDate}. ` +
-      `Review authority history before use`
-    )
+    const revDate = parseISO(data.authorityRevocationDate)
+    const revAgeDays = isValid(revDate)
+      ? differenceInDays(new Date(), revDate)
+      : null
+    if (revAgeDays !== null && revAgeDays <= AUTHORITY_REVOCATION_RECENT_DAYS) {
+      const months = Math.max(1, Math.round(revAgeDays / 30))
+      flags.push(
+        `Recent authority revocation on record: ${data.authorityRevocationDate} ` +
+        `(~${months} month(s) ago). Review authority history before use`
+      )
+    } else {
+      const years = revAgeDays !== null ? Math.floor(revAgeDays / 365) : null
+      info.push(
+        `Prior authority revocation on record: ${data.authorityRevocationDate}` +
+        (years !== null ? ` (~${years} year(s) ago)` : '') +
+        ' — historical' +
+        (commonActive || contractActive
+          ? '; carrier currently holds active authority'
+          : '')
+      )
+    }
   }
 
   // FLAG — General liability expired or missing (Policy Section 6)

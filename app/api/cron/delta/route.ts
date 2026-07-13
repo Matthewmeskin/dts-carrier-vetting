@@ -126,12 +126,34 @@ export async function POST(request: Request) {
               .eq('dot_number', parsed.dotNumber)
           }
 
+          // Only surface what actually CHANGED since the last pull, so baseline
+          // conditions on carriers we already work with don't re-enter the review
+          // queue on every refresh. Flags are compared by a normalized key (digits
+          // /punctuation stripped) so a drifting value ("~132 months ago") isn't
+          // mistaken for a new flag. A carrier's first-ever pull establishes a
+          // silent baseline for flags; genuine hard stops still surface on first
+          // pull (a do-not-use condition is worth knowing even at baseline).
+          const flagKey = (s: string) =>
+            s.toLowerCase().replace(/[0-9]+/g, '#').replace(/[^a-z#]+/g, ' ').replace(/\s+/g, ' ').trim()
+          const prevFlagKeys = new Set(
+            (Array.isArray(prev?.rmis_flags) ? prev.rmis_flags : []).map(flagKey)
+          )
+          const prevHardKeys = new Set(
+            (Array.isArray(prev?.hard_stops) ? prev.hard_stops : []).map(flagKey)
+          )
+          const newFlags = prev
+            ? evaluation.flags.filter((f) => !prevFlagKeys.has(flagKey(f)))
+            : []
+          const newHardStops = prev
+            ? evaluation.hardStops.filter((h) => !prevHardKeys.has(flagKey(h)))
+            : evaluation.hardStops
+
           const deltaRow = {
             dot_number: parsed.dotNumber,
             rmis_insured_id: insdID,
             change_summary: buildChangeSummary(prev, parsed, carrier),
-            hard_stops_detected: evaluation.hardStops,
-            flags_detected: evaluation.flags,
+            hard_stops_detected: newHardStops,
+            flags_detected: newFlags,
             previous_auto_status: prev?.auto_status ?? null,
             new_auto_status: parsed.autoStatus,
             previous_cargo_status: prev?.cargo_status ?? null,
@@ -150,12 +172,14 @@ export async function POST(request: Request) {
             .single()
           deltaLogId = deltaInserted ? (deltaInserted as any).id : null
 
-          if (evaluation.hardStops.length > 0) {
+          // Alert only on newly-introduced hard stops, not baseline ones that
+          // persist across refreshes (which would re-alert every run).
+          if (newHardStops.length > 0) {
             hardStopCarriers.push({
               dotNumber: parsed.dotNumber,
               legalName: (carrier as any).legal_name ?? parsed.legalName,
-              hardStops: evaluation.hardStops,
-              flags: evaluation.flags,
+              hardStops: newHardStops,
+              flags: newFlags,
               alertType: 'delta_hard_stop',
               deltaLogIds: deltaLogId ? [deltaLogId] : [],
             })

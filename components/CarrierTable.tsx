@@ -62,9 +62,10 @@ function carrierMissingDocs(c: CarrierSummary): string[] {
   return missing
 }
 
-/** MC number digits only (Brokerware/RMIS may carry prefixes or spacing). */
-function mcDigits(mc: string | null | undefined): string {
-  return (mc ?? '').replace(/\D/g, '')
+/** MC number digits only (Brokerware/RMIS may carry prefixes or spacing, and
+ *  the value can arrive as a number, so coerce to string before stripping). */
+function mcDigits(mc: string | number | null | undefined): string {
+  return String(mc ?? '').replace(/\D/g, '')
 }
 
 /** FMCSA SAFER carrier-snapshot lookup for an MC number. */

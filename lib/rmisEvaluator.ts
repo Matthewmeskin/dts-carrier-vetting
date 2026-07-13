@@ -1,5 +1,36 @@
 import { ParsedRMISData } from './rmisParser'
+import { normalizeEntityName } from './sosNormalize'
 import { differenceInDays, parseISO, isValid } from 'date-fns'
+
+// Words that carry no identity signal when comparing a W-9 name to the FMCSA
+// legal name (corporate suffixes are already stripped by normalizeEntityName).
+const NAME_STOPWORDS = new Set(['and', 'the', 'of', 'a', 'dba'])
+
+/**
+ * Whether a W-9 business name plausibly refers to the same entity as the FMCSA
+ * legal name. Both are normalized (lowercased, punctuation/suffixes stripped) so
+ * "Tonys Transport & Service" and "TONY'S TRANSPORT AND SERVICE INC." match.
+ * Considered a match when one normalized name contains the other, or they share
+ * at least half of the shorter name's significant tokens.
+ */
+function w9NamePlausiblyMatches(w9Name: string, legalName: string): boolean {
+  const a = normalizeEntityName(legalName)
+  const b = normalizeEntityName(w9Name)
+  if (!a || !b) return true // nothing meaningful to compare — don't flag
+  if (a.includes(b) || b.includes(a)) return true
+  const toks = (s: string) => {
+    const out: string[] = []
+    for (const t of s.split(' ')) {
+      if (t && !NAME_STOPWORDS.has(t) && !out.includes(t)) out.push(t)
+    }
+    return out
+  }
+  const at = toks(a)
+  const bt = toks(b)
+  if (at.length === 0 || bt.length === 0) return true
+  const shared = at.filter((t) => bt.includes(t)).length
+  return shared / Math.min(at.length, bt.length) >= 0.5
+}
 
 export interface RMISEvaluation {
   hardStops: string[]
@@ -164,12 +195,14 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     flags.push(`W-9 not on file in RMIS — required before payment`)
   }
 
-  // FLAG — W9 identity mismatch check (Policy Section 11)
+  // FLAG — W9 identity mismatch check (Policy Section 11). Normalized comparison
+  // so punctuation/formatting differences ("&" vs "and", apostrophes, "Inc")
+  // don't misfire — only a genuine name divergence is flagged.
   if (
     data.w9OnFile &&
     data.w9BusinessName &&
     data.legalName &&
-    !data.legalName.toLowerCase().includes(data.w9BusinessName.toLowerCase().split(' ')[0])
+    !w9NamePlausiblyMatches(data.w9BusinessName, data.legalName)
   ) {
     flags.push(
       `W-9 business name "${data.w9BusinessName}" may not match FMCSA legal name ` +

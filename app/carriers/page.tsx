@@ -15,6 +15,14 @@ export default function CarriersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Render the interactive list only after mount. The server and the first
+  // client render both produce the same minimal shell below, so there is no
+  // hydration step over the dynamic tree — which makes the page robust to
+  // browser extensions that mutate the DOM before React hydrates (a common
+  // cause of hydration errors that can white-screen an otherwise-fine page).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -55,6 +63,23 @@ export default function CarriersPage() {
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [load])
+
+  // Minimal, deterministic shell for SSR + the first client render (pre-mount).
+  if (!mounted) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Carrier Network</h1>
+          <p className="text-sm text-gray-500">
+            Compliance status across every carrier in the DTS network.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Spinner /> Loading…
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">

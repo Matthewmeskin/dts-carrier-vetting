@@ -12,6 +12,10 @@ export interface InsuranceRefreshRequest {
   coverages: string[]
   autoExpiration?: string | null
   cargoExpiration?: string | null
+  /** A follow-up nudge (coverage now near expiry, still not updated). */
+  reminder?: boolean
+  /** Whole days until the soonest coverage expires (for reminder wording). */
+  daysToExpiration?: number | null
 }
 
 /**
@@ -44,15 +48,24 @@ export async function sendInsuranceRefreshRequest(
       req.cargoExpiration ? `Cargo expires ${req.cargoExpiration}` : '',
     ].filter(Boolean)
 
-    const subject = `Insurance update request — ${req.legalName} (${idLine})`
+    const dLeft =
+      typeof req.daysToExpiration === 'number' && req.daysToExpiration >= 0
+        ? req.daysToExpiration
+        : null
+    const subject = req.reminder
+      ? `Reminder — Insurance update request — ${req.legalName} (${idLine})`
+      : `Insurance update request — ${req.legalName} (${idLine})`
+    const lead = req.reminder
+      ? `Following up on our earlier request — this carrier's ${coverageList} coverage ` +
+        `is still showing as due to expire${dLeft !== null ? ` and expires in ${dLeft} day(s)` : ''}. ` +
+        `Could you please pull the updated certificate?`
+      : `Could you please pull the updated insurance certificate for the following ` +
+        `carrier? Their ${coverageList} coverage is showing as due to expire and we'd ` +
+        `like the refreshed certificate on file.`
     const html = `
       <div style="font-family:sans-serif;max-width:640px;line-height:1.5;color:#111;">
         <p>Hello RMIS Support,</p>
-        <p>
-          Could you please pull the updated insurance certificate for the
-          following carrier? Their ${coverageList} coverage is showing as due to
-          expire and we'd like the refreshed certificate on file.
-        </p>
+        <p>${lead}</p>
         <table style="border-collapse:collapse;margin:12px 0;">
           <tr><td style="padding:2px 12px 2px 0;color:#555;">Carrier</td><td style="font-weight:600;">${req.legalName}</td></tr>
           <tr><td style="padding:2px 12px 2px 0;color:#555;">DOT</td><td>${req.dotNumber}</td></tr>
@@ -63,8 +76,9 @@ export async function sendInsuranceRefreshRequest(
         <p>Thank you,<br/>DTS Compliance</p>
       </div>`
     const text =
-      `Hello RMIS Support,\n\nPlease pull the updated insurance certificate for the following carrier ` +
-      `(coverage due to expire):\n\n` +
+      `Hello RMIS Support,\n\n${req.reminder ? 'Following up on our earlier request — ' : ''}` +
+      `Please pull the updated insurance certificate for the following carrier ` +
+      `(coverage due to expire${dLeft !== null ? `, expires in ${dLeft} day(s)` : ''}):\n\n` +
       `Carrier: ${req.legalName}\nDOT: ${req.dotNumber}\n${mc ? `MC: ${mc}\n` : ''}` +
       `Coverage: ${coverageList}\n${expBits.length ? expBits.join('\n') + '\n' : ''}` +
       `\nThank you,\nDTS Compliance`

@@ -59,20 +59,57 @@ export async function POST(request: Request) {
       (carriers ?? []).map((c: any) => [String(c.dot_number), c])
     )
 
-    // Skip carriers already requested within the dedupe window.
-    const since = new Date(Date.now() - dedupeDays * 24 * 3600 * 1000).toISOString()
+    // Classify each carrier: send an INITIAL request when it first goes due to
+    // expire (deduped ~14 days), then a REMINDER once the policy is within
+    // REMINDER_DAYS of its expiration and still not updated (at most one reminder
+    // per ~20 days). A carrier resolved by RMIS flips off "Due-To-Expire" and
+    // drops out of the candidate set automatically.
+    const REMINDER_DAYS = 15
+    const now = Date.now()
+    const since14 = new Date(now - dedupeDays * 864e5).toISOString()
+    const sinceReminder = new Date(now - 20 * 864e5).toISOString()
+    const lookback = new Date(now - 90 * 864e5).toISOString()
+
     const { data: recent } = await (supabaseAdmin as any)
       .from('carrier_events')
-      .select('dot_number')
+      .select('dot_number, created_at, detail')
       .eq('event_type', 'insurance_refresh_request')
-      .gte('created_at', since)
+      .gte('created_at', lookback)
+      .order('created_at', { ascending: false })
       .limit(100000)
-    const recentDots = new Set(
-      (recent ?? []).map((r: any) => String(r.dot_number))
-    )
+    const lastAnyByDot = new Map<string, string>()
+    const lastReminderByDot = new Map<string, string>()
+    for (const e of recent ?? []) {
+      const dot = String((e as any).dot_number)
+      if (!lastAnyByDot.has(dot)) lastAnyByDot.set(dot, (e as any).created_at)
+      if ((e as any)?.detail?.kind === 'reminder' && !lastReminderByDot.has(dot)) {
+        lastReminderByDot.set(dot, (e as any).created_at)
+      }
+    }
 
-    const toSend = candidates
-      .filter((c: any) => !recentDots.has(String(c.dot_number)))
+    const minExpDays = (c: any): number | null => {
+      const ds = [c.auto_expiration_date, c.cargo_expiration_date]
+        .map((d: any) => (d ? Math.floor((Date.parse(d) - now) / 864e5) : null))
+        .filter((x: any): x is number => x !== null && !Number.isNaN(x))
+      return ds.length ? Math.min(...ds) : null
+    }
+    const classify = (c: any): 'initial' | 'reminder' | null => {
+      const dot = String(c.dot_number)
+      const lastAny = lastAnyByDot.get(dot)
+      const lastRem = lastReminderByDot.get(dot)
+      const dLeft = minExpDays(c)
+      // Near expiry and previously contacted → a reminder (unless one went out
+      // recently).
+      if (dLeft !== null && dLeft <= REMINDER_DAYS && lastAny) {
+        return !lastRem || lastRem < sinceReminder ? 'reminder' : null
+      }
+      // Otherwise a first request, deduped to the standard window.
+      return !lastAny || lastAny < since14 ? 'initial' : null
+    }
+
+    const planned = candidates
+      .map((c: any) => ({ c, kind: classify(c), dLeft: minExpDays(c) }))
+      .filter((p: any) => p.kind !== null)
       .slice(0, limit)
 
     const from = process.env.ALERT_EMAIL_FROM ?? '(unset)'
@@ -86,14 +123,16 @@ export async function POST(request: Request) {
         to,
         replyTo,
         candidates: candidates.length,
-        alreadyRequestedRecently: candidates.length - toSend.length,
-        wouldSend: toSend.length,
-        carriers: toSend.map((c: any) => ({
-          dot: c.dot_number,
-          legalName: carrierByDot.get(String(c.dot_number))?.legal_name ?? null,
-          mc: carrierByDot.get(String(c.dot_number))?.mc_number ?? null,
-          auto: c.auto_status,
-          cargo: c.cargo_status,
+        wouldSend: planned.length,
+        initials: planned.filter((p: any) => p.kind === 'initial').length,
+        reminders: planned.filter((p: any) => p.kind === 'reminder').length,
+        carriers: planned.map((p: any) => ({
+          dot: p.c.dot_number,
+          legalName: carrierByDot.get(String(p.c.dot_number))?.legal_name ?? null,
+          kind: p.kind,
+          daysToExpiration: p.dLeft,
+          auto: p.c.auto_status,
+          cargo: p.c.cargo_status,
         })),
       })
     }
@@ -101,12 +140,13 @@ export async function POST(request: Request) {
     let sent = 0
     let failed = 0
     const errors: string[] = []
-    for (const c of toSend) {
+    for (const { c, kind, dLeft } of planned) {
       const dot = String(c.dot_number)
       const carrier: any = carrierByDot.get(dot)
       const autoExp = isExpiringCoverageStatus(c.auto_status)
       const cargoExp = isExpiringCoverageStatus(c.cargo_status)
       const coverages = [autoExp ? 'Auto liability' : '', cargoExp ? 'Cargo' : ''].filter(Boolean)
+      const isReminder = kind === 'reminder'
       const result = await sendInsuranceRefreshRequest({
         dotNumber: dot,
         mcNumber: carrier?.mc_number ?? null,
@@ -114,24 +154,29 @@ export async function POST(request: Request) {
         coverages,
         autoExpiration: autoExp ? c.auto_expiration_date || null : null,
         cargoExpiration: cargoExp ? c.cargo_expiration_date || null : null,
+        reminder: isReminder,
+        daysToExpiration: dLeft,
       })
       if (result.sent) sent++
       else {
         failed++
         if (result.error) errors.push(`${dot}: ${result.error}`)
       }
+      const verb = isReminder ? 'Reminder sent to' : 'Requested updated insurance from'
       await logCarrierEvent({
         dot,
         carrierId: carrier?.id ?? null,
         type: 'insurance_refresh_request',
         summary: result.sent
-          ? `Requested updated insurance from RMIS (${result.to}) — ${coverages.join(' & ')} due to expire.`
+          ? `${verb} RMIS (${result.to}) — ${coverages.join(' & ')} due to expire${dLeft !== null ? ` (expires in ${dLeft}d)` : ''}.`
           : `Insurance update needed — ${coverages.join(' & ')} due to expire (email not sent: ${result.error}).`,
         detail: {
           to: result.to,
           sent: result.sent,
           error: result.error ?? null,
+          kind,
           coverages,
+          daysToExpiration: dLeft,
           autoStatus: c.auto_status,
           cargoStatus: c.cargo_status,
           batch: true,
@@ -147,6 +192,8 @@ export async function POST(request: Request) {
       candidates: candidates.length,
       sent,
       failed,
+      initials: planned.filter((p: any) => p.kind === 'initial').length,
+      reminders: planned.filter((p: any) => p.kind === 'reminder').length,
       errors: errors.slice(0, 20),
     })
   } catch (err: any) {

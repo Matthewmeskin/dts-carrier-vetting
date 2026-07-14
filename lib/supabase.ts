@@ -19,7 +19,17 @@ function getAdminClient(): DB {
       'Supabase admin client requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY'
     )
   }
-  _admin = createClient(url, key)
+  // Force every Supabase request to bypass Next.js's fetch Data Cache. Without
+  // this, supabase-js GETs (e.g. the carrier list reading latest_carrier_insurance)
+  // can be cached indefinitely and never reflect DB writes, so the dashboard
+  // shows stale data (e.g. hard stops that were already cleared).
+  _admin = createClient(url, key, {
+    auth: { persistSession: false },
+    global: {
+      fetch: (input: any, init?: any) =>
+        fetch(input, { ...init, cache: 'no-store' }),
+    },
+  })
   return _admin
 }
 

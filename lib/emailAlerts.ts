@@ -34,8 +34,10 @@ export async function sendInsuranceRefreshRequest(
       return { sent: false, to, error: 'Email not configured (RESEND_API_KEY / ALERT_EMAIL_FROM)' }
     }
     const resend = new Resend(apiKey)
-    // Route replies back to the DTS compliance inbox if one is configured.
-    const replyTo = (process.env.ALERT_EMAIL_TO ?? '')
+    // Route replies to the inbound-capture address when configured (so RMIS
+    // replies land in the portal, not a human inbox); otherwise fall back to
+    // the DTS compliance inbox.
+    const replyTo = (process.env.RMIS_REPLY_TO || process.env.ALERT_EMAIL_TO || '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)

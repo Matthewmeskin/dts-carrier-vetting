@@ -21,8 +21,7 @@ import { NoaPanel } from '@/components/NoaPanel'
 import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
-import { DeltaTimeline } from '@/components/DeltaTimeline'
-import { ActivityLog } from '@/components/ActivityLog'
+import { CarrierActivity } from '@/components/CarrierActivity'
 
 const REVET_TONE: Record<RevetState, BadgeTone> = {
   overdue: 'red',
@@ -297,11 +296,8 @@ export default function CarrierDetailPage({
       {/* Documents */}
       <CarrierDocuments dot={dot} reloadKey={docReload} />
 
-      {/* Change History */}
-      <DeltaTimeline entries={deltaLog} />
-
-      {/* Activity Log */}
-      <ActivityLog events={events ?? []} />
+      {/* Unified activity timeline (RMIS changes + event log) */}
+      <CarrierActivity deltaLog={deltaLog} events={events ?? []} />
     </div>
   )
 }

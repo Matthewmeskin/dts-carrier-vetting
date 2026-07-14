@@ -13,6 +13,7 @@ export type CarrierEventType =
   | 'sos_check'
   | 'noa_check'
   | 'insurance_change'
+  | 'insurance_refresh_request'
 
 export interface CarrierEventInput {
   dot: string

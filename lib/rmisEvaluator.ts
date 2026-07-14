@@ -51,6 +51,22 @@ const COVERAGE_EXPIRING_SOON_DAYS = 30
 // (long since reinstated) are informational so they don't clutter the queue.
 const AUTHORITY_REVOCATION_RECENT_DAYS = 3 * 365
 
+// RMIS coverage statuses meaning the policy is still in force but nearing its
+// expiration date (e.g. "Due-To-Expire"). Treated as a renewal FLAG, not a hard
+// stop — coverage only hard-stops once it has actually expired or gone invalid.
+const EXPIRING_COVERAGE_STATUSES = new Set([
+  'due-to-expire',
+  'due to expire',
+  'expiring',
+])
+
+/** Whether an RMIS coverage status means "still active but expiring soon". */
+export function isExpiringCoverageStatus(
+  status: string | null | undefined
+): boolean {
+  return EXPIRING_COVERAGE_STATUSES.has((status ?? '').trim().toLowerCase())
+}
+
 /** Whole days from today until an ISO/RMIS date, or null if unparseable. */
 function daysUntil(dateStr: string | null | undefined): number | null {
   if (!dateStr) return null
@@ -93,7 +109,8 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
   // still valid but nearing its expiration date is a renewal FLAG, not a hard
   // stop — it only becomes a hard stop once the policy has actually expired.
   const autoDaysLeft = daysUntil(data.autoExpirationDate)
-  if (data.autoStatus !== 'Valid') {
+  const autoExpiring = isExpiringCoverageStatus(data.autoStatus)
+  if (data.autoStatus !== 'Valid' && !autoExpiring) {
     hardStops.push(
       `Auto liability coverage status is "${data.autoStatus}" — must be Valid`
     )
@@ -106,17 +123,24 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     hardStops.push(
       `Auto liability limit $${data.autoLimit.toLocaleString()} is below the $1,000,000 minimum`
     )
-  } else if (autoDaysLeft !== null && autoDaysLeft <= COVERAGE_EXPIRING_SOON_DAYS) {
+  } else if (
+    autoExpiring ||
+    (autoDaysLeft !== null && autoDaysLeft <= COVERAGE_EXPIRING_SOON_DAYS)
+  ) {
+    const detail = autoExpiring
+      ? `RMIS status "${data.autoStatus}"${data.autoExpirationDate ? `, expires ${data.autoExpirationDate}` : ''}`
+      : `expires in ${autoDaysLeft} day(s) (${data.autoExpirationDate})`
     flags.push(
-      `Auto liability coverage expires in ${autoDaysLeft} day(s) ` +
-      `(${data.autoExpirationDate}) — request an updated certificate before it lapses`
+      `Auto liability coverage is expiring — ${detail} — request an updated ` +
+      `certificate before it lapses`
     )
   }
 
   // HARD STOP — Cargo coverage (Policy Section 5 + 8). Same treatment: expiring
   // soon is a renewal flag; only an actually-expired policy is a hard stop.
   const cargoDaysLeft = daysUntil(data.cargoExpirationDate)
-  if (data.cargoStatus !== 'Valid') {
+  const cargoExpiring = isExpiringCoverageStatus(data.cargoStatus)
+  if (data.cargoStatus !== 'Valid' && !cargoExpiring) {
     hardStops.push(
       `Cargo coverage status is "${data.cargoStatus}" — must be Valid`
     )
@@ -129,10 +153,16 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     hardStops.push(
       `Cargo limit $${data.cargoLimit.toLocaleString()} is below the $100,000 minimum`
     )
-  } else if (cargoDaysLeft !== null && cargoDaysLeft <= COVERAGE_EXPIRING_SOON_DAYS) {
+  } else if (
+    cargoExpiring ||
+    (cargoDaysLeft !== null && cargoDaysLeft <= COVERAGE_EXPIRING_SOON_DAYS)
+  ) {
+    const detail = cargoExpiring
+      ? `RMIS status "${data.cargoStatus}"${data.cargoExpirationDate ? `, expires ${data.cargoExpirationDate}` : ''}`
+      : `expires in ${cargoDaysLeft} day(s) (${data.cargoExpirationDate})`
     flags.push(
-      `Cargo coverage expires in ${cargoDaysLeft} day(s) ` +
-      `(${data.cargoExpirationDate}) — request an updated certificate before it lapses`
+      `Cargo coverage is expiring — ${detail} — request an updated certificate ` +
+      `before it lapses`
     )
   }
 

@@ -1,5 +1,88 @@
 import { Resend } from 'resend'
 
+// Where insurance-update requests are sent (Truckstop/RMIS support). Override
+// with RMIS_HELP_EMAIL if it ever changes.
+const RMIS_HELP_EMAIL = process.env.RMIS_HELP_EMAIL || 'RMISHelp@truckstop.com'
+
+export interface InsuranceRefreshRequest {
+  dotNumber: string
+  mcNumber?: string | null
+  legalName: string
+  /** Which coverages are expiring, e.g. ["Auto liability", "Cargo"]. */
+  coverages: string[]
+  autoExpiration?: string | null
+  cargoExpiration?: string | null
+}
+
+/**
+ * Email RMIS support (Truckstop) to request an updated insurance certificate for
+ * a single carrier whose coverage is due to expire. One carrier per email.
+ * Returns whether it sent so the caller can log the outcome; never throws.
+ */
+export async function sendInsuranceRefreshRequest(
+  req: InsuranceRefreshRequest
+): Promise<{ sent: boolean; to: string; error?: string }> {
+  const to = RMIS_HELP_EMAIL
+  try {
+    const apiKey = process.env.RESEND_API_KEY
+    const from = process.env.ALERT_EMAIL_FROM
+    if (!apiKey || !from) {
+      return { sent: false, to, error: 'Email not configured (RESEND_API_KEY / ALERT_EMAIL_FROM)' }
+    }
+    const resend = new Resend(apiKey)
+    // Route replies back to the DTS compliance inbox if one is configured.
+    const replyTo = (process.env.ALERT_EMAIL_TO ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+
+    const mc = req.mcNumber ? String(req.mcNumber).replace(/\D/g, '') : ''
+    const idLine = `DOT ${req.dotNumber}${mc ? ` · MC ${mc}` : ''}`
+    const coverageList = req.coverages.join(' and ')
+    const expBits = [
+      req.autoExpiration ? `Auto liability expires ${req.autoExpiration}` : '',
+      req.cargoExpiration ? `Cargo expires ${req.cargoExpiration}` : '',
+    ].filter(Boolean)
+
+    const subject = `Insurance update request — ${req.legalName} (${idLine})`
+    const html = `
+      <div style="font-family:sans-serif;max-width:640px;line-height:1.5;color:#111;">
+        <p>Hello RMIS Support,</p>
+        <p>
+          Could you please pull the updated insurance certificate for the
+          following carrier? Their ${coverageList} coverage is showing as due to
+          expire and we'd like the refreshed certificate on file.
+        </p>
+        <table style="border-collapse:collapse;margin:12px 0;">
+          <tr><td style="padding:2px 12px 2px 0;color:#555;">Carrier</td><td style="font-weight:600;">${req.legalName}</td></tr>
+          <tr><td style="padding:2px 12px 2px 0;color:#555;">DOT</td><td>${req.dotNumber}</td></tr>
+          ${mc ? `<tr><td style="padding:2px 12px 2px 0;color:#555;">MC</td><td>${mc}</td></tr>` : ''}
+          <tr><td style="padding:2px 12px 2px 0;color:#555;">Coverage</td><td>${coverageList}</td></tr>
+          ${expBits.length ? `<tr><td style="padding:2px 12px 2px 0;color:#555;vertical-align:top;">Expiration</td><td>${expBits.join('<br/>')}</td></tr>` : ''}
+        </table>
+        <p>Thank you,<br/>DTS Compliance</p>
+      </div>`
+    const text =
+      `Hello RMIS Support,\n\nPlease pull the updated insurance certificate for the following carrier ` +
+      `(coverage due to expire):\n\n` +
+      `Carrier: ${req.legalName}\nDOT: ${req.dotNumber}\n${mc ? `MC: ${mc}\n` : ''}` +
+      `Coverage: ${coverageList}\n${expBits.length ? expBits.join('\n') + '\n' : ''}` +
+      `\nThank you,\nDTS Compliance`
+
+    await resend.emails.send({
+      from,
+      to,
+      subject,
+      html,
+      text,
+      ...(replyTo.length ? { replyTo } : {}),
+    })
+    return { sent: true, to }
+  } catch (e) {
+    return { sent: false, to, error: e instanceof Error ? e.message : 'send failed' }
+  }
+}
+
 interface FlaggedCarrier {
   dotNumber: string
   legalName: string

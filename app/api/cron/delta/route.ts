@@ -8,8 +8,9 @@ import {
   RMISCredentials,
 } from '@/lib/rmisClient'
 import { parseRMISXML } from '@/lib/rmisParser'
-import { evaluateRMIS } from '@/lib/rmisEvaluator'
-import { sendComplianceAlert } from '@/lib/emailAlerts'
+import { evaluateRMIS, isExpiringCoverageStatus } from '@/lib/rmisEvaluator'
+import { sendComplianceAlert, sendInsuranceRefreshRequest } from '@/lib/emailAlerts'
+import { logCarrierEvent } from '@/lib/auditLog'
 import { buildInsuranceRow } from '@/app/api/carriers/[dot]/insurance/route'
 import { archiveCarrierDocuments } from '@/lib/rmisArchive'
 import { TablesUpdate } from '@/lib/database.types'
@@ -183,6 +184,54 @@ export async function POST(request: Request) {
               alertType: 'delta_hard_stop',
               deltaLogIds: deltaLogId ? [deltaLogId] : [],
             })
+          }
+
+          // Coverage due to expire → email RMIS (Truckstop) to request an updated
+          // certificate, one carrier per email, and stamp it in the carrier's
+          // activity log. Deduped to at most once per 14 days so a status that
+          // stays "Due-To-Expire" across daily deltas isn't re-emailed.
+          const autoExp = isExpiringCoverageStatus(parsed.autoStatus)
+          const cargoExp = isExpiringCoverageStatus(parsed.cargoStatus)
+          if (autoExp || cargoExp) {
+            const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString()
+            const { data: recent } = await (supabaseAdmin as any)
+              .from('carrier_events')
+              .select('id')
+              .eq('dot_number', parsed.dotNumber)
+              .eq('event_type', 'insurance_refresh_request')
+              .gte('created_at', since)
+              .limit(1)
+            if (!recent || recent.length === 0) {
+              const coverages = [
+                autoExp ? 'Auto liability' : '',
+                cargoExp ? 'Cargo' : '',
+              ].filter(Boolean)
+              const result = await sendInsuranceRefreshRequest({
+                dotNumber: parsed.dotNumber,
+                mcNumber: (carrier as any).mc_number ?? null,
+                legalName: (carrier as any).legal_name ?? parsed.legalName,
+                coverages,
+                autoExpiration: autoExp ? parsed.autoExpirationDate || null : null,
+                cargoExpiration: cargoExp ? parsed.cargoExpirationDate || null : null,
+              })
+              await logCarrierEvent({
+                dot: parsed.dotNumber,
+                carrierId: (carrier as any).id ?? null,
+                type: 'insurance_refresh_request',
+                summary: result.sent
+                  ? `Requested updated insurance from RMIS (${result.to}) — ${coverages.join(' & ')} due to expire.`
+                  : `Insurance update needed — ${coverages.join(' & ')} due to expire (email not sent: ${result.error}).`,
+                detail: {
+                  to: result.to,
+                  sent: result.sent,
+                  error: result.error ?? null,
+                  coverages,
+                  autoStatus: parsed.autoStatus,
+                  cargoStatus: parsed.cargoStatus,
+                },
+                actor: 'system (RMIS delta)',
+              })
+            }
           }
         }
 

@@ -40,7 +40,28 @@ export async function POST(request: NextRequest) {
       }
     }
     // Resend inbound wraps the message under `data`; others are flat.
-    const d = payload?.data ?? payload
+    let d = payload?.data ?? payload
+
+    // Resend's `email.received` webhook carries metadata ONLY (no body). Fetch
+    // the full message from the Received Emails API before we parse/classify it.
+    if (payload?.type === 'email.received' && d?.email_id && process.env.RESEND_API_KEY) {
+      try {
+        const res = await fetch(
+          `https://api.resend.com/emails/receiving/${d.email_id}`,
+          {
+            headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+            cache: 'no-store',
+          }
+        )
+        if (res.ok) {
+          const full = await res.json()
+          d = { ...d, ...(full?.data ?? full) }
+        }
+      } catch {
+        /* fall back to the metadata we already have */
+      }
+    }
+
     const from = d.from ?? d.From ?? d.sender ?? d.envelope_from ?? ''
     const subject = d.subject ?? d.Subject ?? d.headers?.subject ?? ''
     const text: string =

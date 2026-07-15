@@ -5,6 +5,62 @@ import { logCarrierEvent } from '@/lib/auditLog'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+/**
+ * Pull the human-readable reply text out of a message. A Cloudflare Email
+ * Worker forwards the full raw MIME (headers + multipart body); providers like
+ * Resend give us clean `text` already. This best-effort extracts the
+ * text/plain body so the timeline shows the actual reply, not raw headers.
+ * If it can't confidently parse, it returns the input unchanged.
+ */
+function extractReplyText(input: string): string {
+  const raw = String(input ?? '')
+  if (!raw) return ''
+  // Looks like clean text already (not a raw MIME message with header lines)?
+  const looksLikeMime = /^(received|content-type|mime-version|from|dkim-signature):/im.test(
+    raw.slice(0, 400)
+  )
+  if (!looksLikeMime) return raw
+
+  const decodeQuotedPrintable = (s: string) =>
+    s
+      .replace(/=\r?\n/g, '') // soft line breaks
+      .replace(/=([0-9A-Fa-f]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)))
+  const decodePart = (part: string, headers: string): string => {
+    let body = part
+    if (/content-transfer-encoding:\s*quoted-printable/i.test(headers)) {
+      body = decodeQuotedPrintable(body)
+    } else if (/content-transfer-encoding:\s*base64/i.test(headers)) {
+      try {
+        body = Buffer.from(body.replace(/\s+/g, ''), 'base64').toString('utf8')
+      } catch {
+        /* keep as-is */
+      }
+    }
+    return body
+  }
+
+  // Multipart: split on the boundary and take the text/plain part.
+  const boundaryMatch = raw.match(/boundary="?([^"\r\n;]+)"?/i)
+  if (boundaryMatch) {
+    const boundary = boundaryMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const parts = raw.split(new RegExp(`--${boundary}`))
+    for (const part of parts) {
+      if (!/content-type:\s*text\/plain/i.test(part)) continue
+      const split = part.search(/\r?\n\r?\n/)
+      if (split === -1) continue
+      const partHeaders = part.slice(0, split)
+      const decoded = decodePart(part.slice(split), partHeaders)
+      const cleaned = decoded.trim()
+      if (cleaned) return cleaned
+    }
+  }
+
+  // Single-part: everything after the first blank line, minus the headers.
+  const split = raw.search(/\r?\n\r?\n/)
+  const body = split === -1 ? raw : raw.slice(split)
+  return decodeQuotedPrintable(body).trim() || raw
+}
+
 // POST — receive an inbound email (a reply from RMIS/Truckstop to one of our
 // insurance-update requests) from an inbound-email provider, match it to a
 // carrier by the DOT in the subject, and log it to that carrier's activity
@@ -67,7 +123,8 @@ export async function POST(request: NextRequest) {
     const text: string =
       d.text ?? d.Text ?? d['stripped-text'] ?? d.plain ?? d.html ?? d.Html ?? ''
 
-    const hay = `${subject} ${text}`
+    const body = extractReplyText(text)
+    const hay = `${subject} ${body || text}`
     const dotMatch = hay.match(/\bDOT[\s#:.-]*?(\d{5,8})\b/i)
     const mcMatch = hay.match(/\bMC[\s#:.-]*?(\d{3,8})\b/i)
     const dot = dotMatch?.[1] ?? null
@@ -92,7 +149,7 @@ export async function POST(request: NextRequest) {
       .eq('dot_number', dot)
       .maybeSingle()
 
-    const snippet = String(text).replace(/\s+/g, ' ').trim().slice(0, 400)
+    const snippet = String(body || text).replace(/\s+/g, ' ').trim().slice(0, 400)
     const label =
       classification === 'coi_not_received'
         ? 'RMIS reply — COI not yet received'

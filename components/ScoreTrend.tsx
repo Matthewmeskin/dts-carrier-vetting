@@ -28,9 +28,36 @@ const SERIES: Series[] = [
   { key: 'safety_rating_score', label: 'Safety Rating', color: '#78350f' },
 ]
 
+// "2026-06" → "Jun 2026" for the axis; falls back to the upload date.
+function monthKey(s: ScoreRecord): string {
+  return s.release_month || String(s.upload_date ?? s.id)
+}
+function monthLabelOf(s: ScoreRecord): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(s.release_month ?? '')
+  if (m) {
+    const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1))
+    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+  }
+  if (s.upload_date) {
+    const d = new Date(s.upload_date)
+    if (!isNaN(d.getTime()))
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+  return s.release_month || ''
+}
+
 export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
-  // Oldest → newest so the trend reads left to right.
-  const chron = [...scores].reverse()
+  // One point per FMCSA release month, oldest → newest so the trend reads left
+  // to right. (Dedupe defensively in case multiple uploads share a month.)
+  const seen = new Set<string>()
+  const chron = [...scores]
+    .filter((s) => {
+      const k = monthKey(s)
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+    .sort((a, b) => (monthKey(a) < monthKey(b) ? -1 : monthKey(a) > monthKey(b) ? 1 : 0))
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const [hover, setHover] = useState<number | null>(null)
 
@@ -59,14 +86,7 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
   const x = (i: number) => padL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW)
   const y = (v: number) => padT + ((100 - v) / 100) * innerH
 
-  const label = (s: ScoreRecord, i: number) => {
-    if (s.upload_date) {
-      const d = new Date(s.upload_date)
-      if (!isNaN(d.getTime()))
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    }
-    return s.release_month || `#${i + 1}`
-  }
+  const label = (s: ScoreRecord, _i: number) => monthLabelOf(s)
 
   const bands = [
     { from: 75, to: 100, fill: '#dcfce7' },

@@ -73,7 +73,32 @@ const CATEGORY_ROWS: {
   })),
 ]
 
-export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
+// One row per FMCSA release month (newest upload wins), newest month first.
+// `scores` arrives ordered release_month desc, upload_date desc.
+function dedupeByMonth(scores: ScoreRecord[]): ScoreRecord[] {
+  const seen = new Set<string>()
+  const out: ScoreRecord[] = []
+  for (const s of scores) {
+    const k = s.release_month || String(s.upload_date ?? s.id)
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(s)
+  }
+  return out
+}
+
+// "2026-06" → "Jun 2026" for display.
+function monthLabel(rm: string | null | undefined, fallbackDate?: string | null): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(rm ?? '')
+  if (m) {
+    const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1))
+    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+  }
+  return rm || (fallbackDate ? formatDate(fallbackDate) : '')
+}
+
+export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
+  const scores = dedupeByMonth(rawScores)
   const latest = scores[0]
   const prev = scores[1]
   const chron = [...scores].reverse() // oldest → newest for trend reading
@@ -249,7 +274,7 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
                               i === chron.length - 1 && 'text-gray-900'
                             )}
                           >
-                            {s.upload_date ? formatDate(s.upload_date) : s.release_month}
+                            {monthLabel(s.release_month, s.upload_date)}
                           </TH>
                         ))}
                       </TR>

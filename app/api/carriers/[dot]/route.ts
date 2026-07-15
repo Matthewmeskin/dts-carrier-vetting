@@ -19,8 +19,11 @@ export async function GET(
         .from('carrier_scores')
         .select('*')
         .eq('dot_number', dot)
+        // Newest FMCSA release first (a back-filled older month may have a newer
+        // upload_date, so month — not upload time — defines recency).
+        .order('release_month', { ascending: false })
         .order('upload_date', { ascending: false })
-        .limit(12),
+        .limit(24),
       (supabaseAdmin as any)
         .from('latest_carrier_insurance')
         // Select the display columns only — NOT raw_rmis_response (a large blob

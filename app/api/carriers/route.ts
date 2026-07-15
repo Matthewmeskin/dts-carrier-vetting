@@ -104,8 +104,11 @@ export async function GET(request: NextRequest) {
       supabaseAdmin
         .from('carrier_scores')
         .select(
-          'dot_number, gap_score, requires_revetting, flagged_scores, approval_level, upload_date'
+          'dot_number, gap_score, requires_revetting, flagged_scores, approval_level, upload_date, release_month'
         )
+        // Latest by FMCSA release month (not upload time) so a back-filled older
+        // month doesn't override the current month on the roster.
+        .order('release_month', { ascending: false })
         .order('upload_date', { ascending: false })
         .limit(100000),
       // One row per carrier (server-side latest) so the whole roster fits under

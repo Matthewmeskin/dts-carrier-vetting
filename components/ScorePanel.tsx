@@ -92,7 +92,9 @@ function monthLabel(rm: string | null | undefined, fallbackDate?: string | null)
   const m = /^(\d{4})-(\d{2})$/.exec(rm ?? '')
   if (m) {
     const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1))
-    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    // Render in UTC — a local-timezone render of UTC midnight rolls back to the
+    // previous month.
+    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
   }
   return rm || (fallbackDate ? formatDate(fallbackDate) : '')
 }

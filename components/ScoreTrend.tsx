@@ -36,12 +36,13 @@ function monthLabelOf(s: ScoreRecord): string {
   const m = /^(\d{4})-(\d{2})$/.exec(s.release_month ?? '')
   if (m) {
     const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1))
-    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    // Render in UTC so midnight doesn't roll back into the previous month.
+    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
   }
   if (s.upload_date) {
     const d = new Date(s.upload_date)
     if (!isNaN(d.getTime()))
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
   }
   return s.release_month || ''
 }

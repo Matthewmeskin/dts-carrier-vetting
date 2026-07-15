@@ -21,6 +21,14 @@ import { Spinner } from './ui/Spinner'
 import { ExceptionNoteComposer } from './ExceptionNoteComposer'
 import { cn, formatDateTime } from '@/lib/utils'
 import { REVET_INTERVAL_OPTIONS, type RevetStatus, type RevetState } from '@/lib/revet'
+import {
+  APPROVING_STATUSES,
+  requiredApprovalLevel,
+  roleCanApprove,
+  ROLE_LABEL,
+  type Role,
+  type ApprovalLevel,
+} from '@/lib/roles'
 
 const VETTING_TYPES = [
   { value: 'initial', label: 'Initial' },
@@ -104,6 +112,7 @@ export function VettingChecklist({
   revet,
   revetDisabled,
   statusSaving,
+  statusError,
 }: {
   dot: string
   carrierName?: string | null
@@ -121,8 +130,27 @@ export function VettingChecklist({
   revet: RevetStatus
   revetDisabled?: boolean
   statusSaving?: boolean
+  statusError?: string | null
 }) {
   const [tab, setTab] = useState<'active' | 'history'>('active')
+
+  // Signed-in user's role — gates which approving statuses they may set.
+  const [role, setRole] = useState<Role | null>(null)
+  useEffect(() => {
+    fetch('/api/me', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.user?.role) setRole(d.user.role)
+      })
+      .catch(() => {})
+  }, [])
+  const requiredLevel: ApprovalLevel = requiredApprovalLevel(
+    (score as any)?.approval_level,
+    safetyRating
+  )
+  // Only block when we actually know the role (auth on); null role = auth off.
+  const blockedApproval =
+    !!role && requiredLevel !== 'none' && !roleCanApprove(role, requiredLevel)
 
   const latest = vettingRecords[0]
   const autoInputs = useMemo<ChecklistAutoInputs>(
@@ -295,18 +323,37 @@ export function VettingChecklist({
             {/* Decision bar — the single status + re-vet timer + reviewers + save */}
             <div className="rounded-lg border border-dts-blue/30 bg-blue-50/40 p-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Select
-                  label="Carrier status (vetting decision)"
-                  value={carrierStatus ?? 'Pending Review'}
-                  disabled={statusSaving}
-                  onChange={(e) => onCarrierStatusChange(e.target.value)}
-                >
-                  {CARRIER_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </Select>
+                <div>
+                  <Select
+                    label="Carrier status (vetting decision)"
+                    value={carrierStatus ?? 'Pending Review'}
+                    disabled={statusSaving}
+                    onChange={(e) => onCarrierStatusChange(e.target.value)}
+                  >
+                    {CARRIER_STATUSES.map((s) => {
+                      const gated = blockedApproval && APPROVING_STATUSES.includes(s)
+                      return (
+                        <option key={s} value={s} disabled={gated}>
+                          {s}
+                          {gated ? ` — needs ${ROLE_LABEL[requiredLevel as 'manager' | 'director']}` : ''}
+                        </option>
+                      )
+                    })}
+                  </Select>
+                  {blockedApproval && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      This carrier needs{' '}
+                      <span className="font-semibold">
+                        {ROLE_LABEL[requiredLevel as 'manager' | 'director']}
+                      </span>
+                      -level approval — your role ({role ? ROLE_LABEL[role] : '—'}) can set a
+                      hold/decline but not approve it.
+                    </p>
+                  )}
+                  {statusError && (
+                    <p className="mt-1 text-xs text-red-700">{statusError}</p>
+                  )}
+                </div>
                 <div>
                   <Select
                     label="Re-vetting cadence"

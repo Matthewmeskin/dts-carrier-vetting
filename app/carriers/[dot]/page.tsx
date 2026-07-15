@@ -40,6 +40,7 @@ export default function CarrierDetailPage({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [savingStatus, setSavingStatus] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
   const [docReload, setDocReload] = useState(0)
 
   const load = useCallback(async () => {
@@ -63,6 +64,7 @@ export default function CarrierDetailPage({
   async function updateStatus(status: string) {
     if (!detail) return
     setSavingStatus(true)
+    setStatusError(null)
     try {
       const res = await fetch(`/api/carriers/${dot}/status`, {
         method: 'PATCH',
@@ -70,6 +72,10 @@ export default function CarrierDetailPage({
         body: JSON.stringify({ carrier_status: status }),
       })
       if (res.ok) await load()
+      else {
+        const d = await res.json().catch(() => ({}))
+        setStatusError(d.error || 'Could not update status.')
+      }
     } finally {
       setSavingStatus(false)
     }
@@ -305,6 +311,7 @@ export default function CarrierDetailPage({
         revet={revet}
         revetDisabled={disabled}
         statusSaving={savingStatus}
+        statusError={statusError}
       />
 
       {/* Documents */}

@@ -3,6 +3,14 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { TablesUpdate } from '@/lib/database.types'
 import { REVET_INTERVAL_OPTIONS } from '@/lib/revet'
 import { logCarrierEvent } from '@/lib/auditLog'
+import { getSessionUser } from '@/lib/authServer'
+import {
+  APPROVING_STATUSES,
+  requiredApprovalLevel,
+  roleCanSetStatus,
+  ROLE_LABEL,
+  type ApprovalLevel,
+} from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -44,6 +52,46 @@ export async function PATCH(
       )
     }
 
+    // ── Role gate ──────────────────────────────────────────────────────────
+    // Approving a carrier that tripped a gate requires a high-enough role
+    // (§9.4). Restrictive statuses (Decline/Suspend/Do Not Use/Pending) and
+    // clean approvals are open to any signed-in user. Only enforced once auth
+    // is turned on.
+    const authOn = process.env.AUTH_ENABLED === 'true'
+    const user = await getSessionUser()
+    if (authOn && !user) {
+      return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+    }
+    let requiredLevel: ApprovalLevel = 'none'
+    if (user && carrier_status !== undefined && APPROVING_STATUSES.includes(carrier_status)) {
+      const { data: carrierRow } = await supabaseAdmin
+        .from('carriers')
+        .select('safety_rating')
+        .eq('dot_number', dot)
+        .maybeSingle()
+      const { data: scoreRow } = await (supabaseAdmin as any)
+        .from('carrier_scores')
+        .select('approval_level')
+        .eq('dot_number', dot)
+        .order('release_month', { ascending: false })
+        .order('upload_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      requiredLevel = requiredApprovalLevel(
+        scoreRow?.approval_level,
+        (carrierRow as any)?.safety_rating
+      )
+      if (!roleCanSetStatus(user.role, carrier_status, requiredLevel)) {
+        return NextResponse.json(
+          {
+            error: `This carrier requires ${ROLE_LABEL[requiredLevel as 'manager' | 'director'] ?? requiredLevel}-level approval. Your role (${ROLE_LABEL[user.role]}) can't approve it.`,
+            requiredLevel,
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     const updates: TablesUpdate<'carriers'> = {}
     if (carrier_status !== undefined) updates.carrier_status = carrier_status
     if (do_not_use !== undefined) updates.do_not_use = do_not_use
@@ -74,8 +122,8 @@ export async function PATCH(
         carrierId: (data as any).id ?? null,
         type: 'status_change',
         summary: `Carrier updated: ${parts.join(', ')}.`,
-        detail: { carrier_status, do_not_use, do_not_use_reason, revet_interval_days },
-        actor: 'DTS',
+        detail: { carrier_status, do_not_use, do_not_use_reason, revet_interval_days, requiredLevel },
+        actor: user ? `${user.email} (${ROLE_LABEL[user.role]})` : 'DTS',
       })
     }
 

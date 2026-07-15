@@ -188,6 +188,9 @@ export async function POST(request: Request) {
         requires_revetting: evaluation.requiresRevetting,
         flagged_scores: evaluation.flaggedCategories,
         approval_level: evaluation.approvalLevel,
+        // Stamp every upload (incl. same-month re-uploads that overwrite) so the
+        // "Bluewire upload <date>" label reflects the latest upload.
+        upload_date: new Date().toISOString(),
       })
 
       evalByDot.set(dot, {

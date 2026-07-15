@@ -20,7 +20,7 @@ export async function GET(
         .select('*')
         .eq('dot_number', dot)
         .order('upload_date', { ascending: false })
-        .limit(6),
+        .limit(12),
       (supabaseAdmin as any)
         .from('latest_carrier_insurance')
         // Select the display columns only — NOT raw_rmis_response (a large blob

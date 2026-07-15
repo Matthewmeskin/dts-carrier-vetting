@@ -93,7 +93,7 @@ export function evaluateScores(
     summary = `GAP score ${gapScore} requires documented manager exception`
   } else {
     approvalLevel = 'owner_exception'
-    summary = `GAP score ${gapScore} is below 60 — owner-reviewed exception required`
+    summary = `GAP score ${gapScore} is below 60 — director-reviewed exception required`
   }
 
   return {
@@ -111,7 +111,7 @@ export function getApprovalLevelLabel(level: ApprovalLevel): string {
     auto_clear: 'Auto Clear',
     additional_vetting: 'Additional Vetting Required',
     manager_exception: 'Manager Exception',
-    owner_exception: 'Owner Exception',
+    owner_exception: 'Director Exception',
   }
   return labels[level]
 }

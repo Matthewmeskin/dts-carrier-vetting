@@ -57,9 +57,26 @@ function requirementNote(req: string): string {
   return 'not considered'
 }
 
+// Every scored category, GAP first, for the transposed history grid.
+const CATEGORY_ROWS: {
+  key: string
+  label: string
+  kind: 'gap' | 'cat'
+  requirement?: string
+}[] = [
+  { key: 'gap_score', label: 'GAP', kind: 'gap' },
+  ...SCORE_FIELDS.map((f) => ({
+    key: f.key,
+    label: SHORT_LABEL[f.key] ?? f.label,
+    kind: 'cat' as const,
+    requirement: f.requirement,
+  })),
+]
+
 export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
   const latest = scores[0]
   const prev = scores[1]
+  const chron = [...scores].reverse() // oldest → newest for trend reading
   const gapDelta =
     latest?.gap_score != null && prev?.gap_score != null
       ? latest.gap_score - prev.gap_score
@@ -148,6 +165,10 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
                 const ignored = f.requirement === 'ignored'
                 // null = not present or not considered; true/false = pass/fail.
                 const pass = scoreFieldPasses(f.key, val)
+                const prevVal = prev
+                  ? (prev[f.key as keyof ScoreRecord] as number | null)
+                  : null
+                const d = val != null && prevVal != null ? val - prevVal : null
                 const tone = ignored
                   ? 'border-gray-200 bg-gray-50'
                   : pass
@@ -168,8 +189,21 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
                           {requirementNote(f.requirement)}
                         </span>
                       </div>
-                      <div className="text-lg font-bold text-gray-900">
-                        {formatScore(val)}
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-lg font-bold text-gray-900">
+                          {formatScore(val)}
+                        </span>
+                        {d !== null && Math.abs(d) >= 0.01 && (
+                          <span
+                            className={cn(
+                              'text-[11px] font-semibold',
+                              d >= 0 ? 'text-green-600' : 'text-red-600'
+                            )}
+                            title="Change vs. previous upload"
+                          >
+                            {d >= 0 ? '▲' : '▼'} {formatScore(Math.abs(d))}
+                          </span>
+                        )}
                       </div>
                     </div>
                     {!ignored && (
@@ -202,57 +236,76 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
             {scores.length > 1 && (
               <div className="mt-6">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Score history
+                  Score history — trend by category
                 </div>
-                <Table>
-                  <THead>
-                    <TR className="hover:bg-transparent">
-                      <TH>Month</TH>
-                      <TH className="text-right">GAP</TH>
-                      <TH className="text-right">Crash</TH>
-                      <TH className="text-right">Violation</TH>
-                      <TH className="text-right">CSA</TH>
-                      <TH className="text-right">Driver OOS</TH>
-                      <TH>Result</TH>
-                    </TR>
-                  </THead>
-                  <TBody>
-                    {scores.map((s) => (
-                      <TR key={s.id}>
-                        <TD className="whitespace-nowrap text-xs text-gray-600">
-                          {s.release_month || formatDate(s.upload_date)}
-                        </TD>
-                        <TD
-                          className={cn(
-                            'text-right font-semibold',
-                            gapColor(s.gap_score)
-                          )}
-                        >
-                          {formatScore(s.gap_score)}
-                        </TD>
-                        <TD className="text-right">
-                          {formatScore(s.crash_score)}
-                        </TD>
-                        <TD className="text-right">
-                          {formatScore(s.violation_score)}
-                        </TD>
-                        <TD className="text-right">
-                          {formatScore(s.csa_basics_score)}
-                        </TD>
-                        <TD className="text-right">
-                          {formatScore(s.driver_oos_score)}
-                        </TD>
-                        <TD>
-                          {s.overall_pass ? (
-                            <Badge tone="green">Pass</Badge>
-                          ) : (
-                            <Badge tone="red">Flag</Badge>
-                          )}
-                        </TD>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <THead>
+                      <TR className="hover:bg-transparent">
+                        <TH>Category</TH>
+                        {chron.map((s, i) => (
+                          <TH
+                            key={s.id}
+                            className={cn(
+                              'text-right whitespace-nowrap',
+                              i === chron.length - 1 && 'text-gray-900'
+                            )}
+                          >
+                            {s.release_month || formatDate(s.upload_date)}
+                          </TH>
+                        ))}
                       </TR>
-                    ))}
-                  </TBody>
-                </Table>
+                    </THead>
+                    <TBody>
+                      {CATEGORY_ROWS.map((row) => (
+                        <TR key={row.key}>
+                          <TD className="whitespace-nowrap text-xs font-medium text-gray-700">
+                            {row.label}
+                          </TD>
+                          {chron.map((s) => {
+                            const v = s[row.key as keyof ScoreRecord] as number | null
+                            let cls = 'text-gray-700'
+                            if (row.kind === 'gap') {
+                              cls = gapColor(v)
+                            } else if (row.requirement === 'ignored') {
+                              cls = 'text-gray-400'
+                            } else {
+                              const p = scoreFieldPasses(row.key, v)
+                              cls =
+                                p === false
+                                  ? 'text-red-600'
+                                  : p === true
+                                    ? 'text-green-700'
+                                    : 'text-gray-400'
+                            }
+                            return (
+                              <TD
+                                key={s.id}
+                                className={cn('text-right font-semibold', cls)}
+                              >
+                                {formatScore(v)}
+                              </TD>
+                            )
+                          })}
+                        </TR>
+                      ))}
+                      <TR>
+                        <TD className="whitespace-nowrap text-xs font-medium text-gray-700">
+                          Result
+                        </TD>
+                        {chron.map((s) => (
+                          <TD key={s.id} className="text-right">
+                            {s.overall_pass ? (
+                              <Badge tone="green">Pass</Badge>
+                            ) : (
+                              <Badge tone="red">Flag</Badge>
+                            )}
+                          </TD>
+                        ))}
+                      </TR>
+                    </TBody>
+                  </Table>
+                </div>
               </div>
             )}
           </>

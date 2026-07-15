@@ -807,7 +807,7 @@ export function CarrierTable({
                   const disabled = isBrokerwareDisabled(c.brokerware_status)
                   return (
                     <div
-                      key={c.id}
+                      key={vi.key}
                       data-index={vi.index}
                       ref={rowVirtualizer.measureElement}
                       onClick={() => openCarrier(c.dot_number)}
@@ -962,7 +962,7 @@ export function CarrierTable({
               const disabled = isBrokerwareDisabled(c.brokerware_status)
               return (
                 <div
-                  key={c.id}
+                  key={vi.key}
                   data-index={vi.index}
                   ref={mobileVirtualizer.measureElement}
                   className="absolute left-0 top-0 w-full"

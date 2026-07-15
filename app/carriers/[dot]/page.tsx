@@ -195,24 +195,37 @@ export default function CarrierDetailPage({
                 </span>
               </div>
               {(() => {
-                const addr = [
+                const join = (
+                  street: string | null | undefined,
+                  city: string | null | undefined,
+                  state: string | null | undefined,
+                  zip: string | null | undefined
+                ) =>
+                  [street, [city, state, zip].filter(Boolean).join(' ')]
+                    .filter((p) => p && p.trim())
+                    .join(', ')
+                // Prefer the RMIS/DOT physical address; fall back to the
+                // carrier's own address (Brokerware/TMS) when RMIS has none.
+                const rmisAddr = join(
                   insurance?.rmis_carrier_street,
-                  [
-                    insurance?.rmis_carrier_city,
-                    insurance?.rmis_carrier_state,
-                    insurance?.rmis_carrier_zip,
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
-                ]
-                  .filter((p) => p && p.trim())
-                  .join(', ')
+                  insurance?.rmis_carrier_city,
+                  insurance?.rmis_carrier_state,
+                  insurance?.rmis_carrier_zip
+                )
+                const carrierAddr = join(
+                  carrier.street,
+                  carrier.city,
+                  carrier.state,
+                  carrier.zip
+                )
+                const addr = rmisAddr || carrierAddr
+                const addrSource = rmisAddr
+                  ? 'Physical address (RMIS/DOT)'
+                  : 'Physical address (Brokerware/TMS)'
                 if (!addr && !carrier.phone && !carrier.email) return null
                 return (
                   <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
-                    {addr && (
-                      <span title="Physical address (RMIS/DOT)">{addr}</span>
-                    )}
+                    {addr && <span title={addrSource}>{addr}</span>}
                     {carrier.phone && (
                       <a
                         href={`tel:${carrier.phone.replace(/[^0-9+]/g, '')}`}

@@ -227,11 +227,9 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
               considered.
             </p>
 
-            {scores.length > 1 && (
-              <div className="mt-6">
-                <ScoreTrend scores={scores} />
-              </div>
-            )}
+            <div className="mt-6">
+              <ScoreTrend scores={scores} />
+            </div>
 
             {scores.length > 1 && (
               <div className="mt-6">

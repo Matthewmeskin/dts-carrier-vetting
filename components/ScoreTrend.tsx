@@ -48,8 +48,16 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
     padL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW)
   const y = (v: number) => padT + ((100 - v) / 100) * innerH
 
-  const monthLabel = (s: ScoreRecord, i: number) =>
-    s.release_month || `#${i + 1}`
+  // Label each snapshot by its upload date (snapshots can share a release
+  // month), falling back to the release month or an index.
+  const monthLabel = (s: ScoreRecord, i: number) => {
+    if (s.upload_date) {
+      const d = new Date(s.upload_date)
+      if (!isNaN(d.getTime()))
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    }
+    return s.release_month || `#${i + 1}`
+  }
 
   // Severity bands (top→bottom): green ≥75, amber 60–75, red <60.
   const bands = [
@@ -65,7 +73,7 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
     <div className="rounded-md border border-gray-200 p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Severity risk scores — {single ? 'current month' : `${n} months`}
+          Severity risk scores — {single ? 'latest upload' : `${n} uploads`}
         </span>
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {SERIES.map((s) => (
@@ -161,7 +169,7 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
       </svg>
       {single && (
         <p className="mt-1 text-[11px] text-gray-400">
-          One month on file — the lines fill in as you upload each new Bluewire release.
+          One upload on file — the lines fill in with each new Bluewire upload.
         </p>
       )}
     </div>

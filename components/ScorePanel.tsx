@@ -249,7 +249,7 @@ export function ScorePanel({ scores }: { scores: ScoreRecord[] }) {
                               i === chron.length - 1 && 'text-gray-900'
                             )}
                           >
-                            {s.release_month || formatDate(s.upload_date)}
+                            {s.upload_date ? formatDate(s.upload_date) : s.release_month}
                           </TH>
                         ))}
                       </TR>

@@ -147,6 +147,9 @@ export async function POST(request: Request) {
     }
 
     // 3. Evaluate and build score rows in memory.
+    // One timestamp for the whole batch — this upload becomes a single snapshot
+    // point in each carrier's trend (see the (dot_number, upload_date) unique key).
+    const uploadedAt = new Date().toISOString()
     let autoCleared = 0
     const flagged: FlaggedCarrier[] = []
     const scoreRows: TablesInsert<'carrier_scores'>[] = []
@@ -188,9 +191,8 @@ export async function POST(request: Request) {
         requires_revetting: evaluation.requiresRevetting,
         flagged_scores: evaluation.flaggedCategories,
         approval_level: evaluation.approvalLevel,
-        // Stamp every upload (incl. same-month re-uploads that overwrite) so the
-        // "Bluewire upload <date>" label reflects the latest upload.
-        upload_date: new Date().toISOString(),
+        // Each upload is its own snapshot/trend point, keyed by this timestamp.
+        upload_date: uploadedAt,
       })
 
       evalByDot.set(dot, {
@@ -217,7 +219,7 @@ export async function POST(request: Request) {
       const { error } = await supabaseAdmin
         .from('carrier_scores')
         .upsert(scoreRows.slice(i, i + CHUNK), {
-          onConflict: 'dot_number,release_month',
+          onConflict: 'dot_number,upload_date',
         })
       if (error) throw error
     }

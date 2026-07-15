@@ -35,9 +35,10 @@ export function ProblemFilter({
     )
   }
 
-  const groups: ProblemGroup[] = ['Hard Stop', 'Insurance', 'Flagged Score']
+  const groups: ProblemGroup[] = ['Hard Stop', 'RMIS', 'Insurance', 'Flagged Score']
   const groupHeading: Record<ProblemGroup, string> = {
     'Hard Stop': 'Hard Stops',
+    'RMIS': 'RMIS Status',
     'Insurance': 'Insurance Renewal',
     'Flagged Score': 'Flagged Scores',
   }
@@ -106,7 +107,7 @@ export function ProblemFilter({
                       <span
                         className={cn(
                           'rounded-full px-1.5 py-0.5 text-xs font-semibold',
-                          g === 'Hard Stop'
+                          g === 'Hard Stop' || g === 'RMIS'
                             ? 'bg-red-100 text-red-700'
                             : 'bg-amber-100 text-amber-700'
                         )}

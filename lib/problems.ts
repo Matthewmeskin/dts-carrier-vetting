@@ -5,7 +5,7 @@ import { CarrierSummary } from './types'
 // statuses), so we bucket them into canonical categories by keyword; flagged
 // scores are already clean labels and pass through as-is.
 
-export type ProblemGroup = 'Hard Stop' | 'Insurance' | 'Flagged Score'
+export type ProblemGroup = 'Hard Stop' | 'RMIS' | 'Insurance' | 'Flagged Score'
 
 export interface Problem {
   key: string
@@ -75,6 +75,14 @@ export function carrierProblems(c: CarrierSummary): Problem[] {
     const p = categorizeHardStop(hs)
     byKey.set(p.key, p)
   }
+  // In RMIS but not certified — the compliance packet isn't complete/approved.
+  if (c.rmis_status === 'not_certified') {
+    byKey.set('rmis:not_certified', {
+      key: 'rmis:not_certified',
+      label: 'Not certified in RMIS',
+      group: 'RMIS',
+    })
+  }
   for (const p of insuranceProblems(c)) {
     byKey.set(p.key, p)
   }
@@ -103,8 +111,9 @@ export function problemFacets(rows: CarrierSummary[]): ProblemFacet[] {
   // group, most-common first.
   const groupOrder: Record<ProblemGroup, number> = {
     'Hard Stop': 0,
-    'Insurance': 1,
-    'Flagged Score': 2,
+    'RMIS': 1,
+    'Insurance': 2,
+    'Flagged Score': 3,
   }
   return Array.from(map.values()).sort(
     (a, b) => groupOrder[a.group] - groupOrder[b.group] || b.count - a.count

@@ -33,6 +33,7 @@ const EVENT_META: Record<string, { label: string; tone: BadgeTone }> = {
   insurance_change: { label: 'Insurance', tone: 'amber' },
   insurance_refresh_request: { label: 'Insurance', tone: 'blue' },
   insurance_refresh_response: { label: 'RMIS reply', tone: 'green' },
+  hard_stop: { label: 'Hard stop', tone: 'red' },
 }
 
 const DOT: Record<BadgeTone, string> = {

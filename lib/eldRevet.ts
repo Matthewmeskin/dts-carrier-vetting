@@ -11,7 +11,6 @@
 
 import { supabaseAdmin } from './supabase'
 import { isBrokerwareDisabled } from './revet'
-import { sendComplianceAlert } from './emailAlerts'
 import { logCarrierEvent } from './auditLog'
 import type { EldFleetAnalysis } from './eldAnalysis'
 
@@ -98,22 +97,7 @@ export async function maybeFlagForRevet(params: {
       actor: 'ELD monitor',
     })
 
-    // Best-effort email alert.
-    try {
-      await sendComplianceAlert(
-        [
-          {
-            dotNumber: params.dot,
-            legalName: c.legal_name ?? params.dot,
-            flags: reasons,
-            alertType: 'delta_flag',
-          },
-        ],
-        'ELD fraud signal'
-      )
-    } catch {
-      /* mail failure is non-fatal */
-    }
+    // No instant email — the eld_flag event above feeds the daily digest.
 
     return { flagged: true, transitioned: !alreadyPending }
   } catch {

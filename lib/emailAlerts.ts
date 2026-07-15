@@ -205,3 +205,157 @@ export async function sendComplianceAlert(carriers: FlaggedCarrier[], batchLabel
 
   await resend.emails.send({ from: FROM, to: TO, subject, html })
 }
+
+// ── Daily digest ───────────────────────────────────────────────────────────
+// One email per day summarizing everything that needs a human's attention,
+// instead of a separate alert per detection. Individual detections still record
+// to the carrier's activity log in real time — this just batches the outbound
+// notification.
+
+export interface DigestCarrier {
+  dotNumber: string
+  legalName: string
+  mcNumber?: string | null
+  hardStops: string[]
+  reviews: string[]
+}
+export interface DigestReply {
+  dotNumber: string
+  legalName: string
+  note: string
+}
+export interface DailyDigestPayload {
+  since: string
+  until: string
+  hardStops: DigestCarrier[]
+  reviews: DigestCarrier[]
+  replies: DigestReply[]
+}
+
+/**
+ * Send the once-a-day digest to the DTS compliance inbox. Returns whether it
+ * sent so the caller can record the run; never throws.
+ */
+export async function sendDailyDigest(
+  payload: DailyDigestPayload
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    const apiKey = process.env.RESEND_API_KEY
+    const from = process.env.ALERT_EMAIL_FROM
+    const to = (process.env.ALERT_EMAIL_TO ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (!apiKey || !from || to.length === 0) {
+      return { sent: false, error: 'Email not configured (RESEND_API_KEY / ALERT_EMAIL_FROM / ALERT_EMAIL_TO)' }
+    }
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ''
+    const resend = new Resend(apiKey)
+
+    const esc = (s: string) =>
+      String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const idLine = (c: { dotNumber: string; mcNumber?: string | null }) => {
+      const mc = c.mcNumber ? String(c.mcNumber).replace(/\D/g, '') : ''
+      return `DOT ${esc(c.dotNumber)}${mc ? ` · MC ${esc(mc)}` : ''}`
+    }
+    const link = (dot: string) =>
+      APP_URL ? `<a href="${APP_URL}/carriers/${esc(dot)}" style="color:#0063A0;">View</a>` : ''
+
+    const hs = payload.hardStops.length
+    const rv = payload.reviews.length
+    const rp = payload.replies.length
+    const dateLabel = new Date(payload.until).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+
+    const subject =
+      hs > 0
+        ? `DTS Daily Digest — ${hs} hard stop${hs === 1 ? '' : 's'}, ${rv} to review (${dateLabel})`
+        : `DTS Daily Digest — ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''} (${dateLabel})`
+
+    const carrierRows = (list: DigestCarrier[], accent: string, issuesOf: (c: DigestCarrier) => string[]) =>
+      list
+        .map(
+          (c) => `
+      <tr>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
+          <div style="font-weight:600;">${esc(c.legalName)}</div>
+          <div style="color:#6b7280;font-size:12px;">${idLine(c)}</div>
+        </td>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:${accent};">
+          ${issuesOf(c).map((i) => esc(i)).join('<br/>')}
+        </td>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(c.dotNumber)}</td>
+      </tr>`
+        )
+        .join('')
+
+    const section = (title: string, color: string, bodyRows: string) =>
+      bodyRows
+        ? `
+        <h2 style="color:${color};font-size:16px;margin:24px 0 8px;">${title}</h2>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Issue</th>
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
+            </tr>
+          </thead>
+          <tbody>${bodyRows}</tbody>
+        </table>`
+        : ''
+
+    const replyRows = payload.replies
+      .map(
+        (r) => `
+      <tr>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
+          <div style="font-weight:600;">${esc(r.legalName)}</div>
+          <div style="color:#6b7280;font-size:12px;">DOT ${esc(r.dotNumber)}</div>
+        </td>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${esc(r.note)}</td>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(r.dotNumber)}</td>
+      </tr>`
+      )
+      .join('')
+
+    const html = `
+    <div style="font-family:sans-serif;max-width:900px;margin:0 auto;">
+      <div style="background:#AB0534;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
+        <h1 style="margin:0;font-size:20px;">DTS Carrier Daily Digest</h1>
+        <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">
+          ${dateLabel} · ${hs} hard stop${hs === 1 ? '' : 's'}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}
+        </p>
+      </div>
+      <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
+        ${section(`Hard Stops — Do Not Use Until Resolved (${hs})`, '#dc2626', carrierRows(payload.hardStops, '#dc2626', (c) => c.hardStops))}
+        ${section(`Requires Review (${rv})`, '#d97706', carrierRows(payload.reviews, '#b45309', (c) => c.reviews))}
+        ${replyRows ? `
+          <h2 style="color:#047857;font-size:16px;margin:24px 0 8px;">RMIS Replies (${rp})</h2>
+          <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#f9fafb;">
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Reply</th>
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
+            </tr></thead>
+            <tbody>${replyRows}</tbody>
+          </table>` : ''}
+        ${hs + rv + rp === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
+        <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;">
+          <a href="${APP_URL}/carriers"
+             style="background:#0063A0;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;font-size:14px;">
+            Open Carrier Portal
+          </a>
+        </div>
+      </div>
+    </div>`
+
+    await resend.emails.send({ from, to, subject, html })
+    return { sent: true }
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : 'send failed' }
+  }
+}

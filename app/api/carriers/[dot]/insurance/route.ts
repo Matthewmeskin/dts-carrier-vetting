@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { fetchExpandedCarrierXML } from '@/lib/rmisClient'
 import { parseRMISXML, ParsedRMISData } from '@/lib/rmisParser'
 import { evaluateRMIS, RMISEvaluation } from '@/lib/rmisEvaluator'
-import { sendComplianceAlert } from '@/lib/emailAlerts'
+import { logCarrierEvent } from '@/lib/auditLog'
 import { archiveCarrierDocuments } from '@/lib/rmisArchive'
 import { TablesInsert, TablesUpdate } from '@/lib/database.types'
 
@@ -139,25 +139,17 @@ export async function GET(
       await supabaseAdmin.from('carriers').update(carrierUpdates).eq('dot_number', dot)
     }
 
-    // Alert if new hard stops appeared
+    // Record newly-appeared hard stops so the daily digest surfaces them (no
+    // instant email).
     if (evaluation.hardStops.length > 0 && !prevHadHardStops) {
-      try {
-        await sendComplianceAlert(
-          [
-            {
-              dotNumber: dot,
-              legalName: (carrier as any).legal_name ?? parsed.legalName,
-              hardStops: evaluation.hardStops,
-              flags: evaluation.flags,
-              alertType: 'delta_hard_stop',
-            },
-          ],
-          'Manual RMIS refresh'
-        )
-      } catch (alertErr) {
-        // mail failure must not fail the request
-        console.error('Compliance alert failed:', alertErr)
-      }
+      await logCarrierEvent({
+        dot,
+        carrierId: (carrier as any).id ?? null,
+        type: 'hard_stop',
+        summary: `New hard stop(s) on manual RMIS refresh: ${evaluation.hardStops.join('; ')}`.slice(0, 300),
+        detail: { hardStops: evaluation.hardStops, flags: evaluation.flags, source: 'manual_refresh' },
+        actor: 'system (manual RMIS refresh)',
+      })
     }
 
     // Snapshot RMIS documents (COI, W-9, agreement), keeping prior versions.

@@ -9,7 +9,7 @@ import {
 } from '@/lib/rmisClient'
 import { parseRMISXML } from '@/lib/rmisParser'
 import { evaluateRMIS, isExpiringCoverageStatus } from '@/lib/rmisEvaluator'
-import { sendComplianceAlert, sendInsuranceRefreshRequest } from '@/lib/emailAlerts'
+import { sendInsuranceRefreshRequest } from '@/lib/emailAlerts'
 import { logCarrierEvent } from '@/lib/auditLog'
 import { buildInsuranceRow } from '@/app/api/carriers/[dot]/insurance/route'
 import { archiveCarrierDocuments } from '@/lib/rmisArchive'
@@ -266,19 +266,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // Alert for any new hard stops.
+    // New hard stops are recorded in carrier_delta_log above; the daily digest
+    // picks them up. Mark them so the timeline reflects they were surfaced.
     if (hardStopCarriers.length > 0) {
       try {
-        await sendComplianceAlert(
-          hardStopCarriers.map((c) => ({
-            dotNumber: c.dotNumber,
-            legalName: c.legalName,
-            hardStops: c.hardStops,
-            flags: c.flags,
-            alertType: c.alertType,
-          })),
-          'RMIS delta monitoring'
-        )
         const allIds = hardStopCarriers.flatMap((c) => c.deltaLogIds)
         if (allIds.length > 0) {
           await supabaseAdmin
@@ -287,7 +278,7 @@ export async function POST(request: Request) {
             .in('id', allIds)
         }
       } catch (alertErr) {
-        console.error('Delta compliance alert failed:', alertErr)
+        console.error('Delta hard-stop marking failed:', alertErr)
       }
     }
 

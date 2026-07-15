@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { supabaseAdmin } from '@/lib/supabase'
 import { evaluateScores } from '@/lib/scoringRules'
-import { sendComplianceAlert } from '@/lib/emailAlerts'
 import { isBrokerwareDisabled } from '@/lib/revet'
 import { logCarrierEvents, type CarrierEventInput } from '@/lib/auditLog'
 import { TablesInsert } from '@/lib/database.types'
@@ -289,13 +288,9 @@ export async function POST(request: Request) {
     }
     await logCarrierEvents(events)
 
-    // Alert + log if any flagged.
+    // Log if any flagged. No instant email — the score_flag events above feed
+    // the daily digest.
     if (flagged.length > 0) {
-      try {
-        await sendComplianceAlert(flagged, batchLabel)
-      } catch (alertErr) {
-        console.error('Compliance alert failed:', alertErr)
-      }
       try {
         const sentTo = (process.env.ALERT_EMAIL_TO ?? '')
           .split(',')

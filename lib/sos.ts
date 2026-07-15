@@ -16,6 +16,66 @@ function joinAddress(parts: (string | null | undefined)[]): string {
   return parts.filter(Boolean).join(', ')
 }
 
+// True when a value is empty or an LLM/scraper placeholder rather than a real
+// address ("Not provided in SOS record", "N/A", "-", …).
+function isPlaceholderAddress(s: string | null | undefined): boolean {
+  if (!s) return true
+  const t = s.trim().toLowerCase()
+  return (
+    t === '' ||
+    t === '-' ||
+    t === 'n/a' ||
+    t === 'na' ||
+    t.includes('not provided') ||
+    t.includes('not available') ||
+    t.includes('not listed') ||
+    t.includes('no record')
+  )
+}
+
+/**
+ * The dedicated SOS "principal address" field is often blank (e.g. Illinois only
+ * populates the registered-agent address). When it is, fall back to the address
+ * on the officer records — for a small carrier the officer/principal address IS
+ * the business address — else the registered-agent address. Returns null if the
+ * payload truly carries no address.
+ */
+function derivePrincipalAddress(
+  match: SosMatch,
+  raw: any
+): string | null {
+  if (!isPlaceholderAddress(match.principal_address)) return match.principal_address
+  const d = raw?.data ?? raw ?? {}
+
+  // 1) Explicit principal address fields on the raw record.
+  if (d.principalAddress && String(d.principalAddress).trim()) {
+    const explicit = joinAddress([
+      d.principalAddress,
+      d.principalCity,
+      d.principalState,
+      d.principalZip,
+    ])
+    if (explicit) return explicit
+  }
+
+  // 2) Most common officer address (blank ones ignored).
+  const officers = Array.isArray(d.officers) ? d.officers : []
+  const counts = new Map<string, number>()
+  for (const o of officers) {
+    const a = String(o?.address ?? '').replace(/\s+/g, ' ').trim()
+    if (a) counts.set(a, (counts.get(a) ?? 0) + 1)
+  }
+  if (counts.size > 0) {
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0]
+  }
+
+  // 3) Registered-agent address (already normalized on the match).
+  if (!isPlaceholderAddress(match.registered_agent_address)) {
+    return match.registered_agent_address
+  }
+  return null
+}
+
 export function sosPipelineConfigured(): { ok: boolean; missing: string[] } {
   const missing: string[] = []
   if (!sosConfigured()) missing.push('OPENSOS_API_KEY')
@@ -23,7 +83,7 @@ export function sosPipelineConfigured(): { ok: boolean; missing: string[] } {
   return { ok: missing.length === 0, missing }
 }
 
-function matchToCarrierRow(match: SosMatch, state: string | null) {
+function matchToCarrierRow(match: SosMatch, state: string | null, raw?: any) {
   return {
     sos_state: state,
     sos_entity_id: match.entity_id,
@@ -33,7 +93,7 @@ function matchToCarrierRow(match: SosMatch, state: string | null) {
     sos_formation_date: isoDateOrNull(match.formation_date),
     sos_registered_agent: match.registered_agent,
     sos_registered_agent_address: match.registered_agent_address,
-    sos_principal_address: match.principal_address,
+    sos_principal_address: derivePrincipalAddress(match, raw),
     sos_officers: match.officers ?? [],
     name_match: match.name_match,
     address_match: match.address_match,
@@ -45,7 +105,7 @@ function matchToCarrierRow(match: SosMatch, state: string | null) {
   }
 }
 
-function matchToFactorRow(match: SosMatch, state: string | null) {
+function matchToFactorRow(match: SosMatch, state: string | null, raw?: any) {
   return {
     sos_state: state,
     sos_entity_id: match.entity_id,
@@ -55,7 +115,7 @@ function matchToFactorRow(match: SosMatch, state: string | null) {
     sos_formation_date: isoDateOrNull(match.formation_date),
     sos_registered_agent: match.registered_agent,
     sos_registered_agent_address: match.registered_agent_address,
-    sos_principal_address: match.principal_address,
+    sos_principal_address: derivePrincipalAddress(match, raw),
     sos_officers: match.officers ?? [],
     sos_match_confidence: match.match_confidence,
     sos_summary: match.summary,
@@ -102,7 +162,7 @@ export async function recheckFactorSos(
   const { data: saved } = await supabaseAdmin
     .from('factors')
     .update({
-      ...matchToFactorRow(match, state),
+      ...matchToFactorRow(match, state, raw),
       sos_raw: raw as any,
       updated_at: new Date().toISOString(),
     })
@@ -196,7 +256,7 @@ export async function runCarrierSos(
       const row = {
         carrier_id: (carrier as any).id,
         dot_number: dot,
-        ...matchToCarrierRow(match, carrierState),
+        ...matchToCarrierRow(match, carrierState, raw),
         sos_raw: raw as any,
         updated_at: new Date().toISOString(),
       }

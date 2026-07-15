@@ -100,6 +100,17 @@ export async function GET(
       documents: docsByRecord[r.id] ?? [],
     }))
 
+    // Distinct document types on file for this carrier (any source — RMIS
+    // archive or a manual portal upload, tied to a review or not). Lets the
+    // vetting checklist treat a portal-uploaded BCA/W-9 as satisfying its step.
+    const { data: allDocs } = await supabaseAdmin
+      .from('vetting_documents')
+      .select('document_type')
+      .eq('dot_number', dot)
+    const documentTypes = Array.from(
+      new Set((allDocs ?? []).map((d: any) => d.document_type).filter(Boolean))
+    )
+
     return NextResponse.json({
       carrier,
       scores,
@@ -108,6 +119,7 @@ export async function GET(
       deltaLog,
       sos,
       factor,
+      documentTypes,
       events: (eventsRes as any).data ?? [],
     })
   } catch (err: any) {

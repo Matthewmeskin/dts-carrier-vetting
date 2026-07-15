@@ -34,9 +34,13 @@ function formatBytes(bytes?: number | null): string {
 export function CarrierDocuments({
   dot,
   reloadKey,
+  onChanged,
 }: {
   dot: string
   reloadKey?: number
+  /** Fired after an upload so the parent can refresh derived data (e.g. the
+   *  vetting checklist's document-based auto-checks). */
+  onChanged?: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [documents, setDocuments] = useState<VettingDocumentRecord[]>([])
@@ -92,6 +96,7 @@ export function CarrierDocuments({
       setFile(null)
       if (fileRef.current) fileRef.current.value = ''
       await load()
+      onChanged?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
     } finally {

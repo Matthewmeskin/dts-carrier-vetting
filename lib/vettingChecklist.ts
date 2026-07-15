@@ -220,8 +220,8 @@ export function createDefaultChecklist(): VettingChecklist {
       {
         id: 'broker_carrier_agreement',
         category: 'verification',
-        label: 'Executed broker-carrier agreement on file in RMIS',
-        description: 'Agreement must be executed and Agree = Yes in RMIS. Verify title and date.',
+        label: 'Executed broker-carrier agreement on file (RMIS or portal)',
+        description: 'Agreement must be executed — either on file in RMIS (Agree = Yes) or a signed copy uploaded to the portal. Verify title and date.',
         policyRef: 'Section 6',
         required: true,
         completed: false,
@@ -293,6 +293,8 @@ export interface ChecklistAutoInputs {
   insurance?: InsuranceRecord | null
   score?: ScoreRecord | null
   sos?: SosRecord | null
+  /** document_type values on file in the portal (RMIS archive or manual upload). */
+  documentTypes?: string[] | null
 }
 
 interface StepEval {
@@ -312,6 +314,9 @@ function computeAutoEvaluations(
   const ins = inputs.insurance ?? null
   const score = inputs.score ?? null
   const sos = inputs.sos ?? null
+  const docTypes = new Set(
+    (inputs.documentTypes ?? []).map((t) => (t ?? '').toLowerCase())
+  )
   const out: Record<string, StepEval> = {}
 
   // Active FMCSA operating authority. A carrier may run on common OR contract
@@ -441,23 +446,39 @@ function computeAutoEvaluations(
     }
   }
 
-  // Executed broker-carrier agreement on file
-  if (ins && ins.broker_carrier_agreement_on_file != null) {
-    const on = ins.broker_carrier_agreement_on_file
-    out.broker_carrier_agreement = {
-      status: on ? 'pass' : 'fail',
-      evidence: on
-        ? `On file in RMIS${ins.broker_carrier_agreement_date ? ` (${formatDate(ins.broker_carrier_agreement_date)})` : ''}`
-        : `Not on file in RMIS`,
+  // Executed broker-carrier agreement — satisfied by the RMIS flag OR a copy
+  // uploaded to the portal. It doesn't need to be in RMIS if we hold a copy.
+  {
+    const rmisOn = ins?.broker_carrier_agreement_on_file
+    const portalOn = docTypes.has('broker_carrier_agreement')
+    if (rmisOn != null || portalOn) {
+      const on = rmisOn === true || portalOn
+      out.broker_carrier_agreement = {
+        status: on ? 'pass' : 'fail',
+        evidence: !on
+          ? 'Not on file in RMIS or the portal'
+          : rmisOn === true
+            ? `On file in RMIS${ins?.broker_carrier_agreement_date ? ` (${formatDate(ins.broker_carrier_agreement_date)})` : ''}${portalOn ? ' · copy in portal' : ''}`
+            : 'Copy uploaded to portal',
+      }
     }
   }
 
-  // W-9 on file
-  if (ins && ins.w9_on_file != null) {
-    const on = ins.w9_on_file
-    out.w9 = {
-      status: on ? 'pass' : 'fail',
-      evidence: `${on ? 'W-9 on file' : 'W-9 not on file'}${ins.is_factoring ? ' · factoring — verify NOA & pay-to' : ''}`,
+  // W-9 — satisfied by the RMIS flag OR a copy uploaded to the portal.
+  {
+    const rmisOn = ins?.w9_on_file
+    const portalOn = docTypes.has('w9')
+    if (rmisOn != null || portalOn) {
+      const on = rmisOn === true || portalOn
+      const where = !on
+        ? 'W-9 not on file'
+        : rmisOn === true
+          ? `W-9 on file in RMIS${portalOn ? ' · copy in portal' : ''}`
+          : 'W-9 uploaded to portal'
+      out.w9 = {
+        status: on ? 'pass' : 'fail',
+        evidence: `${where}${ins?.is_factoring ? ' · factoring — verify NOA & pay-to' : ''}`,
+      }
     }
   }
 

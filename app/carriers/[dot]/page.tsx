@@ -111,7 +111,7 @@ export default function CarrierDetailPage({
     )
   }
 
-  const { carrier, scores, insurance, vettingRecords, deltaLog, sos, factor, events } =
+  const { carrier, scores, insurance, vettingRecords, deltaLog, sos, factor, events, documentTypes } =
     detail
   const lastVetting = vettingRecords[0]?.completed_at ?? null
   const revetAnchor =
@@ -295,6 +295,7 @@ export default function CarrierDetailPage({
         insurance={insurance}
         score={scores[0]}
         sos={sos}
+        documentTypes={documentTypes}
         vettingRecords={vettingRecords}
         onSaved={load}
         carrierStatus={carrier.carrier_status}
@@ -307,7 +308,7 @@ export default function CarrierDetailPage({
       />
 
       {/* Documents */}
-      <CarrierDocuments dot={dot} reloadKey={docReload} />
+      <CarrierDocuments dot={dot} reloadKey={docReload} onChanged={load} />
 
       {/* Unified activity timeline (RMIS changes + event log) */}
       <CarrierActivity deltaLog={deltaLog} events={events ?? []} />

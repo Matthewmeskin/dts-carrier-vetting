@@ -280,4 +280,5 @@ export interface CarrierDetail {
   sos: SosRecord | null
   factor: FactorRecord | null
   events: CarrierEventRecord[]
+  documentTypes?: string[]
 }

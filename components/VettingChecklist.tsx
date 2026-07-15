@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { InsuranceRecord, ScoreRecord, SosRecord, VettingRecord } from '@/lib/types'
 import {
   createDefaultChecklist,
@@ -94,6 +94,7 @@ export function VettingChecklist({
   insurance,
   score,
   sos,
+  documentTypes,
   vettingRecords,
   onSaved,
   carrierStatus,
@@ -110,6 +111,7 @@ export function VettingChecklist({
   insurance?: InsuranceRecord | null
   score?: ScoreRecord | null
   sos?: SosRecord | null
+  documentTypes?: string[] | null
   vettingRecords: VettingRecord[]
   onSaved?: () => void | Promise<void>
   carrierStatus: string | null
@@ -124,8 +126,8 @@ export function VettingChecklist({
 
   const latest = vettingRecords[0]
   const autoInputs = useMemo<ChecklistAutoInputs>(
-    () => ({ safetyRating, insurance, score, sos }),
-    [safetyRating, insurance, score, sos]
+    () => ({ safetyRating, insurance, score, sos, documentTypes }),
+    [safetyRating, insurance, score, sos, documentTypes]
   )
   const [vettingType, setVettingType] = useState(
     latest?.vetting_type || 'initial'
@@ -133,6 +135,27 @@ export function VettingChecklist({
   const [checklist, setChecklist] = useState<VettingChecklistType>(() =>
     hydrateChecklist(latest, autoInputs)
   )
+
+  // Re-apply auto-evaluation when the underlying data changes (e.g. a document
+  // is uploaded to the portal after the page loaded): refresh each step's
+  // evidence and re-check the ones a human hasn't manually overridden.
+  useEffect(() => {
+    setChecklist((prev) => {
+      const evaluated = attachAutoEvidence(prev, autoInputs)
+      return {
+        ...evaluated,
+        steps: evaluated.steps.map((s) =>
+          s.source === 'manual'
+            ? s
+            : s.autoStatus === 'pass'
+              ? { ...s, completed: true, source: 'auto' }
+              : s.autoStatus === 'fail'
+                ? { ...s, completed: false, source: 'auto' }
+                : s
+        ),
+      }
+    })
+  }, [autoInputs])
   const [internalNotes, setInternalNotes] = useState(
     latest?.internal_notes || ''
   )

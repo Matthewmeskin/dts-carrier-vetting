@@ -230,6 +230,8 @@ export interface DailyDigestPayload {
   hardStops: DigestCarrier[]
   reviews: DigestCarrier[]
   replies: DigestReply[]
+  /** Count of carriers flagged for re-vet by a score upload (summarized, not listed). */
+  scoreFlagged?: number
 }
 
 /**
@@ -264,16 +266,29 @@ export async function sendDailyDigest(
     const hs = payload.hardStops.length
     const rv = payload.reviews.length
     const rp = payload.replies.length
+    const sf = payload.scoreFlagged ?? 0
     const dateLabel = new Date(payload.until).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
+      timeZone: 'UTC',
     })
 
     const subject =
       hs > 0
         ? `DTS Daily Digest — ${hs} hard stop${hs === 1 ? '' : 's'}, ${rv} to review (${dateLabel})`
         : `DTS Daily Digest — ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''} (${dateLabel})`
+
+    // The bulk re-vet queue from a score upload is summarized, not enumerated.
+    const scoreFlagSummary =
+      sf > 0
+        ? `
+        <div style="margin:20px 0 0;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+          <span style="font-weight:600;color:#92400e;">${sf} carrier${sf === 1 ? '' : 's'} flagged for re-vet</span>
+          <span style="color:#92400e;"> by the latest Bluewire score upload.</span>
+          ${APP_URL ? `<a href="${APP_URL}/carriers" style="color:#0063A0;margin-left:6px;">Review the re-vet queue →</a>` : ''}
+        </div>`
+        : ''
 
     const carrierRows = (list: DigestCarrier[], accent: string, issuesOf: (c: DigestCarrier) => string[]) =>
       list
@@ -327,12 +342,13 @@ export async function sendDailyDigest(
       <div style="background:#AB0534;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
         <h1 style="margin:0;font-size:20px;">DTS Carrier Daily Digest</h1>
         <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">
-          ${dateLabel} · ${hs} hard stop${hs === 1 ? '' : 's'}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}
+          ${dateLabel} · ${hs} hard stop${hs === 1 ? '' : 's'}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}${sf ? ` · ${sf} flagged for re-vet` : ''}
         </p>
       </div>
       <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
         ${section(`Hard Stops — Do Not Use Until Resolved (${hs})`, '#dc2626', carrierRows(payload.hardStops, '#dc2626', (c) => c.hardStops))}
         ${section(`Requires Review (${rv})`, '#d97706', carrierRows(payload.reviews, '#b45309', (c) => c.reviews))}
+        ${scoreFlagSummary}
         ${replyRows ? `
           <h2 style="color:#047857;font-size:16px;margin:24px 0 8px;">RMIS Replies (${rp})</h2>
           <table style="width:100%;border-collapse:collapse;">
@@ -343,7 +359,7 @@ export async function sendDailyDigest(
             </tr></thead>
             <tbody>${replyRows}</tbody>
           </table>` : ''}
-        ${hs + rv + rp === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
+        ${hs + rv + rp + sf === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
         <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;">
           <a href="${APP_URL}/carriers"
              style="background:#0063A0;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;font-size:14px;">

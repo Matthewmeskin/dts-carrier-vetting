@@ -59,6 +59,9 @@ export async function POST(request: Request) {
     type Bucket = { hardStops: Set<string>; reviews: Set<string> }
     const byDot = new Map<string, Bucket>()
     const replies: { dot: string; note: string }[] = []
+    // Monthly Bluewire uploads flag a large batch for re-vet — that's the re-vet
+    // queue, not per-carrier alerts. Summarize as a count instead of listing each.
+    const scoreFlaggedDots = new Set<string>()
     const bucket = (dot: string): Bucket => {
       let b = byDot.get(dot)
       if (!b) {
@@ -106,7 +109,11 @@ export async function POST(request: Request) {
         if (e.detail?.classification === 'coi_not_received') {
           replies.push({ dot, note: e.summary ?? 'RMIS reply — COI not yet received.' })
         }
+      } else if (e.event_type === 'score_flag') {
+        // Bulk re-vet queue — counted, not listed per carrier.
+        scoreFlaggedDots.add(dot)
       } else {
+        // eld_flag, insurance_change — acute, list individually.
         bucket(dot).reviews.add(e.summary ?? e.event_type)
       }
     }
@@ -143,8 +150,10 @@ export async function POST(request: Request) {
       note: r.note,
     }))
 
-    const itemCount = hardStops.length + reviews.length + replyList.length
-    const payload = { since, until, hardStops, reviews, replies: replyList }
+    const scoreFlagged = scoreFlaggedDots.size
+    const itemCount =
+      hardStops.length + reviews.length + replyList.length + (scoreFlagged > 0 ? 1 : 0)
+    const payload = { since, until, hardStops, reviews, replies: replyList, scoreFlagged }
 
     if (dryRun) {
       return NextResponse.json({
@@ -152,6 +161,7 @@ export async function POST(request: Request) {
         since,
         until,
         itemCount,
+        scoreFlagged,
         hardStops,
         reviews,
         replies: replyList,
@@ -186,6 +196,7 @@ export async function POST(request: Request) {
       hardStops: hardStops.length,
       reviews: reviews.length,
       replies: replyList.length,
+      scoreFlagged,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

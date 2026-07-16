@@ -18,6 +18,7 @@ const NAV = [
 export function SiteHeader() {
   const pathname = usePathname()
   const [me, setMe] = useState<{ email: string | null; role: Role } | null>(null)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     if (pathname === '/login') return
@@ -25,9 +26,13 @@ export function SiteHeader() {
     fetch('/api/me', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!cancelled && d?.user) setMe({ email: d.user.email, role: d.user.role })
+        if (cancelled) return
+        if (d?.user) setMe({ email: d.user.email, role: d.user.role })
+        setLoaded(true)
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setLoaded(true)
+      })
     return () => {
       cancelled = true
     }
@@ -92,6 +97,14 @@ export function SiteHeader() {
                 Sign out
               </button>
             </div>
+          )}
+          {loaded && !me && (
+            <Link
+              href="/login"
+              className="ml-1 whitespace-nowrap rounded border-l border-gray-200 pl-3 py-1.5 pr-2.5 font-medium text-dts-blue hover:bg-gray-100"
+            >
+              Sign in
+            </Link>
           )}
         </nav>
       </div>

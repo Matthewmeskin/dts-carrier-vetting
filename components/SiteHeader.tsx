@@ -64,6 +64,17 @@ export function SiteHeader() {
               {n.label}
             </Link>
           ))}
+          {me?.role === 'director' && (
+            <Link
+              href="/admin/users"
+              className={cn(
+                'whitespace-nowrap rounded px-2.5 py-1.5 transition hover:bg-gray-100 sm:px-3',
+                pathname.startsWith('/admin') ? 'font-medium text-dts-blue' : 'text-gray-700'
+              )}
+            >
+              Users
+            </Link>
+          )}
           {me && (
             <div className="ml-1 flex items-center gap-2 border-l border-gray-200 pl-2">
               <div className="hidden text-right sm:block">

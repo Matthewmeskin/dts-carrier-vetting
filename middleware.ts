@@ -39,8 +39,10 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   const isLogin = path === '/login'
+  // The OAuth callback must run without a session (it's what creates one).
+  const isAuthFlow = path.startsWith('/auth')
 
-  if (!user && !isLogin) {
+  if (!user && !isLogin && !isAuthFlow) {
     const redirect = request.nextUrl.clone()
     redirect.pathname = '/login'
     redirect.searchParams.set('next', path)

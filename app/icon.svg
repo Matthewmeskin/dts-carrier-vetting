@@ -1,15 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DTS Carrier Compliance Portal">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DTS — Diversified Transportation Services">
   <defs>
-    <linearGradient id="speed" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0.30"/>
+    <linearGradient id="swoosh" x1="0" y1="1" x2="1" y2="0.2">
+      <stop offset="0" stop-color="#8f8f8f" stop-opacity="0"/>
+      <stop offset="0.55" stop-color="#8f8f8f" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#cfcfcf" stop-opacity="0.15"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="13" fill="#8a1a2c"/>
-  <text x="31" y="40" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif"
-        font-weight="900" font-style="italic" font-size="27" letter-spacing="-2.5" fill="#ffffff">DTS</text>
-  <g fill="url(#speed)">
-    <polygon points="19,46 49,46 45,49.5 15,49.5"/>
-    <polygon points="22,51.5 49,51.5 45,55 18,55"/>
+  <rect width="64" height="64" rx="12" fill="#ffffff"/>
+  <!-- swoosh curving up behind the letters -->
+  <path d="M5 49 A 27 17 0 0 1 51 27" fill="none" stroke="url(#swoosh)" stroke-width="3.3" stroke-linecap="round"/>
+  <!-- speed lines trailing off the S -->
+  <g stroke="#111111" stroke-linecap="round">
+    <line x1="31" y1="53.5" x2="60" y2="53.5" stroke-width="2.2"/>
+    <line x1="34" y1="58" x2="60" y2="58" stroke-width="2.2"/>
+  </g>
+  <!-- stacked D / T / S: black drop-shadow, then brand red -->
+  <g font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-style="italic" font-size="30">
+    <text x="5.6" y="30.4" fill="#000000">D</text>
+    <text x="19.6" y="45.4" fill="#000000">T</text>
+    <text x="29.6" y="60.4" fill="#000000">S</text>
+    <text x="4.5" y="29.3" fill="#c0182c">D</text>
+    <text x="18.5" y="44.3" fill="#c0182c">T</text>
+    <text x="28.5" y="59.3" fill="#c0182c">S</text>
   </g>
 </svg>

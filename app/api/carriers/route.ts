@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
     // which is a ~40KB XML blob per row and would balloon the payload to tens of
     // MB across the roster. Explicit high limit avoids PostgREST's 1000-row cap
     // silently hiding carriers as history accumulates.
-    const [carriersRes, scoresRes, insRes, vetRes, noaRes] = await Promise.all([
+    const [carriersRes, scoresRes, insRes, vetRes, docsRes] = await Promise.all([
       carrierQuery,
       supabaseAdmin
         .from('carrier_scores')
@@ -123,11 +123,12 @@ export async function GET(request: NextRequest) {
         .from('vetting_records')
         .select('dot_number, completed_at')
         .order('completed_at', { ascending: false }),
-      // Which carriers have a Notice of Assignment archived.
+      // Portal-uploaded docs that satisfy a requirement (NOA, broker-carrier
+      // agreement, W-9) even when RMIS doesn't have them on file.
       supabaseAdmin
         .from('vetting_documents')
-        .select('dot_number')
-        .eq('document_type', 'noa')
+        .select('dot_number, document_type')
+        .in('document_type', ['noa', 'broker_carrier_agreement', 'w9'])
         .limit(100000),
     ])
     if (carriersRes.error) throw carriersRes.error
@@ -139,9 +140,14 @@ export async function GET(request: NextRequest) {
     const latestScores = latestPerDot(scoresRes.data ?? [])
     const latestInsurance = latestPerDot(insRes.data ?? [])
     const latestVetting = latestPerDot(vetRes.data ?? [])
-    const noaDots = new Set<string>(
-      (noaRes.data ?? []).map((r: any) => String(r.dot_number))
-    )
+    const portalDocs = (docsRes.data ?? []) as { dot_number: string; document_type: string }[]
+    const dotsWithDoc = (type: string) =>
+      new Set<string>(
+        portalDocs.filter((r) => r.document_type === type).map((r) => String(r.dot_number))
+      )
+    const noaDots = dotsWithDoc('noa')
+    const bcaDots = dotsWithDoc('broker_carrier_agreement')
+    const w9PortalDots = dotsWithDoc('w9')
 
     let merged: CarrierSummary[] = (carriers ?? []).map((c: any) => {
       const dot = String(c.dot_number)
@@ -191,8 +197,11 @@ export async function GET(request: NextRequest) {
         brokerware_status: c.brokerware_status ?? null,
         business_type: ins?.w9_company_type ?? null,
         eld_enrolled: ins?.rmis_eld_enrolled ?? null,
-        w9_on_file: ins?.w9_on_file ?? null,
-        agreement_on_file: ins?.broker_carrier_agreement_on_file ?? null,
+        // On file when RMIS has it OR a copy was uploaded to the portal. No
+        // evidence either way = not on file (so it shows in the missing filter).
+        w9_on_file: ins?.w9_on_file === true || w9PortalDots.has(dot),
+        agreement_on_file:
+          ins?.broker_carrier_agreement_on_file === true || bcaDots.has(dot),
         is_factoring: ins?.is_factoring ?? null,
         noa_on_file: noaDots.has(dot),
       }

@@ -46,9 +46,9 @@ function businessTypeLabel(key: string): string {
   return key
 }
 
-// Documents a carrier is missing (that we'd chase for upload). Only counts a doc
-// as missing when we affirmatively know it's absent (=== false), not when the
-// underlying data is simply unknown (null).
+// Documents a carrier is missing (that we'd chase for upload). The API sets each
+// on-file flag from RMIS OR a portal upload, so `false` means no evidence exists
+// anywhere (incl. carriers with no RMIS record) — those count as missing.
 const MISSING_DOC_LABELS: Record<string, string> = {
   w9: 'W-9',
   agreement: 'Broker-Carrier Agreement',

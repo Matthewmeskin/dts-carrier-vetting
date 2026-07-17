@@ -575,29 +575,6 @@ export function VettingChecklist({
                   />
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-dts-blue/20 pt-3">
-                <Button onClick={save} disabled={saving}>
-                  {saving ? <Spinner size={14} className="text-white" /> : null}
-                  {saving ? 'Saving…' : 'Save vetting record'}
-                </Button>
-                {folderUrl && (
-                  <a
-                    href={folderUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium text-dts-blue hover:underline"
-                  >
-                    Open Drive folder →
-                  </a>
-                )}
-                {message && (
-                  <span className="text-sm text-gray-600">{message}</span>
-                )}
-                <span className="ml-auto text-xs text-gray-500">
-                  Setting a final status records the vetting &amp; starts the
-                  re-vet clock.
-                </span>
-              </div>
             </div>
 
             {showException && (
@@ -788,7 +765,28 @@ export function VettingChecklist({
               })}
             </div>
 
-
+            {/* Save is the final action — after the decision, notes, and the
+                full checklist — so you fill everything out then save. */}
+            <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-4">
+              <Button onClick={save} disabled={saving}>
+                {saving ? <Spinner size={14} className="text-white" /> : null}
+                {saving ? 'Saving…' : 'Save vetting record'}
+              </Button>
+              {folderUrl && (
+                <a
+                  href={folderUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-dts-blue hover:underline"
+                >
+                  Open Drive folder →
+                </a>
+              )}
+              {message && <span className="text-sm text-gray-600">{message}</span>}
+              <span className="ml-auto text-xs text-gray-500">
+                Setting a final status records the vetting &amp; starts the re-vet clock.
+              </span>
+            </div>
           </div>
         ) : (
           <HistoryTab

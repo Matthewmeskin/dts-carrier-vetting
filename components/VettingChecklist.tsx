@@ -344,12 +344,33 @@ export function VettingChecklist({
   }, [checklist])
 
   function updateStep(id: string, patch: Partial<ChecklistStep>) {
-    // A human toggling the box overrides any auto state — record that.
-    const withSource =
-      'completed' in patch ? { ...patch, source: 'manual' as const } : patch
+    // A human toggling the box overrides any auto state — record who + when and
+    // log the check/uncheck to the activity timeline (audit trail).
+    if ('completed' in patch) {
+      const step = checklist.steps.find((s) => s.id === id)
+      const withSource: Partial<ChecklistStep> = {
+        ...patch,
+        source: 'manual',
+        completedBy: me?.name || undefined,
+        completedAt: new Date().toISOString(),
+      }
+      setChecklist((c) => ({
+        ...c,
+        steps: c.steps.map((s) => (s.id === id ? { ...s, ...withSource } : s)),
+      }))
+      if (step) {
+        // Fire-and-forget: logging must never block the toggle.
+        fetch(`/api/carriers/${dot}/checklist-event`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: step.label, checked: !!patch.completed }),
+        }).catch(() => {})
+      }
+      return
+    }
     setChecklist((c) => ({
       ...c,
-      steps: c.steps.map((s) => (s.id === id ? { ...s, ...withSource } : s)),
+      steps: c.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)),
     }))
   }
 
@@ -711,7 +732,7 @@ export function VettingChecklist({
                             {open ? 'Hide details' : 'Details'}
                           </button>
                         </div>
-                        {(s.autoStatus || s.evidence) && (
+                        {(s.autoStatus || s.evidence || (s.source === 'manual' && s.completedBy)) && (
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             {s.autoStatus === 'pass' && (
                               <Badge tone={s.source === 'manual' ? 'amber' : 'green'}>
@@ -731,6 +752,12 @@ export function VettingChecklist({
                             {s.evidence && (
                               <span className="text-xs text-gray-500">
                                 {s.evidence}
+                              </span>
+                            )}
+                            {s.source === 'manual' && s.completedBy && (
+                              <span className="text-xs text-gray-400">
+                                · {s.completed ? 'checked' : 'set'} by {s.completedBy}
+                                {s.completedAt ? ` · ${formatDateTime(s.completedAt)}` : ''}
                               </span>
                             )}
                           </div>

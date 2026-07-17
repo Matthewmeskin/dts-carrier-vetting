@@ -16,6 +16,7 @@ export type CarrierEventType =
   | 'insurance_refresh_request'
   | 'insurance_refresh_response'
   | 'hard_stop'
+  | 'checklist_change'
 
 export interface CarrierEventInput {
   dot: string

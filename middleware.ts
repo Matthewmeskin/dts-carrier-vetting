@@ -10,9 +10,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
 
-  // Master switch — leave unset until the first users exist, so deploying the
-  // login code can't lock anyone out. Set AUTH_ENABLED=true to enforce.
-  if (process.env.AUTH_ENABLED !== 'true') return response
+  // Login is enforced by default now that users exist. Kill switch: set
+  // AUTH_ENABLED=false to turn the gate back off (e.g. if it ever locks people out).
+  if (process.env.AUTH_ENABLED === 'false') return response
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

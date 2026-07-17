@@ -57,7 +57,7 @@ export async function PATCH(
     // (§9.4). Restrictive statuses (Decline/Suspend/Do Not Use/Pending) and
     // clean approvals are open to any signed-in user. Only enforced once auth
     // is turned on.
-    const authOn = process.env.AUTH_ENABLED === 'true'
+    const authOn = process.env.AUTH_ENABLED !== 'false'
     const user = await getSessionUser()
     if (authOn && !user) {
       return NextResponse.json({ error: 'Not signed in' }, { status: 401 })

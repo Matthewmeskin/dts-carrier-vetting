@@ -228,24 +228,42 @@ export default function CarrierDetailPage({
                 const addrSource = rmisAddr
                   ? 'Physical address (RMIS/DOT)'
                   : 'Physical address (Brokerware/TMS)'
-                if (!addr && !carrier.phone && !carrier.email) return null
+                // Prefer the carrier's real contact from RMIS over the
+                // Brokerware/TMS value (which is often a placeholder like
+                // na@na.com); fall back to TMS when RMIS has none.
+                const rmisEmail = insurance?.rmis_email || null
+                const rmisPhone = insurance?.rmis_phone || null
+                const email = rmisEmail || carrier.email
+                const phone = rmisPhone || carrier.phone
+                const contactName = insurance?.rmis_contact_name || null
+                const contactTitle = insurance?.rmis_contact_title || null
+                const emailTitle = rmisEmail
+                  ? `Carrier contact (RMIS)${
+                      contactName
+                        ? ` — ${contactName}${contactTitle ? `, ${contactTitle}` : ''}`
+                        : ''
+                    }`
+                  : 'Contact email (Brokerware/TMS)'
+                if (!addr && !phone && !email) return null
                 return (
                   <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
                     {addr && <span title={addrSource}>{addr}</span>}
-                    {carrier.phone && (
+                    {phone && (
                       <a
-                        href={`tel:${carrier.phone.replace(/[^0-9+]/g, '')}`}
+                        href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
                         className="text-dts-blue hover:underline"
+                        title={rmisPhone ? 'Carrier phone (RMIS)' : 'Phone (Brokerware/TMS)'}
                       >
-                        {formatPhone(carrier.phone)}
+                        {formatPhone(phone)}
                       </a>
                     )}
-                    {carrier.email && (
+                    {email && (
                       <a
-                        href={`mailto:${carrier.email}`}
+                        href={`mailto:${email}`}
                         className="break-all text-dts-blue hover:underline"
+                        title={emailTitle}
                       >
-                        {carrier.email}
+                        {email}
                       </a>
                     )}
                   </div>

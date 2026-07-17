@@ -74,6 +74,12 @@ export interface ParsedRMISData {
   rmisCarrierCity: string
   rmisCarrierState: string
   rmisCarrierZip: string
+  // Carrier's primary contact from the RMIS packet (real email/phone the carrier
+  // filed with RMIS — preferred over the Brokerware/TMS placeholder).
+  rmisEmail: string
+  rmisPhone: string
+  rmisContactName: string
+  rmisContactTitle: string
   // Inspections
   usTotalInspections: number
   usVehicleOOSRatio: string
@@ -92,6 +98,14 @@ export interface ParsedRMISData {
 // Pull a tag's text value straight from the XML string (robust to nesting).
 function rawTag(xml: string, name: string): string {
   const m = new RegExp(`<${name}>([^<]*)</${name}>`, 'i').exec(xml)
+  return m ? m[1].trim() : ''
+}
+
+// First NON-empty occurrence of a tag — the carrier's primary contact block
+// (top-level <Contact>/<Title>/<Phone>/<Email>) leads the document, before the
+// typed <Contacts> collection, so the first non-empty value is the primary.
+function firstNonEmptyTag(xml: string, name: string): string {
+  const m = new RegExp(`<${name}>([^<]+)</${name}>`, 'i').exec(xml)
   return m ? m[1].trim() : ''
 }
 
@@ -257,6 +271,11 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
       rawTag(xmlString, 'Mailing_City') || rawTag(xmlString, 'dot_Business_City'),
     rmisCarrierState,
     rmisCarrierZip,
+
+    rmisEmail: firstNonEmptyTag(xmlString, 'Email'),
+    rmisPhone: firstNonEmptyTag(xmlString, 'Phone'),
+    rmisContactName: firstNonEmptyTag(xmlString, 'Contact'),
+    rmisContactTitle: firstNonEmptyTag(xmlString, 'Title'),
 
     usTotalInspections: Number(inspections.US_TotalInspections ?? 0),
     usVehicleOOSRatio: String(inspections.US_VehicleOOSRatio ?? '0%'),

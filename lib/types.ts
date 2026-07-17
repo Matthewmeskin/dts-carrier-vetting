@@ -127,6 +127,10 @@ export interface InsuranceRecord {
   rmis_carrier_city: string | null
   rmis_carrier_state: string | null
   rmis_carrier_zip: string | null
+  rmis_email: string | null
+  rmis_phone: string | null
+  rmis_contact_name: string | null
+  rmis_contact_title: string | null
   rmis_legal_name: string | null
   rmis_dba_name: string | null
   rmis_eld_enrolled: boolean | null

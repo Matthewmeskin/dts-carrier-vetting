@@ -444,7 +444,7 @@ export function VettingChecklist({
                   : 'text-gray-500'
               )}
             >
-              History ({vettingRecords.length})
+              History{vettingRecords.length > 0 ? ` (${vettingRecords.length})` : ''}
             </button>
           </div>
         }

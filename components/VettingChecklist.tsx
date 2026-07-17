@@ -717,6 +717,7 @@ export function VettingChecklist({
                                   : 'Failed policy'}
                               </Badge>
                             )}
+                            {s.autoWarn && <Badge tone="amber">{s.autoWarn}</Badge>}
                             {s.evidence && (
                               <span className="text-xs text-gray-500">
                                 {s.evidence}

@@ -60,6 +60,8 @@ export interface ChecklistStep {
   autoStatus?: AutoStatus
   /** Human-readable evidence backing the auto evaluation (shown inline). */
   evidence?: string
+  /** Non-blocking caveat on a passing step (e.g. coverage due to expire). */
+  autoWarn?: string | null
   /** Provenance of the current checked state. */
   source?: 'auto' | 'manual'
 }
@@ -280,12 +282,51 @@ export interface ChecklistAutoInputs {
 interface StepEval {
   status: AutoStatus
   evidence: string
+  /** Non-blocking caveat on a passing step (e.g. coverage due to expire). */
+  warn?: string
 }
 
 function isActiveStatus(s: string | null | undefined): boolean {
   if (!s) return false
   const v = s.trim().toLowerCase()
   return v === 'active' || v === 'valid' || v === 'a'
+}
+
+// Coverage is "on file" for the checklist unless it is actually lapsed. A
+// Due-To-Expire policy that still meets the limit and hasn't passed its
+// expiration date PASSES (checked) but is flagged as due to expire — only a
+// truly expired / cancelled / missing policy (or one past its date) fails.
+function coverageState(
+  status: string | null | undefined,
+  limit: number | null | undefined,
+  min: number,
+  expDate: string | null | undefined
+): { pass: boolean; dueToExpire: boolean } {
+  const s = (status || '').trim().toLowerCase()
+  const meetsLimit = (limit ?? 0) >= min
+  let past = false
+  if (expDate) {
+    const exp = new Date(expDate)
+    if (!isNaN(exp.getTime())) {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      past = exp.getTime() < today.getTime()
+    }
+  }
+  const lapsed =
+    past ||
+    s.includes('expired') ||
+    s.includes('cancel') ||
+    s.includes('lapsed') ||
+    s.includes('no-current') ||
+    s.includes('no current') ||
+    s === 'none' ||
+    s === ''
+  const covered =
+    !lapsed && (isActiveStatus(status) || s.includes('expire') || s.includes('due'))
+  const pass = meetsLimit && covered
+  const dueToExpire = pass && (s.includes('expire') || s.includes('due'))
+  return { pass, dueToExpire }
 }
 
 function computeAutoEvaluations(
@@ -345,21 +386,38 @@ function computeAutoEvaluations(
     }
   }
 
-  // Auto liability ≥ $1M
+  // Auto liability ≥ $1M — passes while coverage is on file (incl. Due-To-Expire),
+  // only fails when truly lapsed/insufficient; flagged when due to expire.
   if (ins && (ins.auto_status || ins.auto_limit != null)) {
-    const ok = isActiveStatus(ins.auto_status) && (ins.auto_limit ?? 0) >= AUTO_AUTO_LIABILITY_MIN
+    const cs = coverageState(
+      ins.auto_status,
+      ins.auto_limit,
+      AUTO_AUTO_LIABILITY_MIN,
+      ins.auto_expiration_date
+    )
     out.auto_liability = {
-      status: ok ? 'pass' : 'fail',
+      status: cs.pass ? 'pass' : 'fail',
       evidence: `${formatCurrency(ins.auto_limit)} ${ins.auto_status ?? '—'}${ins.auto_expiration_date ? `, exp ${formatDate(ins.auto_expiration_date)}` : ''}`,
+      warn: cs.dueToExpire
+        ? `Due to expire${ins.auto_expiration_date ? ` — exp ${formatDate(ins.auto_expiration_date)}` : ''}`
+        : undefined,
     }
   }
 
-  // Cargo coverage ≥ $100K
+  // Cargo coverage ≥ $100K — same rule as auto liability.
   if (ins && (ins.cargo_status || ins.cargo_limit != null)) {
-    const ok = isActiveStatus(ins.cargo_status) && (ins.cargo_limit ?? 0) >= AUTO_CARGO_MIN
+    const cs = coverageState(
+      ins.cargo_status,
+      ins.cargo_limit,
+      AUTO_CARGO_MIN,
+      ins.cargo_expiration_date
+    )
     out.cargo_coverage = {
-      status: ok ? 'pass' : 'fail',
+      status: cs.pass ? 'pass' : 'fail',
       evidence: `${formatCurrency(ins.cargo_limit)} ${ins.cargo_status ?? '—'}${ins.cargo_expiration_date ? `, exp ${formatDate(ins.cargo_expiration_date)}` : ''}`,
+      warn: cs.dueToExpire
+        ? `Due to expire${ins.cargo_expiration_date ? ` — exp ${formatDate(ins.cargo_expiration_date)}` : ''}`
+        : undefined,
     }
   }
 
@@ -562,7 +620,9 @@ export function attachAutoEvidence(
     ...checklist,
     steps: checklist.steps.map((s) => {
       const e = evals[s.id]
-      return e ? { ...s, autoStatus: e.status, evidence: e.evidence } : s
+      return e
+        ? { ...s, autoStatus: e.status, evidence: e.evidence, autoWarn: e.warn ?? null }
+        : s
     }),
   }
 }

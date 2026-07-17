@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DTS Carrier Compliance Portal">
+  <defs>
+    <linearGradient id="speed" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.30"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="13" fill="#8a1a2c"/>
+  <text x="31" y="40" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif"
+        font-weight="900" font-style="italic" font-size="27" letter-spacing="-2.5" fill="#ffffff">DTS</text>
+  <g fill="url(#speed)">
+    <polygon points="19,46 49,46 45,49.5 15,49.5"/>
+    <polygon points="22,51.5 49,51.5 45,55 18,55"/>
+  </g>
+</svg>

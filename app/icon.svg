@@ -1,26 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DTS — Diversified Transportation Services">
-  <defs>
-    <linearGradient id="swoosh" x1="0" y1="1" x2="1" y2="0.2">
-      <stop offset="0" stop-color="#8f8f8f" stop-opacity="0"/>
-      <stop offset="0.55" stop-color="#8f8f8f" stop-opacity="0.95"/>
-      <stop offset="1" stop-color="#cfcfcf" stop-opacity="0.15"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="12" fill="#ffffff"/>
-  <!-- swoosh curving up behind the letters -->
-  <path d="M5 49 A 27 17 0 0 1 51 27" fill="none" stroke="url(#swoosh)" stroke-width="3.3" stroke-linecap="round"/>
-  <!-- speed lines trailing off the S -->
-  <g stroke="#111111" stroke-linecap="round">
-    <line x1="31" y1="53.5" x2="60" y2="53.5" stroke-width="2.2"/>
-    <line x1="34" y1="58" x2="60" y2="58" stroke-width="2.2"/>
-  </g>
-  <!-- stacked D / T / S: black drop-shadow, then brand red -->
-  <g font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-style="italic" font-size="30">
-    <text x="5.6" y="30.4" fill="#000000">D</text>
-    <text x="19.6" y="45.4" fill="#000000">T</text>
-    <text x="29.6" y="60.4" fill="#000000">S</text>
-    <text x="4.5" y="29.3" fill="#c0182c">D</text>
-    <text x="18.5" y="44.3" fill="#c0182c">T</text>
-    <text x="28.5" y="59.3" fill="#c0182c">S</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DTS — trucking">
+  <rect width="64" height="64" rx="12" fill="#c0182c"/>
+  <!-- cargo box -->
+  <rect x="6" y="17" width="35" height="25" rx="2.5" fill="#ffffff"/>
+  <!-- cab -->
+  <path d="M41 24 h11 l6 8 v10 h-17 z" fill="#ffffff"/>
+  <!-- windshield -->
+  <path d="M43.5 26.5 h7.5 l4.5 6 h-12 z" fill="#c0182c"/>
+  <!-- wheels -->
+  <circle cx="17" cy="45" r="5.5" fill="#1a1a1a"/>
+  <circle cx="47" cy="45" r="5.5" fill="#1a1a1a"/>
+  <circle cx="17" cy="45" r="2" fill="#ffffff"/>
+  <circle cx="47" cy="45" r="2" fill="#ffffff"/>
+  <!-- DTS on the trailer -->
+  <text x="23.5" y="35" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="13" fill="#c0182c">DTS</text>
 </svg>

@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
       supabaseAdmin
         .from('vetting_documents')
         .select('dot_number, document_type')
-        .in('document_type', ['noa', 'broker_carrier_agreement', 'w9'])
+        .in('document_type', ['noa', 'broker_carrier_agreement', 'tariff', 'w9'])
         .limit(100000),
     ])
     if (carriersRes.error) throw carriersRes.error
@@ -146,7 +146,16 @@ export async function GET(request: NextRequest) {
         portalDocs.filter((r) => r.document_type === type).map((r) => String(r.dot_number))
       )
     const noaDots = dotsWithDoc('noa')
-    const bcaDots = dotsWithDoc('broker_carrier_agreement')
+    // A signed BCA OR a carrier tariff / alternate agreement satisfies the
+    // agreement requirement (some carriers, e.g. LTL/ABF, won't sign ours).
+    const bcaDots = new Set<string>(
+      portalDocs
+        .filter(
+          (r) =>
+            r.document_type === 'broker_carrier_agreement' || r.document_type === 'tariff'
+        )
+        .map((r) => String(r.dot_number))
+    )
     const w9PortalDots = dotsWithDoc('w9')
 
     let merged: CarrierSummary[] = (carriers ?? []).map((c: any) => {

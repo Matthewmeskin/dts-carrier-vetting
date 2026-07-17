@@ -202,8 +202,8 @@ export function createDefaultChecklist(): VettingChecklist {
       {
         id: 'broker_carrier_agreement',
         category: 'verification',
-        label: 'Executed broker-carrier agreement on file (RMIS or portal)',
-        description: 'Agreement must be executed — either on file in RMIS (Agree = Yes) or a signed copy uploaded to the portal. Verify title and date.',
+        label: 'Executed broker-carrier agreement — or carrier tariff / alternate agreement — on file',
+        description: 'An executed broker-carrier agreement (RMIS Agree = Yes or a signed copy in the portal) OR, for carriers that operate under their own terms (e.g. LTL carriers like ABF), their carrier tariff / alternate agreement uploaded to the portal.',
         policyRef: 'Section 6',
         required: true,
         completed: false,
@@ -484,20 +484,25 @@ function computeAutoEvaluations(
     }
   }
 
-  // Executed broker-carrier agreement — satisfied by the RMIS flag OR a copy
-  // uploaded to the portal. It doesn't need to be in RMIS if we hold a copy.
+  // Executed broker-carrier agreement — satisfied by the RMIS flag OR a copy in
+  // the portal OR, for carriers that won't sign ours (e.g. LTL/ABF), a carrier
+  // tariff / alternate agreement uploaded to the portal.
   {
     const rmisOn = ins?.broker_carrier_agreement_on_file
-    const portalOn = docTypes.has('broker_carrier_agreement')
+    const portalBca = docTypes.has('broker_carrier_agreement')
+    const portalTariff = docTypes.has('tariff')
+    const portalOn = portalBca || portalTariff
     if (rmisOn != null || portalOn) {
       const on = rmisOn === true || portalOn
       out.broker_carrier_agreement = {
         status: on ? 'pass' : 'fail',
         evidence: !on
-          ? 'Not on file in RMIS or the portal'
+          ? 'No broker-carrier agreement or tariff on file (RMIS or portal)'
           : rmisOn === true
-            ? `On file in RMIS${ins?.broker_carrier_agreement_date ? ` (${formatDate(ins.broker_carrier_agreement_date)})` : ''}${portalOn ? ' · copy in portal' : ''}`
-            : 'Copy uploaded to portal',
+            ? `Agreement on file in RMIS${ins?.broker_carrier_agreement_date ? ` (${formatDate(ins.broker_carrier_agreement_date)})` : ''}${portalOn ? ' · copy in portal' : ''}`
+            : portalTariff
+              ? 'Carrier tariff / alternate agreement uploaded to portal'
+              : 'Broker-carrier agreement uploaded to portal',
       }
     }
   }

@@ -11,6 +11,7 @@ import { formatDate } from '@/lib/utils'
 
 const DOC_TYPES = [
   { value: 'broker_carrier_agreement', label: 'Broker-Carrier Agreement' },
+  { value: 'tariff', label: 'Carrier Tariff / Alt. Agreement' },
   { value: 'w9', label: 'W-9' },
   { value: 'insurance_cert', label: 'Insurance Certificate' },
   { value: 'noa', label: 'Notice of Assignment (NOA)' },

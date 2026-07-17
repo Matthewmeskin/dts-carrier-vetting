@@ -58,6 +58,7 @@ const REVET_TONE: Record<RevetState, BadgeTone> = {
 const ATTACH_TYPES = [
   { value: 'exception_note', label: 'Exception Note' },
   { value: 'broker_carrier_agreement', label: 'Broker-Carrier Agreement' },
+  { value: 'tariff', label: 'Carrier Tariff / Alt. Agreement' },
   { value: 'w9', label: 'W-9' },
   { value: 'insurance_cert', label: 'Insurance Certificate' },
   { value: 'noa', label: 'Notice of Assignment (NOA)' },

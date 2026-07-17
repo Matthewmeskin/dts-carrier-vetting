@@ -51,7 +51,7 @@ function businessTypeLabel(key: string): string {
 // anywhere (incl. carriers with no RMIS record) — those count as missing.
 const MISSING_DOC_LABELS: Record<string, string> = {
   w9: 'W-9',
-  agreement: 'Broker-Carrier Agreement',
+  agreement: 'Broker-Carrier Agreement / Tariff',
   noa: 'NOA (factoring)',
 }
 function carrierMissingDocs(c: CarrierSummary): string[] {

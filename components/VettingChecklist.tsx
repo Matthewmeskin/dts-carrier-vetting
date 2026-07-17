@@ -106,6 +106,7 @@ export function VettingChecklist({
   vettingRecords,
   onSaved,
   carrierStatus,
+  statusSetBy,
   onCarrierStatusChange,
   revetIntervalDays,
   onRevetIntervalChange,
@@ -124,6 +125,7 @@ export function VettingChecklist({
   vettingRecords: VettingRecord[]
   onSaved?: () => void | Promise<void>
   carrierStatus: string | null
+  statusSetBy?: { actor: string | null; at: string | null } | null
   onCarrierStatusChange: (status: string) => void
   revetIntervalDays: number | null
   onRevetIntervalChange: (days: number) => void
@@ -761,21 +763,57 @@ export function VettingChecklist({
 
           </div>
         ) : (
-          <HistoryTab records={vettingRecords} />
+          <HistoryTab
+            records={vettingRecords}
+            currentStatus={carrierStatus}
+            statusSetBy={statusSetBy ?? null}
+          />
         )}
       </CardBody>
     </Card>
   )
 }
 
-function HistoryTab({ records }: { records: VettingRecord[] }) {
+function HistoryTab({
+  records,
+  currentStatus,
+  statusSetBy,
+}: {
+  records: VettingRecord[]
+  currentStatus: string | null
+  statusSetBy?: { actor: string | null; at: string | null } | null
+}) {
   const [open, setOpen] = useState<Record<string, boolean>>({})
-  if (records.length === 0) {
-    return <p className="text-sm text-gray-500">No prior vetting records.</p>
-  }
   return (
-    <ol className="space-y-3">
-      {records.map((r) => {
+    <div className="space-y-3">
+      {/* Current decision — so the standing status is never ambiguous even when
+          it was set via the quick status dropdown rather than a saved vetting. */}
+      <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3">
+        <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          Current decision
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <Badge tone={carrierStatusTone(currentStatus)}>
+            {currentStatus || 'Pending Review'}
+          </Badge>
+          {statusSetBy?.at && (
+            <span className="text-xs text-gray-500">
+              set {statusSetBy.actor ? `by ${statusSetBy.actor} ` : ''}on{' '}
+              {formatDateTime(statusSetBy.at)}
+            </span>
+          )}
+        </div>
+        {records.length === 0 && (
+          <p className="mt-2 text-xs text-gray-500">
+            No full vetting saved yet. This status was set via the quick status
+            change — use “Save” in Active Vetting to record a documented review here.
+          </p>
+        )}
+      </div>
+
+      {records.length === 0 ? null : (
+        <ol className="space-y-3">
+          {records.map((r) => {
         const cl = r.checklist as VettingChecklistType | null
         return (
           <li key={r.id} className="rounded-md border border-gray-200">
@@ -851,8 +889,10 @@ function HistoryTab({ records }: { records: VettingRecord[] }) {
               </div>
             )}
           </li>
-        )
-      })}
-    </ol>
+            )
+          })}
+        </ol>
+      )}
+    </div>
   )
 }

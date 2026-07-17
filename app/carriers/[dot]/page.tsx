@@ -323,6 +323,12 @@ export default function CarrierDetailPage({
         vettingRecords={vettingRecords}
         onSaved={load}
         carrierStatus={carrier.carrier_status}
+        statusSetBy={(() => {
+          const e = (events ?? []).find(
+            (x: any) => x.event_type === 'status_change' && /status\s*→/i.test(x.summary || '')
+          )
+          return e ? { actor: e.actor ?? null, at: e.created_at ?? null } : null
+        })()}
         onCarrierStatusChange={updateStatus}
         revetIntervalDays={carrier.revet_interval_days}
         onRevetIntervalChange={updateRevetInterval}

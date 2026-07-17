@@ -273,12 +273,6 @@ export function VettingChecklist({
         }${insurance?.operating_status ? `; status: ${insurance.operating_status}` : ''}`
       )
     if (safetyRating) snap.push(`- FMCSA safety rating: ${safetyRating}`)
-    if (insurance?.us_total_inspections != null)
-      snap.push(
-        `- US inspections: ${insurance.us_total_inspections}` +
-          (insurance.us_vehicle_oos_ratio ? `, vehicle OOS ${insurance.us_vehicle_oos_ratio}` : '') +
-          (insurance.us_driver_oos_ratio ? `, driver OOS ${insurance.us_driver_oos_ratio}` : '')
-      )
     if (insurance?.auto_status) {
       const lim = money(insurance.auto_limit)
       const exp = fmt(insurance.auto_expiration_date)

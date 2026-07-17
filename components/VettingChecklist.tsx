@@ -194,6 +194,14 @@ export function VettingChecklist({
   )
   const [reviewedBy, setReviewedBy] = useState(latest?.reviewed_by || '')
   const [approvedBy, setApprovedBy] = useState(latest?.approved_by || '')
+  // Re-vet cadence is held locally and only persisted on Save, so toggling the
+  // dropdown to compare options doesn't write (and log) a change each time.
+  const [pendingInterval, setPendingInterval] = useState<number>(
+    revetIntervalDays ?? 120
+  )
+  useEffect(() => {
+    setPendingInterval(revetIntervalDays ?? 120)
+  }, [revetIntervalDays])
   const [exceptionNote, setExceptionNote] = useState(
     latest?.exception_note || ''
   )
@@ -401,6 +409,11 @@ export function VettingChecklist({
       } else {
         setMessage('Vetting record saved.')
       }
+      // Persist the re-vet cadence only now (on Save), and only if it changed —
+      // so it logs one activity entry instead of one per dropdown toggle.
+      if (pendingInterval !== (revetIntervalDays ?? 120)) {
+        await onRevetIntervalChange(pendingInterval)
+      }
       await onSaved?.()
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Save failed')
@@ -480,9 +493,9 @@ export function VettingChecklist({
                 <div>
                   <Select
                     label="Re-vetting cadence"
-                    value={String(revetIntervalDays ?? 120)}
+                    value={String(pendingInterval)}
                     disabled={statusSaving || revetDisabled}
-                    onChange={(e) => onRevetIntervalChange(Number(e.target.value))}
+                    onChange={(e) => setPendingInterval(Number(e.target.value))}
                   >
                     {REVET_INTERVAL_OPTIONS.map((d) => (
                       <option key={d} value={d}>

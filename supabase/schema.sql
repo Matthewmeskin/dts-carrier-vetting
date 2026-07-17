@@ -364,3 +364,28 @@ returns jsonb language sql stable as $$
   where cs.dot_number = p_dot order by cs.checked_at desc nulls last limit 1;
 $$;
 grant execute on function get_carrier_sos(text) to anon, authenticated, service_role;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Security hardening (applied via migration security_hardening_rls_and_functions)
+-- The app reads/writes exclusively via the service-role key (server API routes),
+-- which bypasses RLS — so RLS is enabled with NO policies (deny-all for anon /
+-- authenticated) on internal tables, locking down the public PostgREST API.
+-- ─────────────────────────────────────────────────────────────────────────────
+alter table if exists public.carrier_events     enable row level security;
+alter table if exists public.carrier_sos        enable row level security;
+alter table if exists public.eld_fleet_pulls    enable row level security;
+alter table if exists public.eld_vehicle_pings  enable row level security;
+alter table if exists public.email_digests      enable row level security;
+alter table if exists public.factors            enable row level security;
+alter table if exists public.noa_verifications  enable row level security;
+alter table if exists public.rmis_lock          enable row level security;
+
+alter view if exists public.latest_carrier_insurance set (security_invoker = on);
+
+alter function public._norm_entity(x text) set search_path = public, pg_temp;
+alter function public.acquire_rmis_lock(p_holder text, p_ttl_seconds integer) set search_path = public, pg_temp;
+alter function public.get_carrier_sos(p_dot text) set search_path = public, pg_temp;
+alter function public.release_rmis_lock(p_holder text) set search_path = public, pg_temp;
+alter function public.handle_new_user() set search_path = public, pg_temp;
+
+revoke execute on function public.handle_new_user() from anon, authenticated, public;

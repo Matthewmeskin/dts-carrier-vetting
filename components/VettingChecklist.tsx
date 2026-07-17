@@ -136,11 +136,16 @@ export function VettingChecklist({
 
   // Signed-in user's role — gates which approving statuses they may set.
   const [role, setRole] = useState<Role | null>(null)
+  // Signed-in user's identity, used to auto-fill the exception-note reviewer/approver.
+  const [me, setMe] = useState<{ name: string; role: Role } | null>(null)
   useEffect(() => {
     fetch('/api/me', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d?.user?.role) setRole(d.user.role)
+        if (d?.user?.role) {
+          setRole(d.user.role)
+          setMe({ name: d.user.fullName || d.user.email || '', role: d.user.role })
+        }
       })
       .catch(() => {})
   }, [])
@@ -204,6 +209,124 @@ export function VettingChecklist({
 
   const percent = checklistCompletionPercent(checklist)
   const summary = useMemo(() => autoSummary(checklist), [checklist])
+
+  // Build a defensible, mostly-factual exception memo: auto-fill the objective
+  // record (who/when, what was reviewed, the issues the checks raised, a data
+  // snapshot) and leave the judgment sections (mitigating factors, controls,
+  // scope) blank for the reviewer to write in their own words.
+  function buildExceptionPrefill(): string {
+    const today = new Date().toLocaleDateString('en-US')
+    const roleLabel = me ? ROLE_LABEL[me.role] ?? me.role : ''
+    const reviewer = me?.name ? `${me.name} (${roleLabel})` : '[YOUR NAME / ROLE]'
+    const approver = me?.name ? `${me.name}, ${roleLabel}` : '[Name, Title]'
+    const fmt = (d?: string | null) =>
+      d ? new Date(d).toLocaleDateString('en-US', { timeZone: 'UTC' }) : null
+    const money = (n?: number | null) =>
+      n != null ? `$${Number(n).toLocaleString('en-US')}` : null
+
+    const steps = checklist.steps as any[]
+    const failing = steps.filter((s) => s.required && s.autoStatus === 'fail')
+    const openReview = steps.filter(
+      (s) => s.required && !s.completed && s.autoStatus !== 'fail'
+    )
+    const issueLines = [
+      ...failing.map((s) => `- Policy not met: ${s.label} (${s.policyRef})`),
+      ...openReview.map((s) => `- Needs human review: ${s.label} (${s.policyRef})`),
+    ]
+    const issues = issueLines.length
+      ? issueLines.join('\n')
+      : '[Describe the specific non-hard-stop issue — e.g., "Carrier has 45 days of authority and limited inspection history"]'
+
+    const reviewed: string[] = []
+    if (score) {
+      const rel = fmt((score as any).release_month)
+      const up = fmt((score as any).upload_date)
+      reviewed.push(
+        `- Bluewire safety scores${rel ? ` (release ${rel})` : ''}${up ? `, uploaded ${up}` : ''}`
+      )
+    }
+    if (insurance) {
+      const f = fmt(insurance.fetched_at)
+      reviewed.push(`- RMIS insurance & authority data${f ? ` (pulled ${f})` : ''}`)
+    }
+    if (safetyRating) reviewed.push('- FMCSA safety rating')
+    if (sos) reviewed.push('- Secretary of State business registration')
+    reviewed.push(
+      '- [Add any: direct carrier conversation, OSINT / web search, references, prior load history]'
+    )
+
+    const snap: string[] = []
+    const authDate = fmt(insurance?.authority_original_date)
+    const days = insurance?.authority_days_active
+    if (authDate || days != null)
+      snap.push(
+        `- Operating authority granted${authDate ? ` ${authDate}` : ''}${
+          days != null ? ` (${days} days active)` : ''
+        }${insurance?.operating_status ? `; status: ${insurance.operating_status}` : ''}`
+      )
+    if (safetyRating) snap.push(`- FMCSA safety rating: ${safetyRating}`)
+    if (insurance?.us_total_inspections != null)
+      snap.push(
+        `- US inspections: ${insurance.us_total_inspections}` +
+          (insurance.us_vehicle_oos_ratio ? `, vehicle OOS ${insurance.us_vehicle_oos_ratio}` : '') +
+          (insurance.us_driver_oos_ratio ? `, driver OOS ${insurance.us_driver_oos_ratio}` : '')
+      )
+    if (insurance?.auto_status) {
+      const lim = money(insurance.auto_limit)
+      const exp = fmt(insurance.auto_expiration_date)
+      snap.push(
+        `- Auto liability: ${insurance.auto_status}${lim ? `, limit ${lim}` : ''}${exp ? `, expires ${exp}` : ''}`
+      )
+    }
+    if (insurance?.cargo_status) {
+      const lim = money(insurance.cargo_limit)
+      const exp = fmt(insurance.cargo_expiration_date)
+      snap.push(
+        `- Cargo: ${insurance.cargo_status}${lim ? `, limit ${lim}` : ''}${exp ? `, expires ${exp}` : ''}`
+      )
+    }
+    if (score) {
+      const gap = (score as any).gap_score
+      const flagged = ((score as any).flagged_scores as string[] | null) || []
+      snap.push(
+        `- Bluewire GAP score: ${gap != null ? gap : '—'}; flagged categories: ${
+          flagged.length ? flagged.join(', ') : 'none'
+        }`
+      )
+    }
+    const snapshot = snap.length ? snap.join('\n') : '- [No RMIS / Bluewire snapshot on file]'
+
+    const typeLabel = VETTING_TYPES.find((t) => t.value === vettingType)?.label ?? vettingType
+
+    return [
+      'CARRIER EXCEPTION / REASONABLE-CARE MEMO',
+      '',
+      `Carrier: ${carrierName || '[CARRIER NAME]'}, USDOT ${dot}`,
+      `Review date: ${today}`,
+      `Reviewed by: ${reviewer}`,
+      `Vetting type: ${typeLabel}`,
+      '',
+      'ISSUE(S) IDENTIFIED',
+      issues,
+      '',
+      'INFORMATION REVIEWED',
+      reviewed.join('\n'),
+      '',
+      'CARRIER SNAPSHOT (as of review date)',
+      snapshot,
+      '',
+      'MITIGATING FACTORS',
+      '[Describe why this carrier is still appropriate despite the issue — prior experience, low-risk freight, strong insurance, references, etc. Write this in your own words.]',
+      '',
+      'OPERATIONAL CONTROLS REQUIRED',
+      '[List controls — one-load limit, live ELD tracking, direct insurance verification, pickup verification, etc.]',
+      '',
+      'APPROVAL',
+      'Approved for: [Scope — one load / specific lane / specific date range]',
+      `Approved by: ${approver}`,
+      `Date: ${today}`,
+    ].join('\n')
+  }
 
   const showException = useMemo(() => {
     const anyRequiredIncomplete = checklist.steps.some(
@@ -452,6 +575,7 @@ export function VettingChecklist({
                 onChange={setExceptionNote}
                 carrierName={carrierName}
                 dotNumber={dot}
+                onBuildPrefill={buildExceptionPrefill}
               />
             )}
 

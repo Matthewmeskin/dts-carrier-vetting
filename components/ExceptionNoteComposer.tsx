@@ -9,13 +9,21 @@ export function ExceptionNoteComposer({
   onChange,
   carrierName,
   dotNumber,
+  onBuildPrefill,
 }: {
   value: string
   onChange: (v: string) => void
   carrierName?: string | null
   dotNumber: string
+  // When provided, builds a data-populated memo (reviewer, issues, snapshot);
+  // otherwise falls back to the static template.
+  onBuildPrefill?: () => string
 }) {
   function prefill() {
+    if (onBuildPrefill) {
+      onChange(onBuildPrefill())
+      return
+    }
     const filled = EXCEPTION_NOTE_TEMPLATE.replace(
       '[CARRIER NAME]',
       carrierName || '[CARRIER NAME]'

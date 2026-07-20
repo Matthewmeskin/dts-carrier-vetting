@@ -389,3 +389,13 @@ alter function public.release_rmis_lock(p_holder text) set search_path = public,
 alter function public.handle_new_user() set search_path = public, pg_temp;
 
 revoke execute on function public.handle_new_user() from anon, authenticated, public;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Carrier haul activity (Policy §4). Most-recent pickup date on which a carrier
+-- hauled a load for DTS, sourced daily from the TMS (Hyperion GetLoads) and
+-- matched to the carrier by MC number. Powers the "not hauled in N days"
+-- dormancy signal; it does NOT reset the re-vet clock (an actively-hauling
+-- carrier still ages into scheduled re-vetting).
+-- ─────────────────────────────────────────────────────────────────────────────
+alter table carriers add column if not exists last_hauled_at timestamptz;
+create index if not exists idx_carriers_mc_number on carriers (mc_number);

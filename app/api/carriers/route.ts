@@ -38,6 +38,7 @@ interface CarrierSummary {
   hard_stops: string[] | null
   insurance_fetched_at: string | null
   last_reviewed: string | null
+  last_hauled_at: string | null
   revet_interval_days: number | null
   created_at: string | null
   brokerware_status: string | null
@@ -201,6 +202,9 @@ export async function GET(request: NextRequest) {
         // The re-vet clock anchors to the later of the last completed vetting and
         // any auto-recertification (score upload + RMIS still certified).
         last_reviewed: maxIso(v?.completed_at ?? null, c.revet_reset_at ?? null),
+        // Most-recent haul date from the TMS (Policy §4 dormancy signal) — does
+        // NOT feed the re-vet clock above.
+        last_hauled_at: c.last_hauled_at ?? null,
         revet_interval_days: c.revet_interval_days ?? null,
         created_at: c.created_at ?? null,
         brokerware_status: c.brokerware_status ?? null,

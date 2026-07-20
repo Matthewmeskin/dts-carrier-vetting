@@ -8,7 +8,44 @@ export const DEFAULT_REVET_INTERVAL = 120
 // Carriers within this many days of the due date are flagged "due soon".
 export const REVET_DUE_SOON_WINDOW = 14
 
+// Policy §4: a carrier that hasn't hauled for DTS within this many days is
+// "dormant" — re-verify before reuse. Separate from the re-vet clock: hauling
+// does NOT reset re-vetting (an active carrier still ages into scheduled review).
+export const DORMANCY_DAYS = 120
+
 export type RevetState = 'ok' | 'due_soon' | 'overdue' | 'unknown'
+
+export interface HaulActivity {
+  /** Most recent haul date, or null if we have no record of a haul for DTS. */
+  lastHauledAt: string | null
+  /** Whole days since the last haul, or null when never hauled/unknown. */
+  daysSinceHauled: number | null
+  /** True only for a carrier we HAVE used that has since gone quiet ≥ threshold.
+   *  Never-hauled carriers are not "dormant" — that's a distinct state. */
+  dormant: boolean
+  label: string
+}
+
+/**
+ * Compute a carrier's haul-activity state from its last haul date (Policy §4).
+ * Never-hauled carriers return dormant=false with a "No haul on record" label so
+ * a brand-new or never-used carrier isn't mislabeled as dormant.
+ */
+export function computeHaulActivity(
+  lastHauledAt: string | null | undefined,
+  thresholdDays: number = DORMANCY_DAYS
+): HaulActivity {
+  const at = toDate(lastHauledAt)
+  if (!at) {
+    return { lastHauledAt: null, daysSinceHauled: null, dormant: false, label: 'No haul on record' }
+  }
+  const days = differenceInDays(new Date(), at)
+  const dormant = days >= thresholdDays
+  const label = dormant
+    ? `Not hauled in ${days}d`
+    : `Last hauled ${days}d ago`
+  return { lastHauledAt: at.toISOString(), daysSinceHauled: days, dormant, label }
+}
 
 /** A carrier is "disabled" when Brokerware reports a non-Active status. */
 export function isBrokerwareDisabled(status: string | null | undefined): boolean {

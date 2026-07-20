@@ -27,6 +27,23 @@ export const maxDuration = 60
 // drains, and the remaining carriers simply reappear on the next run.
 const DEFAULT_MAX_PER_RUN = 15
 
+// Current time in RMIS's timestamp format ("M/D/YYYY h:mm:ss AM/PM", UTC) —
+// used to force-clear a stale InsdID we can't pull an Expanded record for.
+function rmisNowTimestamp(): string {
+  return new Date()
+    .toLocaleString('en-US', {
+      timeZone: 'UTC',
+      month: 'numeric',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    })
+    .replace(',', '')
+}
+
 interface HardStopCarrier {
   dotNumber: string
   legalName: string
@@ -78,18 +95,16 @@ export async function POST(request: Request) {
     const hardStopCarriers: HardStopCarrier[] = []
 
     for (const insdID of insdIDs) {
+      // Timestamp used to clear this InsdID from the delta queue. Prefer the
+      // Expanded header timestamp; if we can't pull the record (stale/invalid
+      // InsdID), fall back to "now" so it still clears instead of looping forever.
+      let clearTs: string | null = null
       try {
         // 1) Pull the current Expanded record (throws on an RMIS error envelope).
         const xml = await fetchExpandedCarrierXML({ insdID, credentials: creds })
         const parsed = parseRMISXML(xml)
         const evaluation = evaluateRMIS(parsed)
-
-        // Clear requires the timestamp from the Expanded header. If it is
-        // missing we can't safely clear, so skip (it'll be retried next run).
-        if (!parsed.headerTimestamp) {
-          failed++
-          continue
-        }
+        clearTs = parsed.headerTimestamp || null
 
         // 2) Persist the change (best-effort) before clearing so we never lose data.
         const { data: carrier } = await supabaseAdmin
@@ -235,12 +250,7 @@ export async function POST(request: Request) {
           }
         }
 
-        // 3) CLEAR THIS CARRIER NOW — the critical step. Done per-carrier so the
-        // queue drains incrementally and a timeout never leaves it un-cleared.
-        await deltaClear([{ insdID, timeStamp: parsed.headerTimestamp }], creds)
-        cleared++
-
-        // 4) Optionally archive changed documents (best-effort, after clearing).
+        // 3) Optionally archive changed documents (best-effort).
         // Off by default: pulling documents is slow and hits the Document API a
         // lot, so we keep the delta lean and reliable. Enable per-run with
         // {"archiveDocs": true} if you accept the extra load.
@@ -258,11 +268,20 @@ export async function POST(request: Request) {
           }
         }
       } catch (perCarrierErr) {
-        // Leave this one queued; it will be retried on a later run. We do NOT
-        // hammer it — the next scheduled run picks it up after the 120s
-        // visibility window.
         console.error(`Delta processing error for InsdID ${insdID}:`, perCarrierErr)
         failed++
+      }
+
+      // CLEAR — ALWAYS, so the queue drains. A stale/invalid InsdID whose
+      // Expanded record can't be pulled is force-cleared with the current
+      // timestamp, so it stops reappearing on every batch (RMIS suspends
+      // accounts whose delta queue never clears). This is the key fix for
+      // carriers that were stuck in the queue for months.
+      try {
+        await deltaClear([{ insdID, timeStamp: clearTs || rmisNowTimestamp() }], creds)
+        cleared++
+      } catch (clearErr) {
+        console.error(`Delta clear failed for InsdID ${insdID}:`, clearErr)
       }
     }
 

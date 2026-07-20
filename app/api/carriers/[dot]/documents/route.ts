@@ -41,11 +41,11 @@ export async function GET(
   }
 }
 
-function sanitizeName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120)
-}
-
-// POST — upload a document to Supabase Storage and record it against the carrier.
+// POST — record a document that the client already uploaded to Supabase Storage
+// via a signed upload URL (see ./sign). We take metadata + the storage path in
+// JSON — NOT the file bytes — so uploads of any size bypass Vercel's 4.5 MB
+// serverless request-body limit (which previously rejected large PDFs with a
+// non-JSON 413).
 export async function POST(
   request: Request,
   { params }: { params: { dot: string } }
@@ -62,40 +62,25 @@ export async function POST(
       return NextResponse.json({ error: 'Carrier not found' }, { status: 404 })
     }
 
-    const formData = await request.formData()
-    const file = formData.get('file')
-    const documentType = formData.get('documentType')
-    const uploadedBy = formData.get('uploadedBy')
-    const vettingRecordId = formData.get('vettingRecordId')
-
-    if (!file || typeof (file as any).arrayBuffer !== 'function') {
-      return NextResponse.json({ error: 'Missing file' }, { status: 400 })
+    const body = await request.json().catch(() => null)
+    const storagePath = body?.storagePath ? String(body.storagePath) : null
+    if (!storagePath) {
+      return NextResponse.json({ error: 'Missing storagePath' }, { status: 400 })
     }
-
-    const f = file as File
-    const buffer = Buffer.from(await f.arrayBuffer())
-    const path = `${dot}/${Date.now()}-${sanitizeName(f.name)}`
-
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from(BUCKET)
-      .upload(path, buffer, {
-        contentType: f.type || 'application/octet-stream',
-        upsert: false,
-      })
-    if (uploadError) throw uploadError
 
     const docRow = {
       carrier_id: (carrier as any).id,
       dot_number: dot,
-      document_type: documentType ? String(documentType) : null,
-      file_name: f.name,
-      file_size_bytes: buffer.length,
-      mime_type: f.type || null,
+      document_type: body.documentType ? String(body.documentType) : null,
+      file_name: body.fileName ? String(body.fileName) : null,
+      file_size_bytes:
+        typeof body.fileSizeBytes === 'number' ? body.fileSizeBytes : null,
+      mime_type: body.mimeType ? String(body.mimeType) : null,
       storage_bucket: BUCKET,
-      storage_path: path,
-      uploaded_by: uploadedBy ? String(uploadedBy) : null,
+      storage_path: storagePath,
+      uploaded_by: body.uploadedBy ? String(body.uploadedBy) : null,
       // Optionally tie the upload to a specific vetting review.
-      vetting_record_id: vettingRecordId ? String(vettingRecordId) : null,
+      vetting_record_id: body.vettingRecordId ? String(body.vettingRecordId) : null,
     }
 
     const { data: document, error: insertError } = await supabaseAdmin
@@ -107,7 +92,7 @@ export async function POST(
 
     const { data: signed } = await supabaseAdmin.storage
       .from(BUCKET)
-      .createSignedUrl(path, SIGNED_URL_TTL)
+      .createSignedUrl(storagePath, SIGNED_URL_TTL)
 
     return NextResponse.json({
       document: { ...document, url: signed?.signedUrl ?? null },

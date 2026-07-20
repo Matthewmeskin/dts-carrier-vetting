@@ -20,6 +20,7 @@ import { Badge, carrierStatusTone, type BadgeTone } from './ui/Badge'
 import { Spinner } from './ui/Spinner'
 import { ExceptionNoteComposer } from './ExceptionNoteComposer'
 import { cn, formatDateTime } from '@/lib/utils'
+import { uploadCarrierDocument } from '@/lib/uploadDocument'
 import { REVET_INTERVAL_OPTIONS, type RevetStatus, type RevetState } from '@/lib/revet'
 import {
   APPROVING_STATUSES,
@@ -401,19 +402,13 @@ export function VettingChecklist({
       // Attach the selected document to this review, if any.
       if (attachFile && data?.id) {
         try {
-          const fd = new FormData()
-          fd.append('file', attachFile)
-          fd.append('documentType', attachType)
-          fd.append('uploadedBy', reviewedBy)
-          fd.append('vettingRecordId', String(data.id))
-          const upRes = await fetch(`/api/carriers/${dot}/documents`, {
-            method: 'POST',
-            body: fd,
+          await uploadCarrierDocument({
+            dot,
+            file: attachFile,
+            documentType: attachType,
+            uploadedBy: reviewedBy,
+            vettingRecordId: String(data.id),
           })
-          if (!upRes.ok) {
-            const upErr = await upRes.json().catch(() => ({}))
-            throw new Error(upErr.error || 'Document upload failed')
-          }
           setAttachFile(null)
           if (fileRef.current) fileRef.current.value = ''
           setMessage('Vetting record and document saved.')

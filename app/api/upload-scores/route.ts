@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getSessionUser } from '@/lib/authServer'
 import { evaluateScores } from '@/lib/scoringRules'
 import { isBrokerwareDisabled } from '@/lib/revet'
 import { logCarrierEvents, type CarrierEventInput } from '@/lib/auditLog'
@@ -74,6 +75,19 @@ interface FlaggedCarrier {
 
 export async function POST(request: Request) {
   try {
+    // This route is excluded from the auth middleware (it's called by n8n with a
+    // bearer secret AND by the signed-in /upload page), so it must authenticate
+    // itself: a valid CRON_SECRET bearer OR a signed-in user. Skipped when the
+    // auth kill switch is off.
+    if (process.env.AUTH_ENABLED !== 'false') {
+      const authHeader = request.headers.get('authorization')
+      const hasCron =
+        !!process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`
+      if (!hasCron && !(await getSessionUser())) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+    }
+
     const formData = await request.formData()
     const file = formData.get('file')
 

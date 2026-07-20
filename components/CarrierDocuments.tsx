@@ -8,6 +8,7 @@ import { Input, Select } from './ui/Input'
 import { Badge } from './ui/Badge'
 import { Spinner } from './ui/Spinner'
 import { formatDate } from '@/lib/utils'
+import { uploadCarrierDocument } from '@/lib/uploadDocument'
 
 const DOC_TYPES = [
   { value: 'broker_carrier_agreement', label: 'Broker-Carrier Agreement' },
@@ -84,16 +85,12 @@ export function CarrierDocuments({
     setUploading(true)
     setError(null)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('documentType', docType)
-      fd.append('uploadedBy', uploadedBy)
-      const res = await fetch(`/api/carriers/${dot}/documents`, {
-        method: 'POST',
-        body: fd,
+      await uploadCarrierDocument({
+        dot,
+        file,
+        documentType: docType,
+        uploadedBy,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Upload failed')
       setFile(null)
       if (fileRef.current) fileRef.current.value = ''
       await load()

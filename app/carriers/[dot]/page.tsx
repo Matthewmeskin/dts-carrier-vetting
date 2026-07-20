@@ -7,6 +7,7 @@ import { Card, CardBody } from '@/components/ui/Card'
 import { Badge, carrierStatusTone, type BadgeTone } from '@/components/ui/Badge'
 import {
   computeRevetStatus,
+  computeHaulActivity,
   isBrokerwareDisabled,
   type RevetState,
 } from '@/lib/revet'
@@ -271,18 +272,38 @@ export default function CarrierDetailPage({
               })()}
             </div>
             <div className="text-right text-sm text-gray-500">
-              {disabled ? (
-                <span>Disabled — re-vetting not required</span>
-              ) : (
-                <div className="flex flex-col items-end gap-1">
-                  <Badge tone={REVET_TONE[revet.state]}>{revet.label}</Badge>
-                  {revet.dueDate && (
-                    <span className="text-xs">
-                      due {revet.dueDate.toLocaleDateString()}
+              <div className="flex flex-col items-end gap-1">
+                {disabled ? (
+                  <span>Disabled — re-vetting not required</span>
+                ) : (
+                  <>
+                    <Badge tone={REVET_TONE[revet.state]}>{revet.label}</Badge>
+                    {revet.dueDate && (
+                      <span className="text-xs">
+                        due {revet.dueDate.toLocaleDateString()}
+                      </span>
+                    )}
+                  </>
+                )}
+                {(() => {
+                  const haul = computeHaulActivity(carrier.last_hauled_at)
+                  if (!haul.lastHauledAt) {
+                    return <span className="text-xs text-gray-400">No DTS haul on record</span>
+                  }
+                  return (
+                    <span
+                      className="text-xs"
+                      title={`Last hauled ${new Date(haul.lastHauledAt).toLocaleDateString()}`}
+                    >
+                      {haul.dormant ? (
+                        <Badge tone="amber">{haul.label}</Badge>
+                      ) : (
+                        <span className="text-gray-500">{haul.label}</span>
+                      )}
                     </span>
-                  )}
-                </div>
-              )}
+                  )
+                })()}
+              </div>
             </div>
           </div>
 

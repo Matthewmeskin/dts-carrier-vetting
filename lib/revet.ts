@@ -40,10 +40,16 @@ export function computeHaulActivity(
     return { lastHauledAt: null, daysSinceHauled: null, dormant: false, label: 'No haul on record' }
   }
   const days = differenceInDays(new Date(), at)
+  // A future date means a load is booked ahead — clearly active, never dormant.
+  if (days < 0) {
+    return { lastHauledAt: at.toISOString(), daysSinceHauled: days, dormant: false, label: 'Load booked ahead' }
+  }
   const dormant = days >= thresholdDays
   const label = dormant
     ? `Not hauled in ${days}d`
-    : `Last hauled ${days}d ago`
+    : days === 0
+      ? 'Hauled today'
+      : `Last hauled ${days}d ago`
   return { lastHauledAt: at.toISOString(), daysSinceHauled: days, dormant, label }
 }
 

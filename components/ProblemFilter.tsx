@@ -35,11 +35,12 @@ export function ProblemFilter({
     )
   }
 
-  const groups: ProblemGroup[] = ['Hard Stop', 'RMIS', 'Insurance', 'Flagged Score']
+  const groups: ProblemGroup[] = ['Hard Stop', 'RMIS', 'Insurance', 'Dormancy', 'Flagged Score']
   const groupHeading: Record<ProblemGroup, string> = {
     'Hard Stop': 'Hard Stops',
     'RMIS': 'RMIS Status',
     'Insurance': 'Insurance Renewal',
+    'Dormancy': 'Haul Activity',
     'Flagged Score': 'Flagged Scores',
   }
 

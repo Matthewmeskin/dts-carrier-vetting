@@ -1,11 +1,12 @@
 import { CarrierSummary } from './types'
+import { computeHaulActivity } from './revet'
 
 // A "problem" is either a categorized hard stop or a flagged safety-score
 // category. Hard-stop strings carry dynamic values (dollar amounts, day counts,
 // statuses), so we bucket them into canonical categories by keyword; flagged
 // scores are already clean labels and pass through as-is.
 
-export type ProblemGroup = 'Hard Stop' | 'RMIS' | 'Insurance' | 'Flagged Score'
+export type ProblemGroup = 'Hard Stop' | 'RMIS' | 'Insurance' | 'Dormancy' | 'Flagged Score'
 
 export interface Problem {
   key: string
@@ -86,6 +87,15 @@ export function carrierProblems(c: CarrierSummary): Problem[] {
   for (const p of insuranceProblems(c)) {
     byKey.set(p.key, p)
   }
+  // Not hauled for DTS within the dormancy window (Policy §4) — re-verify before
+  // reuse. Only flags carriers we HAVE used that have since gone quiet.
+  if (computeHaulActivity(c.last_hauled_at).dormant) {
+    byKey.set('dormant', {
+      key: 'dormant',
+      label: 'Not hauled in 120+ days',
+      group: 'Dormancy',
+    })
+  }
   for (const label of c.flagged_scores ?? []) {
     const key = `fs:${label}`
     byKey.set(key, { key, label, group: 'Flagged Score' })
@@ -113,7 +123,8 @@ export function problemFacets(rows: CarrierSummary[]): ProblemFacet[] {
     'Hard Stop': 0,
     'RMIS': 1,
     'Insurance': 2,
-    'Flagged Score': 3,
+    'Dormancy': 3,
+    'Flagged Score': 4,
   }
   return Array.from(map.values()).sort(
     (a, b) => groupOrder[a.group] - groupOrder[b.group] || b.count - a.count

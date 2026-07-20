@@ -27,6 +27,7 @@ export interface CarrierSummary {
   hard_stops: string[] | null
   insurance_fetched_at: string | null
   last_reviewed: string | null
+  last_hauled_at: string | null
   revet_interval_days: number | null
   created_at: string | null
   brokerware_status: string | null

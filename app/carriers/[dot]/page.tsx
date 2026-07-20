@@ -288,18 +288,18 @@ export default function CarrierDetailPage({
                 {(() => {
                   const haul = computeHaulActivity(carrier.last_hauled_at)
                   if (!haul.lastHauledAt) {
-                    return <span className="text-xs text-gray-400">No DTS haul on record</span>
+                    return (
+                      <Badge tone="gray">No DTS haul on record</Badge>
+                    )
                   }
+                  const tone: BadgeTone = haul.dormant
+                    ? 'amber'
+                    : (haul.daysSinceHauled ?? 0) < 0
+                      ? 'blue'
+                      : 'green'
                   return (
-                    <span
-                      className="text-xs"
-                      title={`Last hauled ${new Date(haul.lastHauledAt).toLocaleDateString()}`}
-                    >
-                      {haul.dormant ? (
-                        <Badge tone="amber">{haul.label}</Badge>
-                      ) : (
-                        <span className="text-gray-500">{haul.label}</span>
-                      )}
+                    <span title={`Last hauled ${new Date(haul.lastHauledAt).toLocaleDateString()}`}>
+                      <Badge tone={tone}>{haul.label}</Badge>
                     </span>
                   )
                 })()}

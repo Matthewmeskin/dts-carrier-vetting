@@ -7,7 +7,7 @@ import { Button } from './ui/Button'
 import { Input, Select } from './ui/Input'
 import { Badge } from './ui/Badge'
 import { Spinner } from './ui/Spinner'
-import { formatDate } from '@/lib/utils'
+import { formatDateTime } from '@/lib/utils'
 import { uploadCarrierDocument } from '@/lib/uploadDocument'
 
 const DOC_TYPES = [
@@ -60,6 +60,16 @@ export function CarrierDocuments({
   }, [documents])
   const [docType, setDocType] = useState('broker_carrier_agreement')
   const [uploadedBy, setUploadedBy] = useState('')
+  // Default "Uploaded by" to the signed-in user (they can still override it).
+  useEffect(() => {
+    fetch('/api/me', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const name = d?.user?.fullName
+        if (name) setUploadedBy((prev) => prev || name)
+      })
+      .catch(() => {})
+  }, [])
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -186,7 +196,7 @@ export function CarrierDocuments({
                       )}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {formatDate(d.uploaded_at)}
+                      {formatDateTime(d.uploaded_at)}
                       {d.uploaded_by ? ` · ${d.uploaded_by}` : ''}
                       {formatBytes(d.file_size_bytes)
                         ? ` · ${formatBytes(d.file_size_bytes)}`

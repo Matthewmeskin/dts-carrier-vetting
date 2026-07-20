@@ -211,6 +211,8 @@ export function VettingChecklist({
   )
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [saving, setSaving] = useState(false)
+  // True when the reviewer has made changes not yet written to a vetting record.
+  const [dirty, setDirty] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [folderUrl, setFolderUrl] = useState<string | null>(
     latest?.google_drive_folder_url || null
@@ -345,28 +347,21 @@ export function VettingChecklist({
   }, [checklist])
 
   function updateStep(id: string, patch: Partial<ChecklistStep>) {
-    // A human toggling the box overrides any auto state — record who + when and
-    // log the check/uncheck to the activity timeline (audit trail).
+    // A human toggling the box overrides any auto state — record who + when.
+    // The check is only committed to the Activity timeline when the vetting
+    // record is SAVED (see save()), so an unsaved toggle never shows as history.
     if ('completed' in patch) {
-      const step = checklist.steps.find((s) => s.id === id)
       const withSource: Partial<ChecklistStep> = {
         ...patch,
         source: 'manual',
         completedBy: me?.name || undefined,
         completedAt: new Date().toISOString(),
       }
+      setDirty(true)
       setChecklist((c) => ({
         ...c,
         steps: c.steps.map((s) => (s.id === id ? { ...s, ...withSource } : s)),
       }))
-      if (step) {
-        // Fire-and-forget: logging must never block the toggle.
-        fetch(`/api/carriers/${dot}/checklist-event`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label: step.label, checked: !!patch.completed }),
-        }).catch(() => {})
-      }
       return
     }
     setChecklist((c) => ({
@@ -398,6 +393,33 @@ export function VettingChecklist({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Save failed')
       if (data?.folder?.webViewLink) setFolderUrl(data.folder.webViewLink)
+
+      // Now that the record is saved, commit the manual check/uncheck changes to
+      // the Activity timeline — only the boxes a human changed since the last
+      // saved snapshot, so the audit trail reflects real, saved actions.
+      try {
+        const prev = new Map<string, boolean>(
+          (((latest?.checklist as any)?.steps ?? []) as any[]).map((s) => [
+            s.id,
+            !!s.completed,
+          ])
+        )
+        const changed = checklist.steps.filter(
+          (s) => s.source === 'manual' && !!s.completed !== (prev.get(s.id) ?? false)
+        )
+        await Promise.all(
+          changed.map((s) =>
+            fetch(`/api/carriers/${dot}/checklist-event`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ label: s.label, checked: !!s.completed }),
+            }).catch(() => {})
+          )
+        )
+      } catch {
+        /* audit logging is best-effort */
+      }
+      setDirty(false)
 
       // Attach the selected document to this review, if any.
       if (attachFile && data?.id) {
@@ -575,7 +597,10 @@ export function VettingChecklist({
             {showException && (
               <ExceptionNoteComposer
                 value={exceptionNote}
-                onChange={setExceptionNote}
+                onChange={(v) => {
+                  setDirty(true)
+                  setExceptionNote(v)
+                }}
                 carrierName={carrierName}
                 dotNumber={dot}
                 onBuildPrefill={buildExceptionPrefill}
@@ -585,7 +610,10 @@ export function VettingChecklist({
             <Textarea
               label="Internal notes"
               value={internalNotes}
-              onChange={(e) => setInternalNotes(e.target.value)}
+              onChange={(e) => {
+                setDirty(true)
+                setInternalNotes(e.target.value)
+              }}
               rows={3}
               placeholder="Internal notes about this vetting…"
             />
@@ -765,8 +793,18 @@ export function VettingChecklist({
             <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-4">
               <Button onClick={save} disabled={saving}>
                 {saving ? <Spinner size={14} className="text-white" /> : null}
-                {saving ? 'Saving…' : 'Save vetting record'}
+                {saving
+                  ? 'Saving…'
+                  : dirty
+                    ? 'Save changes'
+                    : 'Save vetting record'}
               </Button>
+              {dirty && !saving && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  Unsaved changes — nothing is recorded until you save
+                </span>
+              )}
               {folderUrl && (
                 <a
                   href={folderUrl}

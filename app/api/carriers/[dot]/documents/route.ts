@@ -1,11 +1,26 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logCarrierEvent } from '@/lib/auditLog'
+import { getSessionUser } from '@/lib/authServer'
+import { ROLE_LABEL } from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const BUCKET = 'carrier-documents'
 const SIGNED_URL_TTL = 60 * 60 // 1 hour
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  broker_carrier_agreement: 'Broker-Carrier Agreement',
+  tariff: 'Carrier Tariff / Alt. Agreement',
+  w9: 'W-9',
+  insurance_cert: 'Insurance Certificate',
+  noa: 'Notice of Assignment (NOA)',
+  exception_note: 'Exception Note',
+  osint_report: 'OSINT Report',
+  fmcsa_screenshot: 'FMCSA Screenshot',
+  other: 'Document',
+}
 
 // GET — list all documents for a carrier, with a fresh signed URL for each
 // file stored in Supabase Storage (Google Drive docs keep their view link).
@@ -93,6 +108,21 @@ export async function POST(
     const { data: signed } = await supabaseAdmin.storage
       .from(BUCKET)
       .createSignedUrl(storagePath, SIGNED_URL_TTL)
+
+    // Record the upload on the carrier's Activity timeline (audit trail).
+    const typeLabel =
+      DOC_TYPE_LABELS[String(body.documentType ?? '')] ?? 'Document'
+    const user = await getSessionUser()
+    const actor =
+      (body.uploadedBy ? String(body.uploadedBy) : '') ||
+      (user ? `${user.fullName || user.email}${user.role ? ` (${ROLE_LABEL[user.role]})` : ''}` : 'DTS')
+    await logCarrierEvent({
+      dot,
+      carrierId: (carrier as any).id ?? null,
+      type: 'document_upload',
+      summary: `Uploaded ${typeLabel}${body.fileName ? `: ${body.fileName}` : ''}`,
+      actor,
+    })
 
     return NextResponse.json({
       document: { ...document, url: signed?.signedUrl ?? null },

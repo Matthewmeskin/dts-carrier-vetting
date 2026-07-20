@@ -120,6 +120,27 @@ export default function CarrierDetailPage({
 
   const { carrier, scores, insurance, vettingRecords, deltaLog, sos, factor, events, documentTypes } =
     detail
+
+  // RMIS flags are computed from RMIS data only, so the "no broker-carrier
+  // agreement / no W-9" flags keep firing even after a copy is uploaded to the
+  // portal. Suppress those specific flags when the portal has the document —
+  // mirroring the vetting checklist, which already accepts a portal BCA / tariff
+  // / W-9. (Other flags are unaffected.)
+  const docSet = new Set((documentTypes ?? []).map((t: string) => (t || '').toLowerCase()))
+  const hasAgreement = docSet.has('broker_carrier_agreement') || docSet.has('tariff')
+  const hasW9 = docSet.has('w9')
+  const keepFlag = (f: string): boolean => {
+    const low = f.toLowerCase()
+    if (hasAgreement && low.includes('broker-carrier agreement')) return false
+    if (hasW9 && low.includes('w-9')) return false
+    return true
+  }
+  const displayFlags = (insurance?.rmis_flags ?? []).filter(keepFlag)
+  const displayHardStops = (insurance?.hard_stops ?? []).filter(keepFlag)
+  const displayInsurance = insurance
+    ? { ...insurance, rmis_flags: displayFlags, hard_stops: displayHardStops }
+    : insurance
+
   const lastVetting = vettingRecords[0]?.completed_at ?? null
   const revetAnchor =
     lastVetting && carrier.revet_reset_at
@@ -315,13 +336,10 @@ export default function CarrierDetailPage({
         </CardBody>
       </Card>
 
-      <AlertBanner
-        hardStops={insurance?.hard_stops}
-        flags={insurance?.rmis_flags}
-      />
+      <AlertBanner hardStops={displayHardStops} flags={displayFlags} />
 
       {/* Insurance */}
-      <InsurancePanel insurance={insurance} dot={dot} onRefreshed={load} />
+      <InsurancePanel insurance={displayInsurance} dot={dot} onRefreshed={load} />
 
       {/* Notice of Assignment — factoring carriers only */}
       {insurance?.is_factoring && <NoaPanel dot={dot} />}

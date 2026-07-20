@@ -160,9 +160,6 @@ export function InsurancePanel({
     }
   }
 
-  const hardStops = insurance?.hard_stops ?? []
-  const flags = insurance?.rmis_flags ?? []
-
   const coverages: Coverage[] = insurance
     ? [
         {
@@ -233,32 +230,8 @@ export function InsurancePanel({
           </div>
         )}
 
-        {hardStops.length > 0 && (
-          <div className="mb-3 rounded-md border-l-4 border-red-600 bg-red-50 px-3 py-2">
-            <div className="text-sm font-semibold text-red-800">
-              Hard stops ({hardStops.length})
-            </div>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-red-700">
-              {hardStops.map((h, i) => (
-                <li key={i}>{h}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {flags.length > 0 && (
-          <div className="mb-3 rounded-md border-l-4 border-amber-500 bg-amber-50 px-3 py-2">
-            <div className="text-sm font-semibold text-amber-800">
-              Flags ({flags.length})
-            </div>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-amber-700">
-              {flags.map((f, i) => (
-                <li key={i}>{f}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
+        {/* Hard stops + flags are surfaced once, in the page-level AlertBanner
+            above — not duplicated here. This card shows coverage details only. */}
         {!insurance ? (
           <p className="text-sm text-gray-500">
             No coverage data yet. Click “Refresh RMIS” to pull the latest

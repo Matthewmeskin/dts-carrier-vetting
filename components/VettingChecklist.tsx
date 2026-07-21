@@ -105,6 +105,7 @@ export function VettingChecklist({
   score,
   sos,
   documentTypes,
+  isIntrastate,
   vettingRecords,
   onSaved,
   carrierStatus,
@@ -124,6 +125,7 @@ export function VettingChecklist({
   score?: ScoreRecord | null
   sos?: SosRecord | null
   documentTypes?: string[] | null
+  isIntrastate?: boolean | null
   vettingRecords: VettingRecord[]
   onSaved?: () => void | Promise<void>
   carrierStatus: string | null
@@ -163,8 +165,8 @@ export function VettingChecklist({
 
   const latest = vettingRecords[0]
   const autoInputs = useMemo<ChecklistAutoInputs>(
-    () => ({ safetyRating, insurance, score, sos, documentTypes }),
-    [safetyRating, insurance, score, sos, documentTypes]
+    () => ({ safetyRating, insurance, score, sos, documentTypes, isIntrastate }),
+    [safetyRating, insurance, score, sos, documentTypes, isIntrastate]
   )
   const [vettingType, setVettingType] = useState(
     latest?.vetting_type || 'initial'

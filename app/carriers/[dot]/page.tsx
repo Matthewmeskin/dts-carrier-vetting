@@ -24,6 +24,7 @@ import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
 import { CarrierActivity } from '@/components/CarrierActivity'
 import { AddressCheck } from '@/components/AddressCheck'
+import { IntrastateToggle } from '@/components/IntrastateToggle'
 
 const REVET_TONE: Record<RevetState, BadgeTone> = {
   overdue: 'red',
@@ -137,6 +138,9 @@ export default function CarrierDetailPage({
     // Crash counts are informational only — severity is already captured by the
     // Bluewire safety scores, so never surface a crash flag/hard stop here.
     if (low.includes('crash')) return false
+    // Intrastate carriers don't need interstate operating authority — suppress
+    // that hard stop when the carrier is manually designated intrastate.
+    if (carrier.is_intrastate && low.includes('operating authority')) return false
     return true
   }
   const displayFlags = (insurance?.rmis_flags ?? []).filter(keepFlag)
@@ -342,6 +346,10 @@ export default function CarrierDetailPage({
 
       <AlertBanner hardStops={displayHardStops} flags={displayFlags} />
 
+      {/* Intrastate-only designation (Manager/Director; suppresses the interstate
+          operating-authority hard stop) */}
+      <IntrastateToggle dot={dot} value={carrier.is_intrastate} onChanged={load} />
+
       {/* Address check — satellite + Street View of the FMCSA physical address */}
       <AddressCheck
         street={insurance?.rmis_carrier_street ?? carrier.street}
@@ -376,6 +384,7 @@ export default function CarrierDetailPage({
         score={scores[0]}
         sos={sos}
         documentTypes={documentTypes}
+        isIntrastate={carrier.is_intrastate}
         vettingRecords={vettingRecords}
         onSaved={load}
         carrierStatus={carrier.carrier_status}

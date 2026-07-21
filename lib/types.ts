@@ -58,6 +58,7 @@ export interface CarrierRecord {
   revet_interval_days: number | null
   revet_reset_at: string | null
   last_hauled_at: string | null
+  is_intrastate: boolean | null
   phone: string | null
   email: string | null
   brokerware_carrier_id: number | null

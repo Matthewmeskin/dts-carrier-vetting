@@ -277,6 +277,9 @@ export interface ChecklistAutoInputs {
   sos?: SosRecord | null
   /** document_type values on file in the portal (RMIS archive or manual upload). */
   documentTypes?: string[] | null
+  /** Manually designated intrastate-only carrier — interstate FMCSA operating
+   *  authority is not required, so the "no active authority" check passes. */
+  isIntrastate?: boolean | null
 }
 
 interface StepEval {
@@ -340,9 +343,17 @@ function computeAutoEvaluations(
   )
   const out: Record<string, StepEval> = {}
 
+  // Intrastate carriers don't need interstate FMCSA operating authority, so the
+  // authority check passes on the strength of the manual intrastate designation.
+  if (inputs.isIntrastate) {
+    out.authority_active = {
+      status: 'pass',
+      evidence: 'Intrastate carrier — interstate FMCSA operating authority not required',
+    }
+  }
   // Active FMCSA operating authority. A carrier may run on common OR contract
   // authority (or both) — any active authority satisfies the requirement.
-  if (
+  else if (
     ins &&
     (ins.operating_status ||
       ins.common_authority_status ||

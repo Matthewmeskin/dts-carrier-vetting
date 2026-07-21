@@ -399,3 +399,9 @@ revoke execute on function public.handle_new_user() from anon, authenticated, pu
 -- ─────────────────────────────────────────────────────────────────────────────
 alter table carriers add column if not exists last_hauled_at timestamptz;
 create index if not exists idx_carriers_mc_number on carriers (mc_number);
+
+-- Manual "intrastate only" designation (Manager/Director-set, logged). An
+-- intrastate carrier operates within a single state and needs no interstate
+-- FMCSA operating authority, so this downgrades the "no active operating
+-- authority" hard stop for that carrier only.
+alter table carriers add column if not exists is_intrastate boolean not null default false;

@@ -9,6 +9,7 @@ import {
   requiredApprovalLevel,
   roleCanSetStatus,
   ROLE_LABEL,
+  ROLE_RANK,
   type ApprovalLevel,
 } from '@/lib/roles'
 
@@ -32,7 +33,7 @@ export async function PATCH(
   try {
     const dot = params.dot
     const body = await request.json()
-    const { carrier_status, do_not_use, do_not_use_reason, revet_interval_days } =
+    const { carrier_status, do_not_use, do_not_use_reason, revet_interval_days, is_intrastate } =
       body ?? {}
 
     if (carrier_status !== undefined && !ALLOWED_STATUSES.includes(carrier_status)) {
@@ -92,12 +93,22 @@ export async function PATCH(
       }
     }
 
+    // Marking a carrier intrastate downgrades a real hard stop (no interstate
+    // authority), so require Manager+ — never a Staff user.
+    if (is_intrastate !== undefined && authOn && user && ROLE_RANK[user.role] < ROLE_RANK.manager) {
+      return NextResponse.json(
+        { error: `Marking a carrier intrastate requires Manager or Director. Your role is ${ROLE_LABEL[user.role]}.` },
+        { status: 403 }
+      )
+    }
+
     const updates: TablesUpdate<'carriers'> = {}
     if (carrier_status !== undefined) updates.carrier_status = carrier_status
     if (do_not_use !== undefined) updates.do_not_use = do_not_use
     if (do_not_use_reason !== undefined) updates.do_not_use_reason = do_not_use_reason
     if (revet_interval_days !== undefined)
       updates.revet_interval_days = revet_interval_days
+    if (is_intrastate !== undefined) (updates as any).is_intrastate = !!is_intrastate
 
     const { data, error } = await supabaseAdmin
       .from('carriers')
@@ -116,6 +127,8 @@ export async function PATCH(
     if (do_not_use !== undefined) parts.push(`do-not-use → ${do_not_use ? 'yes' : 'no'}`)
     if (revet_interval_days !== undefined)
       parts.push(`re-vet interval → ${revet_interval_days}d`)
+    if (is_intrastate !== undefined)
+      parts.push(`intrastate designation → ${is_intrastate ? 'ON (interstate authority not required)' : 'OFF'}`)
     if (parts.length > 0) {
       await logCarrierEvent({
         dot,

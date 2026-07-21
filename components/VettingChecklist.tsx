@@ -470,6 +470,7 @@ export function VettingChecklist({
   }
 
   return (
+    <>
     <Card>
       <CardHeader
         title="Vetting Workspace"
@@ -842,6 +843,24 @@ export function VettingChecklist({
         )}
       </CardBody>
     </Card>
+
+    {/* Sticky save bar — appears whenever there are unsaved changes, so saving
+        is always reachable without scrolling to the bottom of the checklist. */}
+    {tab === 'active' && dirty && (
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-amber-300 bg-amber-50/95 px-4 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.08)] backdrop-blur">
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-amber-800">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            You have unsaved changes to this vetting record.
+          </span>
+          <Button onClick={save} disabled={saving}>
+            {saving ? <Spinner size={14} className="text-white" /> : null}
+            {saving ? 'Saving…' : 'Save vetting record'}
+          </Button>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 

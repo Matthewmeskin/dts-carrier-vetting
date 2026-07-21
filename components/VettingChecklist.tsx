@@ -65,6 +65,7 @@ const ATTACH_TYPES = [
   { value: 'noa', label: 'Notice of Assignment (NOA)' },
   { value: 'osint_report', label: 'OSINT Report' },
   { value: 'fmcsa_screenshot', label: 'FMCSA Screenshot' },
+  { value: 'safety_plan', label: 'Safety Plan' },
   { value: 'other', label: 'Other' },
 ]
 

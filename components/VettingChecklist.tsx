@@ -201,6 +201,13 @@ export function VettingChecklist({
   )
   const [reviewedBy, setReviewedBy] = useState(latest?.reviewed_by || '')
   const [approvedBy, setApprovedBy] = useState(latest?.approved_by || '')
+  // Auto-fill reviewer/approver from the signed-in user, but only when blank so
+  // it never overwrites a saved record or a manual edit. The user can override.
+  useEffect(() => {
+    if (!me?.name) return
+    setReviewedBy((v) => v || me.name)
+    setApprovedBy((v) => v || me.name)
+  }, [me])
   // Re-vet cadence is held locally and only persisted on Save, so toggling the
   // dropdown to compare options doesn't write (and log) a change each time.
   const [pendingInterval, setPendingInterval] = useState<number>(

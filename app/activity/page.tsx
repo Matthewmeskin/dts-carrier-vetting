@@ -6,7 +6,25 @@ import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
 import { Input, Select } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
-import { formatDateTime } from '@/lib/utils'
+const PT = 'America/Los_Angeles'
+/** Today's date (YYYY-MM-DD) in Pacific. */
+function pacificToday(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: PT })
+}
+/** Format an ISO timestamp in Pacific, e.g. "Jul 21, 2026 3:31 PM". */
+function fmtPacific(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleString('en-US', {
+    timeZone: PT,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
 
 interface Row {
   id: string
@@ -43,7 +61,7 @@ function isPerson(actor: string | null): boolean {
 }
 
 export default function ActivityLogPage() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(pacificToday)
   const [actor, setActor] = useState('')
   const [peopleOnly, setPeopleOnly] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
@@ -97,7 +115,7 @@ export default function ActivityLogPage() {
       <Card>
         <CardHeader
           title="Actions by day"
-          subtitle="Who did what, across all carriers. Times are UTC."
+          subtitle="Who did what, across all carriers. Times are Pacific (PT)."
           action={
             <div className="flex items-end gap-3">
               <div className="flex rounded-md border border-gray-200 p-0.5 text-xs">
@@ -185,7 +203,7 @@ export default function ActivityLogPage() {
                     return (
                       <tr key={r.id} className="border-b border-gray-100 align-top">
                         <td className="whitespace-nowrap py-2 pr-3 text-xs text-gray-500">
-                          {formatDateTime(r.created_at)}
+                          {fmtPacific(r.created_at)}
                         </td>
                         <td className="py-2 pr-3 text-gray-800">{r.actor || 'system'}</td>
                         <td className="py-2 pr-3">

@@ -13,11 +13,24 @@ export async function GET(request: NextRequest) {
     const dateParam = params.get('date') // YYYY-MM-DD (UTC day)
     const actor = params.get('actor')
 
+    const TZ = 'America/Los_Angeles' // Pacific (PST/PDT)
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam ?? '')
       ? (dateParam as string)
-      : new Date().toISOString().slice(0, 10)
-    const start = `${date}T00:00:00.000Z`
-    const end = `${date}T23:59:59.999Z`
+      : new Date().toLocaleDateString('en-CA', { timeZone: TZ }) // Pacific "today"
+
+    // Day boundaries are the selected calendar day in Pacific, expressed in UTC
+    // (so an 11 PM PT action stays on its Pacific date, not the next UTC day).
+    const offsetMs = (utcMs: number) => {
+      const dt = new Date(utcMs)
+      const asTz = new Date(dt.toLocaleString('en-US', { timeZone: TZ }))
+      const asUtc = new Date(dt.toLocaleString('en-US', { timeZone: 'UTC' }))
+      return asTz.getTime() - asUtc.getTime()
+    }
+    const [y, mo, d] = date.split('-').map(Number)
+    const startGuess = Date.UTC(y, mo - 1, d, 0, 0, 0, 0)
+    const endGuess = Date.UTC(y, mo - 1, d, 23, 59, 59, 999)
+    const start = new Date(startGuess - offsetMs(startGuess)).toISOString()
+    const end = new Date(endGuess - offsetMs(endGuess)).toISOString()
 
     let query = (supabaseAdmin as any)
       .from('carrier_events')

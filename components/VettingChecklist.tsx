@@ -347,6 +347,9 @@ export function VettingChecklist({
   }, [checklist])
 
   function updateStep(id: string, patch: Partial<ChecklistStep>) {
+    // Any edit (check/uncheck OR a per-step note) is unsaved until the vetting
+    // record is saved — flag it so the "Unsaved changes" indicator shows.
+    setDirty(true)
     // A human toggling the box overrides any auto state — record who + when.
     // The check is only committed to the Activity timeline when the vetting
     // record is SAVED (see save()), so an unsaved toggle never shows as history.
@@ -357,7 +360,6 @@ export function VettingChecklist({
         completedBy: me?.name || undefined,
         completedAt: new Date().toISOString(),
       }
-      setDirty(true)
       setChecklist((c) => ({
         ...c,
         steps: c.steps.map((s) => (s.id === id ? { ...s, ...withSource } : s)),

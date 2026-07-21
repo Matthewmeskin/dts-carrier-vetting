@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getOrCreateCarrierFolder } from '@/lib/googleDrive'
+import { getSessionUser } from '@/lib/authServer'
+import { logCarrierEvent } from '@/lib/auditLog'
+import { ROLE_LABEL } from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -96,6 +99,28 @@ export async function POST(request: Request) {
         .update({ carrier_status: resolvedStatus })
         .eq('dot_number', String(dotNumber))
     }
+
+    // Stamp the save on the carrier's Activity timeline (audit trail), including
+    // the internal note if one was entered.
+    const user = await getSessionUser()
+    const actor = user
+      ? `${user.fullName || user.email}${user.role ? ` (${ROLE_LABEL[user.role]})` : ''}`
+      : reviewedBy
+        ? String(reviewedBy)
+        : 'DTS'
+    const note = internalNotes ? String(internalNotes).trim() : ''
+    const bits: string[] = []
+    if (resolvedStatus) bits.push(`status set to ${resolvedStatus}`)
+    let summary = bits.length ? `Vetting saved — ${bits.join(', ')}` : 'Vetting record saved'
+    if (note) summary += ` · Note: “${note.slice(0, 300)}”`
+    await logCarrierEvent({
+      dot: String(dotNumber),
+      carrierId: (carrier as any).id ?? null,
+      type: 'vetting_saved',
+      summary,
+      detail: note ? { internalNotes: note } : null,
+      actor,
+    })
 
     return NextResponse.json({
       id: (vettingRecord as any).id,

@@ -133,6 +133,9 @@ export default function CarrierDetailPage({
     const low = f.toLowerCase()
     if (hasAgreement && low.includes('broker-carrier agreement')) return false
     if (hasW9 && low.includes('w-9')) return false
+    // Crash counts are informational only — severity is already captured by the
+    // Bluewire safety scores, so never surface a crash flag/hard stop here.
+    if (low.includes('crash')) return false
     return true
   }
   const displayFlags = (insurance?.rmis_flags ?? []).filter(keepFlag)

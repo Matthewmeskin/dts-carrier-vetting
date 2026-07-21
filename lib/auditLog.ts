@@ -18,6 +18,7 @@ export type CarrierEventType =
   | 'hard_stop'
   | 'checklist_change'
   | 'document_upload'
+  | 'vetting_saved'
 
 export interface CarrierEventInput {
   dot: string

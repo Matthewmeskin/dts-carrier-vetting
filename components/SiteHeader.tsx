@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 const NAV = [
   { href: '/carriers', label: 'Carriers' },
   { href: '/changes', label: 'Changes' },
+  { href: '/activity', label: 'Activity' },
   { href: '/factors', label: 'Factors' },
   { href: '/upload', label: 'Upload Scores' },
 ]

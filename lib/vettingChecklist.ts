@@ -89,7 +89,7 @@ Mitigating factors:
 [Describe why this carrier is still appropriate despite the issue — prior experience, low-risk freight, strong insurance, etc.]
 
 Operational controls required:
-[List controls — one-load limit, live ELD tracking, direct insurance verification, pickup verification, etc.]
+[Describe the specific operational controls you are requiring for this exception, if any.]
 
 Approval:
 Approved for: [Scope — one load / specific lane / specific date range]

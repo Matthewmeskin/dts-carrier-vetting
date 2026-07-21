@@ -329,7 +329,7 @@ export function VettingChecklist({
       '[Describe why this carrier is still appropriate despite the issue — prior experience, low-risk freight, strong insurance, references, etc. Write this in your own words.]',
       '',
       'OPERATIONAL CONTROLS REQUIRED',
-      '[List controls — one-load limit, live ELD tracking, direct insurance verification, pickup verification, etc.]',
+      '[Describe the specific operational controls you are requiring for this exception, if any.]',
       '',
       'APPROVAL',
       'Approved for: [Scope — one load / specific lane / specific date range]',

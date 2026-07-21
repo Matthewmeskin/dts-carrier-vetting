@@ -290,7 +290,7 @@ const COL = {
   flagged: 'w-52 shrink-0 pr-2',
   insurance: 'w-44 shrink-0 pr-2',
   rmis: 'w-28 shrink-0 pr-2',
-  status: 'w-32 shrink-0 pr-2',
+  status: 'w-44 shrink-0 pr-2',
   reviewed: 'w-28 shrink-0 pr-2',
   revet: 'w-28 shrink-0',
 }
@@ -897,11 +897,14 @@ export function CarrierTable({
                       </div>
                       <div className={COL.status}>
                         {disabled ? (
-                          <Badge tone="gray">
+                          <Badge tone="gray" className="!whitespace-normal leading-tight">
                             {c.brokerware_status || 'Disabled'} (Brokerware)
                           </Badge>
                         ) : (
-                          <Badge tone={carrierStatusTone(c.carrier_status)}>
+                          <Badge
+                            tone={carrierStatusTone(c.carrier_status)}
+                            className="!whitespace-normal leading-tight"
+                          >
                             {c.carrier_status ?? '—'}
                           </Badge>
                         )}

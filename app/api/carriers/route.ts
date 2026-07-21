@@ -197,7 +197,14 @@ export async function GET(request: NextRequest) {
         rmis_overall_pass: ins?.rmis_overall_pass ?? null,
         rmis_is_certified: ins?.rmis_is_certified ?? null,
         rmis_status: rmisStatus,
-        hard_stops: ins?.hard_stops ?? null,
+        // Intrastate carriers legitimately have no interstate operating
+        // authority — suppress that hard stop here too (count, problem filter),
+        // matching the carrier detail page.
+        hard_stops: (() => {
+          const hs = ins?.hard_stops ?? null
+          if (!hs || !c.is_intrastate) return hs
+          return hs.filter((h: string) => !/operating authority/i.test(h))
+        })(),
         insurance_fetched_at: ins?.fetched_at ?? null,
         // The re-vet clock anchors to the later of the last completed vetting and
         // any auto-recertification (score upload + RMIS still certified).

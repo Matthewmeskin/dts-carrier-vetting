@@ -1,12 +1,13 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardBody } from './ui/Card'
 
 // Client-side Maps key. When set, the panel renders an inline satellite map +
-// Street View of the FMCSA-registered address (a quick way to spot a fake /
-// residential / mailbox-store address — a chameleon-carrier signal). When it's
-// absent, the panel falls back to "open in Google Maps" links (no key needed),
-// so this upgrades automatically once NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is added.
+// interactive Street View of the FMCSA-registered address (a quick way to spot
+// a fake / residential / mailbox-store address — a chameleon-carrier signal).
+// Without it, the panel falls back to "open in Google Maps" links (no key
+// needed), so it upgrades automatically once the key is added.
 const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 
 function buildAddress(
@@ -17,6 +18,90 @@ function buildAddress(
 ): string {
   const line2 = [city, state, zip].filter((p) => p && String(p).trim()).join(' ')
   return [street, line2].filter((p) => p && String(p).trim()).join(', ')
+}
+
+// Load the Google Maps JS API once, shared across every AddressCheck instance.
+let mapsPromise: Promise<any> | null = null
+function loadMaps(): Promise<any> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('no window'))
+  if ((window as any).google?.maps) return Promise.resolve((window as any).google)
+  if (mapsPromise) return mapsPromise
+  mapsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${KEY}&v=weekly`
+    s.async = true
+    s.onload = () => resolve((window as any).google)
+    s.onerror = () => reject(new Error('maps js failed'))
+    document.head.appendChild(s)
+  })
+  return mapsPromise
+}
+
+// Interactive, draggable Street View (Maps JS). Geocodes the address, finds the
+// nearest panorama, and renders it. Falls back to the static image on any
+// failure (e.g. Maps JS / Geocoding API not enabled, or no imagery nearby).
+function InteractiveStreetView({
+  address,
+  staticSrc,
+  mapsLink,
+}: {
+  address: string
+  staticSrc: string
+  mapsLink: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    loadMaps()
+      .then((google) => {
+        if (cancelled || !ref.current) return
+        new google.maps.Geocoder().geocode(
+          { address },
+          (results: any, status: string) => {
+            if (cancelled) return
+            if (status !== 'OK' || !results?.[0]) return setFailed(true)
+            const loc = results[0].geometry.location
+            new google.maps.StreetViewService().getPanorama(
+              { location: loc, radius: 150 },
+              (data: any, st: string) => {
+                if (cancelled) return
+                if (st !== 'OK' || !data?.location?.pano) return setFailed(true)
+                new google.maps.StreetViewPanorama(ref.current!, {
+                  pano: data.location.pano,
+                  pov: { heading: 0, pitch: 0 },
+                  zoom: 0,
+                  addressControl: false,
+                  motionTracking: false,
+                  motionTrackingControl: false,
+                  fullscreenControl: true,
+                })
+              }
+            )
+          }
+        )
+      })
+      .catch(() => setFailed(true))
+    return () => {
+      cancelled = true
+    }
+  }, [address])
+
+  if (failed) {
+    return (
+      <a href={mapsLink} target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={staticSrc}
+          alt="Street View of the FMCSA address"
+          className="h-64 w-full rounded-md border border-gray-200 object-cover"
+          loading="lazy"
+        />
+      </a>
+    )
+  }
+  return <div ref={ref} className="h-64 w-full overflow-hidden rounded-md border border-gray-200" />
 }
 
 export function AddressCheck({
@@ -30,13 +115,10 @@ export function AddressCheck({
   city?: string | null
   state?: string | null
   zip?: string | null
-  /** Where the address came from, for the subtitle. */
   source?: string
 }) {
   const address = buildAddress(street, city, state, zip)
 
-  // No FMCSA/RMIS physical address on file — show a prompt rather than falling
-  // back to a TMS mailing / P.O. Box address (which can't verify a real site).
   if (!address) {
     return (
       <Card>
@@ -98,18 +180,10 @@ export function AddressCheck({
               />
             </div>
             <div>
-              <div className="mb-1 text-xs font-medium text-gray-500">Street View</div>
-              <a href={mapsLink} target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={streetImg!}
-                  alt="Street View of the FMCSA address"
-                  className="h-64 w-full rounded-md border border-gray-200 object-cover"
-                  loading="lazy"
-                />
-              </a>
+              <div className="mb-1 text-xs font-medium text-gray-500">Street View — drag to look around</div>
+              <InteractiveStreetView address={address} staticSrc={streetImg!} mapsLink={mapsLink} />
               <p className="mt-1 text-xs text-gray-400">
-                No image? Street View may not cover this exact spot — click to open Maps.
+                No imagery? Street View may not cover this exact spot — click to open Maps.
               </p>
             </div>
           </div>

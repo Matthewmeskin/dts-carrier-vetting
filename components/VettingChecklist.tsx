@@ -169,9 +169,10 @@ export function VettingChecklist({
     () => ({ safetyRating, insurance, score, sos, documentTypes, isIntrastate }),
     [safetyRating, insurance, score, sos, documentTypes, isIntrastate]
   )
-  const [vettingType, setVettingType] = useState(
-    latest?.vetting_type || 'initial'
-  )
+  // Vetting type is no longer set in the UI (the field was removed) but is still
+  // persisted so existing records and downstream logic keep working; it defaults
+  // to the last saved value, or 'initial' for a brand-new carrier.
+  const [vettingType] = useState(latest?.vetting_type || 'initial')
   const [checklist, setChecklist] = useState<VettingChecklistType>(() =>
     hydrateChecklist(latest, autoInputs)
   )
@@ -631,34 +632,19 @@ export function VettingChecklist({
               placeholder="Internal notes about this vetting…"
             />
 
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="w-56">
-                <Select
-                  label="Vetting type"
-                  value={vettingType}
-                  onChange={(e) => setVettingType(e.target.value)}
-                >
-                  {VETTING_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </Select>
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
+                <span>Required steps complete</span>
+                <span className="font-semibold">{percent}%</span>
               </div>
-              <div className="flex-1">
-                <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
-                  <span>Required steps complete</span>
-                  <span className="font-semibold">{percent}%</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all',
-                      percent === 100 ? 'bg-green-500' : 'bg-dts-blue'
-                    )}
-                    style={{ width: `${percent}%` }}
-                  />
-                </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all',
+                    percent === 100 ? 'bg-green-500' : 'bg-dts-blue'
+                  )}
+                  style={{ width: `${percent}%` }}
+                />
               </div>
             </div>
 
@@ -911,13 +897,19 @@ function HistoryTab({
               onClick={() => setOpen((x) => ({ ...x, [r.id]: !x[r.id] }))}
               className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
             >
-              <div>
+              <div className="min-w-0">
                 <div className="text-sm font-medium text-gray-900">
                   {formatDateTime(r.completed_at || r.created_at)}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {r.vetting_type} · reviewed by {r.reviewed_by || '—'}
+                  reviewed by {r.reviewed_by || '—'}
+                  {r.approved_by ? ` · approved by ${r.approved_by}` : ''}
                 </div>
+                {(r.internal_notes || r.exception_note) && (
+                  <div className="mt-1 truncate text-xs italic text-gray-600">
+                    “{(r.internal_notes || r.exception_note || '').replace(/\s+/g, ' ').trim()}”
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Badge tone={carrierStatusTone(r.vetting_status)}>

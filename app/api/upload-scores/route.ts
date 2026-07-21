@@ -9,6 +9,11 @@ import { TablesInsert } from '@/lib/database.types'
 
 const GOOD_STANDING_STATUSES = ['Approved', 'Exception Approved']
 
+// How far a GAP score must drop below its excepted level before an
+// exception-approved carrier is re-flagged for review (a "materially worse"
+// change). Small month-to-month wobble within this band stays excepted.
+const GAP_WORSEN_MARGIN = 5
+
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -163,23 +168,105 @@ export async function POST(request: Request) {
     let autoCleared = 0
     const flagged: FlaggedCarrier[] = []
     const scoreRows: TablesInsert<'carrier_scores'>[] = []
+    const toScoreInput = (r: any) => ({
+      gap_score: num(r.gapScore) ?? 0,
+      crash_score: num(r.crashScore),
+      violation_score: num(r.violationScore),
+      csa_basics_score: num(r.csaBasicsScore),
+      driver_oos_score: num(r.driverOosScore),
+      critical_acute_violation_score: num(r.criticalAcuteScore),
+      new_entrant_score: num(r.newEntrantScore),
+      mcs_150_score: num(r.mcs150Score),
+      safety_rating_score: num(r.safetyRatingScore),
+    })
+
+    // ── Exception-aware re-flag suppression ──────────────────────────────────
+    // A carrier that is currently Exception-Approved was knowingly cleared
+    // despite a failing score. Re-flagging it every month for the SAME issue is
+    // noise, so we suppress the score-driven review flag while it stays
+    // exception-approved — UNLESS the score materially worsens (GAP drops at
+    // least GAP_WORSEN_MARGIN below the excepted level) or a category that was
+    // passing at exception time now fails (a genuinely new issue). New hard
+    // stops surface via their own path, and the scheduled re-vet clock still
+    // brings the carrier due on its date regardless.
+    const suppressedDots = new Set<string>()
+    {
+      const candidates: { dot: string; gap: number | null; flagged: string[] }[] = []
+      for (const [dot, r] of Array.from(mapped.entries())) {
+        const meta = metaByDot.get(dot)
+        if (!meta || meta.status !== 'Exception Approved') continue
+        if (meta.doNotUse || isBrokerwareDisabled(meta.brokerware)) continue
+        const ev = evaluateScores(toScoreInput(r))
+        if (!ev.requiresRevetting) continue // passes now — nothing to suppress
+        candidates.push({
+          dot,
+          gap: ev.gapScore ?? null,
+          flagged: ev.flaggedCategories,
+        })
+      }
+      if (candidates.length > 0) {
+        const candDots = candidates.map((c) => c.dot)
+        // The exception baseline = the score snapshot the reviewer saw at the
+        // last completed vetting. Compare this month's score against that.
+        const completedAtByDot = new Map<string, string>()
+        const { data: vrows } = await (supabaseAdmin as any)
+          .from('vetting_records')
+          .select('dot_number, completed_at')
+          .in('dot_number', candDots)
+          .not('completed_at', 'is', null)
+          .order('completed_at', { ascending: false })
+        for (const v of vrows ?? []) {
+          const d = String(v.dot_number)
+          if (!completedAtByDot.has(d)) completedAtByDot.set(d, v.completed_at)
+        }
+        const { data: srows } = await (supabaseAdmin as any)
+          .from('carrier_scores')
+          .select('dot_number, gap_score, flagged_scores, upload_date')
+          .in('dot_number', candDots)
+          .order('upload_date', { ascending: false })
+        for (const c of candidates) {
+          const completedAt = completedAtByDot.get(c.dot)
+          let baseline: { gap: number | null; flagged: string[] } | null = null
+          for (const s of srows ?? []) {
+            if (String(s.dot_number) !== c.dot) continue
+            // srows is newest-first — first row at/before the exception is the
+            // snapshot the reviewer signed off on.
+            if (completedAt && s.upload_date > completedAt) continue
+            baseline = {
+              gap: s.gap_score ?? null,
+              flagged: Array.isArray(s.flagged_scores) ? s.flagged_scores : [],
+            }
+            break
+          }
+          // No baseline to compare against → be conservative and re-flag.
+          if (!baseline) continue
+          const materiallyWorse =
+            baseline.gap != null &&
+            c.gap != null &&
+            c.gap <= baseline.gap - GAP_WORSEN_MARGIN
+          const newCategory = c.flagged.some(
+            (cat) => !baseline!.flagged.includes(cat)
+          )
+          if (!materiallyWorse && !newCategory) suppressedDots.add(c.dot)
+        }
+      }
+    }
+
     // Per-dot pass result for the recertification pass below.
-    const evalByDot = new Map<string, { passed: boolean; gap: number | null }>()
+    const evalByDot = new Map<
+      string,
+      { passed: boolean; gap: number | null; needsReview: boolean }
+    >()
     for (const [dot, r] of Array.from(mapped.entries())) {
       const carrierId = idByDot.get(dot)
       if (!carrierId) continue
 
-      const evaluation = evaluateScores({
-        gap_score: num(r.gapScore) ?? 0,
-        crash_score: num(r.crashScore),
-        violation_score: num(r.violationScore),
-        csa_basics_score: num(r.csaBasicsScore),
-        driver_oos_score: num(r.driverOosScore),
-        critical_acute_violation_score: num(r.criticalAcuteScore),
-        new_entrant_score: num(r.newEntrantScore),
-        mcs_150_score: num(r.mcs150Score),
-        safety_rating_score: num(r.safetyRatingScore),
-      })
+      const evaluation = evaluateScores(toScoreInput(r))
+      // "Raw" = the score's own verdict (kept in overall_pass). "needsReview" =
+      // the actionable flag that drives the review queue + digest, which honors
+      // an active exception (see suppressedDots above).
+      const rawNeedsRevet = evaluation.requiresRevetting
+      const needsReview = rawNeedsRevet && !suppressedDots.has(dot)
 
       scoreRows.push({
         carrier_id: carrierId,
@@ -198,7 +285,7 @@ export async function POST(request: Request) {
         rating_label: r.safetyRating ?? null,
         release_month: releaseMonth(r.releaseMonth),
         overall_pass: evaluation.overallPass,
-        requires_revetting: evaluation.requiresRevetting,
+        requires_revetting: needsReview,
         flagged_scores: evaluation.flaggedCategories,
         approval_level: evaluation.approvalLevel,
         // Each upload is its own snapshot/trend point, keyed by this timestamp.
@@ -206,11 +293,12 @@ export async function POST(request: Request) {
       })
 
       evalByDot.set(dot, {
-        passed: !evaluation.requiresRevetting,
+        passed: !rawNeedsRevet,
         gap: evaluation.gapScore ?? null,
+        needsReview,
       })
 
-      if (evaluation.requiresRevetting) {
+      if (needsReview) {
         flagged.push({
           dotNumber: dot,
           legalName: r.legalName ?? '',
@@ -219,9 +307,10 @@ export async function POST(request: Request) {
           approvalLevel: evaluation.approvalLevel,
           alertType: 'score_failure',
         })
-      } else {
+      } else if (!rawNeedsRevet) {
         autoCleared++
       }
+      // else: failing but within a granted exception — held, not re-flagged.
     }
 
     // 4. Bulk upsert scores (idempotent per carrier + release month).
@@ -282,13 +371,25 @@ export async function POST(request: Request) {
           actor: 'Bluewire upload',
         })
         recertified++
-      } else if (!ev.passed) {
+      } else if (ev.needsReview) {
         events.push({
           dot,
           carrierId: meta.id,
           type: 'score_flag',
           summary: `Scores flagged for re-vet on ${batchLabel} (GAP ${ev.gap ?? '—'}).`,
           detail: { gap: ev.gap, batch: batchLabel },
+          actor: 'Bluewire upload',
+        })
+      } else if (!ev.passed) {
+        // Still failing, but the carrier is Exception-Approved and nothing got
+        // materially worse — audit note only, no re-flag and no digest nag. The
+        // scheduled re-vet clock still brings it due on its date.
+        events.push({
+          dot,
+          carrierId: meta.id,
+          type: 'score_upload',
+          summary: `Scores still below policy on ${batchLabel} (GAP ${ev.gap ?? '—'}) but within the granted exception — not re-flagged.`,
+          detail: { gap: ev.gap, batch: batchLabel, suppressed: true },
           actor: 'Bluewire upload',
         })
       }
@@ -330,6 +431,9 @@ export async function POST(request: Request) {
       flagged: flagged.length,
       autoCleared,
       recertified,
+      // Exception-approved carriers whose failing score was held (not re-flagged)
+      // because nothing got materially worse since the exception was granted.
+      exceptionHeld: suppressedDots.size,
       errors,
     })
   } catch (err: any) {

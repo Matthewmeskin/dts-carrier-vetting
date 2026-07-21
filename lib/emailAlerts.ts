@@ -206,6 +206,83 @@ export async function sendComplianceAlert(carriers: FlaggedCarrier[], batchLabel
   await resend.emails.send({ from: FROM, to: TO, subject, html })
 }
 
+// ── Expired-insurance report ─────────────────────────────────────────────────
+// A proactive full list of active carriers whose auto/cargo insurance is
+// CURRENTLY expired (not just newly-detected). Complements the delta-based daily
+// digest, which only surfaces changes.
+
+export interface ExpiredInsuranceCarrier {
+  dotNumber: string
+  legalName: string
+  mcNumber?: string | null
+  /** e.g. ["Auto liability expired 7/1/2026", "Cargo status: No-Current-Info"]. */
+  issues: string[]
+}
+
+export async function sendInsuranceExpiryReport(
+  carriers: ExpiredInsuranceCarrier[]
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    const apiKey = process.env.RESEND_API_KEY
+    const from = process.env.ALERT_EMAIL_FROM
+    const to = (process.env.ALERT_EMAIL_TO ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (!apiKey || !from || to.length === 0) {
+      return { sent: false, error: 'Email not configured (RESEND_API_KEY / ALERT_EMAIL_FROM / ALERT_EMAIL_TO)' }
+    }
+    if (carriers.length === 0) return { sent: true } // nothing expired — no email
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ''
+    const resend = new Resend(apiKey)
+    const esc = (s: string) =>
+      String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const link = (dot: string) =>
+      APP_URL ? `<a href="${APP_URL}/carriers/${esc(dot)}" style="color:#0063A0;">View</a>` : ''
+
+    const rows = carriers
+      .map((c) => {
+        const mc = c.mcNumber ? String(c.mcNumber).replace(/\D/g, '') : ''
+        return `
+      <tr>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
+          <div style="font-weight:600;">${esc(c.legalName)}</div>
+          <div style="color:#6b7280;font-size:12px;">DOT ${esc(c.dotNumber)}${mc ? ` · MC ${esc(mc)}` : ''}</div>
+        </td>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:#dc2626;">
+          ${c.issues.map((i) => esc(i)).join('<br/>')}
+        </td>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(c.dotNumber)}</td>
+      </tr>`
+      })
+      .join('')
+
+    const subject = `DTS Insurance Expiry — ${carriers.length} active carrier${carriers.length === 1 ? '' : 's'} with expired coverage`
+    const html = `
+    <div style="font-family:sans-serif;max-width:900px;margin:0 auto;">
+      <div style="background:#AB0534;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
+        <h1 style="margin:0;font-size:20px;">Carriers With Expired Insurance</h1>
+        <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">${carriers.length} active carrier${carriers.length === 1 ? '' : 's'} — do not use until coverage is restored.</p>
+      </div>
+      <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
+        <table style="width:100%;border-collapse:collapse;margin-top:12px;">
+          <thead><tr style="background:#f9fafb;">
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Expired Coverage</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`
+
+    await resend.emails.send({ from, to, subject, html })
+    return { sent: true }
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : 'send failed' }
+  }
+}
+
 // ── Daily digest ───────────────────────────────────────────────────────────
 // One email per day summarizing everything that needs a human's attention,
 // instead of a separate alert per detection. Individual detections still record

@@ -36,9 +36,16 @@ function meta(type: string) {
   return TYPE_META[type] ?? { label: type, tone: 'gray' as BadgeTone }
 }
 
+// A human actor is stamped "Name (Staff|Manager|Director)"; automated actors are
+// things like "ELD monitor", "system (RMIS delta)", "Bluewire upload".
+function isPerson(actor: string | null): boolean {
+  return !!actor && /\((Staff|Manager|Director)\)\s*$/.test(actor)
+}
+
 export default function ActivityLogPage() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [actor, setActor] = useState('')
+  const [peopleOnly, setPeopleOnly] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
   const [actors, setActors] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,15 +70,20 @@ export default function ActivityLogPage() {
     load()
   }, [load])
 
-  // Per-user counts for the selected day (over the unfiltered actor list).
+  const visibleRows = useMemo(
+    () => (peopleOnly ? rows.filter((r) => isPerson(r.actor)) : rows),
+    [rows, peopleOnly]
+  )
+
+  // Per-actor counts for the selected day, over the current (People/All) view.
   const summary = useMemo(() => {
     const m = new Map<string, number>()
-    for (const r of rows) {
+    for (const r of visibleRows) {
       const a = r.actor || 'system'
       m.set(a, (m.get(a) ?? 0) + 1)
     }
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
-  }, [rows])
+  }, [visibleRows])
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -88,6 +100,22 @@ export default function ActivityLogPage() {
           subtitle="Who did what, across all carriers. Times are UTC."
           action={
             <div className="flex items-end gap-3">
+              <div className="flex rounded-md border border-gray-200 p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPeopleOnly(false)}
+                  className={`rounded px-2.5 py-1 font-medium ${!peopleOnly ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPeopleOnly(true)}
+                  className={`rounded px-2.5 py-1 font-medium ${peopleOnly ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                >
+                  People only
+                </button>
+              </div>
               <div className="w-40">
                 <Input
                   label="Date"
@@ -133,8 +161,12 @@ export default function ActivityLogPage() {
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <Spinner size={16} /> Loading…
             </div>
-          ) : rows.length === 0 ? (
-            <p className="text-sm text-gray-500">No recorded actions on this date.</p>
+          ) : visibleRows.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              {peopleOnly
+                ? 'No user actions on this date (only automated activity).'
+                : 'No recorded actions on this date.'}
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -148,7 +180,7 @@ export default function ActivityLogPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => {
+                  {visibleRows.map((r) => {
                     const m = meta(r.event_type)
                     return (
                       <tr key={r.id} className="border-b border-gray-100 align-top">

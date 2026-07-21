@@ -341,14 +341,20 @@ export default function CarrierDetailPage({
 
           {/* Business registration (Secretary of State) + factor */}
           <SosPanel dot={dot} sos={sos} factor={factor} onRefreshed={load} />
+
+          {/* Intrastate-only designation (Manager/Director; suppresses the
+              interstate operating-authority hard stop) — grouped with the
+              carrier info at the top. */}
+          <IntrastateToggle
+            dot={dot}
+            value={carrier.is_intrastate}
+            onChanged={load}
+            bare
+          />
         </CardBody>
       </Card>
 
       <AlertBanner hardStops={displayHardStops} flags={displayFlags} />
-
-      {/* Intrastate-only designation (Manager/Director; suppresses the interstate
-          operating-authority hard stop) */}
-      <IntrastateToggle dot={dot} value={carrier.is_intrastate} onChanged={load} />
 
       {/* Address check — satellite + Street View of the FMCSA physical address.
           Only the FMCSA/RMIS physical address is used (never the TMS mailing /

@@ -14,10 +14,14 @@ export function IntrastateToggle({
   dot,
   value,
   onChanged,
+  bare,
 }: {
   dot: string
   value: boolean | null
   onChanged?: () => void | Promise<void>
+  /** Render without the Card wrapper, to sit inside another panel (e.g. the
+   *  carrier header tile). */
+  bare?: boolean
 }) {
   const [role, setRole] = useState<Role | null>(null)
   const [on, setOn] = useState(!!value)
@@ -64,9 +68,8 @@ export function IntrastateToggle({
     }
   }
 
-  return (
-    <Card>
-      <CardBody>
+  const inner = (
+    <>
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-sm font-medium text-gray-900">Intrastate-only carrier</div>
@@ -110,7 +113,15 @@ export function IntrastateToggle({
           </p>
         )}
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-      </CardBody>
+    </>
+  )
+
+  if (bare) {
+    return <div className="border-t border-gray-100 pt-4">{inner}</div>
+  }
+  return (
+    <Card>
+      <CardBody>{inner}</CardBody>
     </Card>
   )
 }

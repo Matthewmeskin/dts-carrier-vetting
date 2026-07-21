@@ -34,7 +34,22 @@ export function AddressCheck({
   source?: string
 }) {
   const address = buildAddress(street, city, state, zip)
-  if (!address) return null
+
+  // No FMCSA/RMIS physical address on file — show a prompt rather than falling
+  // back to a TMS mailing / P.O. Box address (which can't verify a real site).
+  if (!address) {
+    return (
+      <Card>
+        <CardHeader title="Address check" subtitle={source || 'FMCSA-registered physical address'} />
+        <CardBody>
+          <p className="text-sm text-gray-500">
+            No FMCSA/RMIS physical address on file for this carrier. Use “Refresh
+            from RMIS” on the Insurance panel to pull it.
+          </p>
+        </CardBody>
+      </Card>
+    )
+  }
 
   const enc = encodeURIComponent(address)
   const mapsLink = `https://www.google.com/maps/search/?api=1&query=${enc}`

@@ -350,17 +350,15 @@ export default function CarrierDetailPage({
           operating-authority hard stop) */}
       <IntrastateToggle dot={dot} value={carrier.is_intrastate} onChanged={load} />
 
-      {/* Address check — satellite + Street View of the FMCSA physical address */}
+      {/* Address check — satellite + Street View of the FMCSA physical address.
+          Only the FMCSA/RMIS physical address is used (never the TMS mailing /
+          P.O. Box address), since the point is to verify the physical site. */}
       <AddressCheck
-        street={insurance?.rmis_carrier_street ?? carrier.street}
-        city={insurance?.rmis_carrier_city ?? carrier.city}
-        state={insurance?.rmis_carrier_state ?? carrier.state}
-        zip={insurance?.rmis_carrier_zip ?? carrier.zip}
-        source={
-          insurance?.rmis_carrier_street
-            ? 'FMCSA-registered physical address (RMIS)'
-            : 'Carrier address (Brokerware/TMS)'
-        }
+        street={insurance?.rmis_carrier_street}
+        city={insurance?.rmis_carrier_city}
+        state={insurance?.rmis_carrier_state}
+        zip={insurance?.rmis_carrier_zip}
+        source="FMCSA-registered physical address (RMIS)"
       />
 
       {/* Insurance */}

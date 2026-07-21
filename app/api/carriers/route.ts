@@ -5,11 +5,7 @@ import { computeRevetStatus, isBrokerwareDisabled } from '@/lib/revet'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const ACTIVE_STATUSES = [
-  'Approved',
-  'Approved with Restrictions',
-  'Exception Approved',
-]
+const ACTIVE_STATUSES = ['Approved', 'Exception Approved']
 
 interface CarrierSummary {
   id: string

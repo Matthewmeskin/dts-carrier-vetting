@@ -16,8 +16,9 @@ create table carriers (
   power_units integer,
   safety_rating text default 'Unrated',
   carrier_status text default 'Pending Review',
-  -- carrier_status options: Approved, Approved with Restrictions,
-  -- Exception Approved, Declined, Suspended, Do Not Use, Pending Review
+  -- carrier_status options: Pending Review (neutral default), Approved,
+  -- Exception Approved, Declined. (Declined folds in the former Suspended /
+  -- Do Not Use; Approved with Restrictions was folded into Exception Approved.)
   do_not_use boolean default false,
   do_not_use_reason text,
   created_at timestamptz default now(),
@@ -130,8 +131,8 @@ create table vetting_records (
   vetting_type text not null,
   -- vetting_type options: initial, monthly_review, revetting, exception
   vetting_status text,
-  -- vetting_status options: approved, approved_with_restrictions,
-  -- exception_approved, declined, in_progress
+  -- vetting_status options (stored as display strings): Pending Review,
+  -- Approved, Exception Approved, Declined
   checklist jsonb,
   exception_note text,
   internal_notes text,

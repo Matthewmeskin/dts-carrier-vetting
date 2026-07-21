@@ -18,11 +18,8 @@ export const runtime = 'nodejs'
 
 const ALLOWED_STATUSES = [
   'Approved',
-  'Approved with Restrictions',
   'Exception Approved',
   'Declined',
-  'Suspended',
-  'Do Not Use',
   'Pending Review',
 ]
 

@@ -38,16 +38,24 @@ const VETTING_TYPES = [
   { value: 'exception', label: 'Exception' },
 ]
 
-// The single carrier status = the vetting decision.
+// The single carrier status = the vetting decision. Three decisions plus the
+// neutral pre-decision default:
+//  • Approved            → satisfies baseline requirements (Active in TMS)
+//  • Exception Approved  → misses a non-hard-stop baseline preference; scoped
+//                          exception per §15
+//  • Declined            → not eligible (covers former Declined / Suspended /
+//                          Do Not Use — Disabled in TMS)
 const CARRIER_STATUSES = [
   'Pending Review',
   'Approved',
-  'Approved with Restrictions',
   'Exception Approved',
   'Declined',
-  'Suspended',
-  'Do Not Use',
 ]
+
+// "Approved" is only offered when the carrier clears every baseline
+// requirement. If any required check is failing policy or still incomplete,
+// the only forward paths are a documented Exception Approval or a Decline.
+const APPROVED_STATUS = 'Approved'
 
 const REVET_TONE: Record<RevetState, BadgeTone> = {
   overdue: 'red',
@@ -357,6 +365,19 @@ export function VettingChecklist({
     return anyRequiredIncomplete || !!exceptionStepChecked
   }, [checklist])
 
+  // A carrier "meets baseline" only when every required check is completed AND
+  // none of them is a policy failure that was manually overridden. Overriding a
+  // failed policy is, by definition, an exception — so it can't be plain
+  // Approved. When baseline isn't met, the Approved option is disabled and the
+  // reviewer must choose Exception Approved or Declined.
+  const meetsBaseline = useMemo(
+    () =>
+      checklist.steps.every(
+        (s) => !s.required || (s.completed && s.autoStatus !== 'fail')
+      ),
+    [checklist]
+  )
+
   function updateStep(id: string, patch: Partial<ChecklistStep>) {
     // Any edit (check/uncheck OR a per-step note) is unsaved until the vetting
     // record is saved — flag it so the "Unsaved changes" indicator shows.
@@ -516,15 +537,33 @@ export function VettingChecklist({
                     onChange={(e) => onCarrierStatusChange(e.target.value)}
                   >
                     {CARRIER_STATUSES.map((s) => {
-                      const gated = blockedApproval && APPROVING_STATUSES.includes(s)
+                      const roleGated =
+                        blockedApproval && APPROVING_STATUSES.includes(s)
+                      // Can't pick plain Approved unless baseline is satisfied.
+                      const baselineGated = s === APPROVED_STATUS && !meetsBaseline
+                      const gated = roleGated || baselineGated
+                      const suffix = baselineGated
+                        ? ' — baseline not met (use Exception Approved)'
+                        : roleGated
+                          ? ` — needs ${ROLE_LABEL[requiredLevel as 'manager' | 'director']}`
+                          : ''
                       return (
                         <option key={s} value={s} disabled={gated}>
                           {s}
-                          {gated ? ` — needs ${ROLE_LABEL[requiredLevel as 'manager' | 'director']}` : ''}
+                          {suffix}
                         </option>
                       )
                     })}
                   </Select>
+                  {!meetsBaseline && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      This carrier doesn’t meet a baseline requirement, so it
+                      can’t be plainly <span className="font-semibold">Approved</span>.
+                      Use <span className="font-semibold">Exception Approved</span>{' '}
+                      (with a documented, scoped exception) or{' '}
+                      <span className="font-semibold">Declined</span>.
+                    </p>
+                  )}
                   {blockedApproval && (
                     <p className="mt-1 text-xs text-amber-700">
                       This carrier needs{' '}

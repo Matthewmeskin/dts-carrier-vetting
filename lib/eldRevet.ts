@@ -57,7 +57,7 @@ export async function maybeFlagForRevet(params: {
 
     const alreadyPending =
       c.carrier_status === 'Pending Review' ||
-      c.carrier_status === 'Do Not Use' ||
+      c.carrier_status === 'Declined' ||
       c.do_not_use === true
 
     const reasons = reds.map((f) => f.text)

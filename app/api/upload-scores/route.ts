@@ -7,11 +7,7 @@ import { isBrokerwareDisabled } from '@/lib/revet'
 import { logCarrierEvents, type CarrierEventInput } from '@/lib/auditLog'
 import { TablesInsert } from '@/lib/database.types'
 
-const GOOD_STANDING_STATUSES = [
-  'Approved',
-  'Approved with Restrictions',
-  'Exception Approved',
-]
+const GOOD_STANDING_STATUSES = ['Approved', 'Exception Approved']
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'

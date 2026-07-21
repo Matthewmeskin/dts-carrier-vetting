@@ -12,9 +12,12 @@ export const runtime = 'nodejs'
 // older callers. New callers send the carrier status value directly.
 const STATUS_MAP: Record<string, string> = {
   approved: 'Approved',
-  approved_with_restrictions: 'Approved with Restrictions',
   exception_approved: 'Exception Approved',
   declined: 'Declined',
+  // Legacy decisions that have since been folded into "Declined".
+  suspended: 'Declined',
+  do_not_use: 'Declined',
+  approved_with_restrictions: 'Exception Approved',
   in_progress: 'Pending Review',
 }
 

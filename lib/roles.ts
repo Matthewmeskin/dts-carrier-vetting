@@ -23,11 +23,7 @@ export function isRole(v: unknown): v is Role {
 }
 
 /** Carrier statuses that constitute an approval (subject to the role gate). */
-export const APPROVING_STATUSES = [
-  'Approved',
-  'Approved with Restrictions',
-  'Exception Approved',
-]
+export const APPROVING_STATUSES = ['Approved', 'Exception Approved']
 
 /**
  * The minimum approval role a carrier needs, from its score-derived approval

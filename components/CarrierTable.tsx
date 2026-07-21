@@ -124,11 +124,7 @@ function buildCarrierCsv(rows: CarrierSummary[]): string {
   return lines.join('\n')
 }
 
-const ACTIVE_STATUSES = [
-  'Approved',
-  'Approved with Restrictions',
-  'Exception Approved',
-]
+const ACTIVE_STATUSES = ['Approved', 'Exception Approved']
 
 const REVET_TONE: Record<RevetState, BadgeTone> = {
   overdue: 'red',
@@ -451,7 +447,13 @@ export function CarrierTable({
         case 'HardStop':
           return (c.hard_stops?.length ?? 0) > 0
         case 'DoNotUse':
-          return !!c.do_not_use || c.carrier_status === 'Do Not Use'
+          // "Declined" now covers the former Declined / Suspended / Do Not Use.
+          return (
+            !!c.do_not_use ||
+            c.carrier_status === 'Declined' ||
+            c.carrier_status === 'Do Not Use' ||
+            c.carrier_status === 'Suspended'
+          )
         default:
           return true
       }
@@ -699,7 +701,7 @@ export function CarrierTable({
             <option value="DueForRevet">Due for Re-vet</option>
             <option value="HardStop">Hard Stop</option>
             <option value="NotInRmis">Not in RMIS</option>
-            <option value="DoNotUse">Do Not Use</option>
+            <option value="DoNotUse">Declined / Do Not Use</option>
             <option value="Disabled">Inactive / Disabled (Brokerware)</option>
           </Select>
         </div>

@@ -23,6 +23,7 @@ import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
 import { CarrierActivity } from '@/components/CarrierActivity'
+import { AddressCheck } from '@/components/AddressCheck'
 
 const REVET_TONE: Record<RevetState, BadgeTone> = {
   overdue: 'red',
@@ -340,6 +341,19 @@ export default function CarrierDetailPage({
       </Card>
 
       <AlertBanner hardStops={displayHardStops} flags={displayFlags} />
+
+      {/* Address check — satellite + Street View of the FMCSA physical address */}
+      <AddressCheck
+        street={insurance?.rmis_carrier_street ?? carrier.street}
+        city={insurance?.rmis_carrier_city ?? carrier.city}
+        state={insurance?.rmis_carrier_state ?? carrier.state}
+        zip={insurance?.rmis_carrier_zip ?? carrier.zip}
+        source={
+          insurance?.rmis_carrier_street
+            ? 'FMCSA-registered physical address (RMIS)'
+            : 'Carrier address (Brokerware/TMS)'
+        }
+      />
 
       {/* Insurance */}
       <InsurancePanel insurance={displayInsurance} dot={dot} onRefreshed={load} />

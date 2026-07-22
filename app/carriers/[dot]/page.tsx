@@ -23,6 +23,7 @@ import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
 import { PaymentVetting } from '@/components/PaymentVetting'
+import { RmisMonitoring } from '@/components/RmisMonitoring'
 import { CarrierActivity } from '@/components/CarrierActivity'
 import { AddressCheck } from '@/components/AddressCheck'
 import { IntrastateToggle } from '@/components/IntrastateToggle'
@@ -356,6 +357,15 @@ export default function CarrierDetailPage({
       </Card>
 
       <AlertBanner hardStops={displayHardStops} flags={displayFlags} />
+
+      {/* RMIS monitoring — prompt to detach when the carrier is disabled in the
+          TMS (we shouldn't keep paying RMIS to monitor a carrier we don't use). */}
+      <RmisMonitoring
+        dot={dot}
+        disabledInTms={disabled}
+        brokerwareStatus={carrier.brokerware_status}
+        onChanged={load}
+      />
 
       {/* Address check — satellite + Street View of the FMCSA physical address.
           Only the FMCSA/RMIS physical address is used (never the TMS mailing /

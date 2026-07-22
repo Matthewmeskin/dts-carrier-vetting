@@ -16,6 +16,8 @@ const CLIENT_PASSWORD = process.env.RMIS_CLIENT_PASSWORD
 const DELTA_URL = `${BASE_URL}/_c/std/api/DeltaAPI.aspx`
 const EXPANDED_URL = `${BASE_URL}/_c/std/api/ExpandedCarrierAPI.aspx`
 const DOCUMENT_URL = `${BASE_URL}/_c/std/api/DocumentAPI.aspx`
+const NONATTACHED_URL = `${BASE_URL}/_c/std/api/NonAttachedCarrierStatusRequestAPI.aspx`
+const ATTACH_URL = `${BASE_URL}/_c/std/api/AttachCarrier.aspx`
 
 function requireCredentials() {
   if (!CLIENT_ID || !CLIENT_PASSWORD) {
@@ -93,6 +95,102 @@ export async function fetchExpandedCarrierXML(params: {
     throw new Error(`RMIS Expanded Carrier API error: ${err || 'unknown error'}`)
   }
   return xml
+}
+
+/**
+ * Check a carrier that is NOT in our monitored list. Returns basic info (and
+ * whether they'd pass the business rules) for carriers RMIS isn't tracking for
+ * us — the fallback when the Expanded Carrier API returns "Insured not found".
+ * Provide a DOT or MC number. Returns the raw response text (XML).
+ */
+export async function fetchNonMonitoredCarrier(params: {
+  dotNumber?: string
+  mcNumber?: string
+  credentials?: RMISCredentials
+}): Promise<string> {
+  const { clientID, clientPassword } = resolveCreds(params.credentials)
+
+  let querytype: string
+  let queryid: string
+  if (params.dotNumber) {
+    querytype = 'DOT'
+    queryid = params.dotNumber
+  } else if (params.mcNumber) {
+    querytype = 'MC_MX'
+    queryid = params.mcNumber
+  } else {
+    throw new Error('fetchNonMonitoredCarrier requires dotNumber or mcNumber')
+  }
+
+  const query = new URLSearchParams({
+    clientID,
+    pwd: clientPassword,
+    querytype,
+    queryid,
+    version: '2',
+  })
+
+  const text = await withRmisLock(async () => {
+    const res = await fetch(`${NONATTACHED_URL}?${query.toString()}`, {
+      method: 'GET',
+      headers: { Accept: 'application/xml, text/xml, application/json' },
+      cache: 'no-store',
+    })
+    if (!res.ok) {
+      throw new Error(
+        `RMIS Non-Monitored Carrier API returned ${res.status} ${res.statusText}`
+      )
+    }
+    return res.text()
+  }, { label: 'nonmonitored' })
+
+  if (/<Result>\s*ERROR\s*<\/Result>/i.test(text)) {
+    const err = /<Error>([\s\S]*?)<\/Error>/i.exec(text)?.[1]?.trim()
+    throw new Error(`RMIS Non-Monitored Carrier API error: ${err || 'unknown error'}`)
+  }
+  return text
+}
+
+export type AttachMode = 'Attach' | 'Detach'
+
+/**
+ * Attach or Detach a carrier from our monitored carrier list. Per RMIS, Attach
+ * is for TESTING ONLY — production use is Detach (stop monitoring a carrier we no
+ * longer work with, e.g. one disabled in the TMS). Provide a DOT or MC number.
+ */
+export async function setCarrierMonitoring(params: {
+  mode: AttachMode
+  dotNumber?: string
+  mcNumber?: string
+  insuredID?: string
+  credentials?: RMISCredentials
+}): Promise<{ ok: boolean; status: number; body: string }> {
+  const { clientID, clientPassword } = resolveCreds(params.credentials)
+
+  const query = new URLSearchParams({
+    clientID,
+    pwd: clientPassword,
+    attachMode: params.mode,
+  })
+  // Identifier is one of MCNumber / DOTNumber / InsuredID.
+  if (params.insuredID) query.set('InsuredID', params.insuredID)
+  else if (params.dotNumber) query.set('DOTNumber', params.dotNumber)
+  else if (params.mcNumber) query.set('MCNumber', params.mcNumber)
+  else throw new Error('setCarrierMonitoring requires dotNumber, mcNumber, or insuredID')
+
+  return withRmisLock(async () => {
+    const res = await fetch(`${ATTACH_URL}?${query.toString()}`, {
+      method: 'GET',
+      headers: { Accept: 'application/xml, text/xml, application/json' },
+      cache: 'no-store',
+    })
+    const body = await res.text()
+    if (/<Result>\s*ERROR\s*<\/Result>/i.test(body)) {
+      const err = /<Error>([\s\S]*?)<\/Error>/i.exec(body)?.[1]?.trim()
+      throw new Error(`RMIS Attach/Detach error: ${err || body.slice(0, 200)}`)
+    }
+    return { ok: res.ok, status: res.status, body }
+  }, { label: `attach:${params.mode}` })
 }
 
 export type RMISDocumentType =

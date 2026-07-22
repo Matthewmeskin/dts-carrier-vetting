@@ -1,4 +1,5 @@
 import type { CarrierContext } from '@/lib/carrierContext'
+import { formatDate, formatDateTime } from '@/lib/utils'
 
 // Build a print-friendly, standalone Carrier Profile HTML page from the carrier
 // context. Rendered to PDF (via the PDF service) and appended to the payment
@@ -30,9 +31,21 @@ export function buildCarrierProfileHtml(
   const yn = (v: any): string => (v === true ? 'YES' : v === false ? 'NO' : '&mdash;')
   const fld = (l: string, v: any): string =>
     `<tr><td class="l">${l}</td><td class="v">${esc(v)}</td></tr>`
+  // Like fld but the value is trusted HTML (e.g. a link).
+  const fldRaw = (l: string, v: string): string =>
+    `<tr><td class="l">${l}</td><td class="v">${v || '&mdash;'}</td></tr>`
   const addrStr = [addr.street, [addr.city, addr.state, addr.zip].filter(Boolean).join(' ')]
     .filter((p) => p && String(p).trim())
     .join(', ')
+
+  // Secretary-of-State search link for the carrier (state SoS business search).
+  const sosName = String(c.legal_name || '')
+  const sosState = String(addr.state || '').trim()
+  const sosSearchLink = sosName
+    ? `<a href="https://www.google.com/search?q=${encodeURIComponent(
+        sosName + ' ' + sosState + ' secretary of state business entity search'
+      )}">Search ${esc(sosState)} Secretary of State</a>`
+    : '&mdash;'
   const hardStops =
     Array.isArray(ins.hard_stops) && ins.hard_stops.length
       ? ins.hard_stops.join('; ')
@@ -104,20 +117,20 @@ export function buildCarrierProfileHtml(
     '<div class="cols"><div><table>' +
     fld('Operating status', auth.operating_status) +
     fld('Contract authority', auth.contract_authority_status) +
-    fld('Authority granted', auth.authority_original_date) +
+    fld('Authority granted', auth.authority_original_date ? formatDate(auth.authority_original_date) : null) +
     fld('Authority age (days)', auth.authority_days_active) +
     '</table></div><div><table>' +
     fld('Safety rating', c.safety_rating) +
     fld('RMIS certified', yn(ins.rmis_is_certified)) +
-    fld('RMIS last pulled', ins.fetched_at) +
+    fld('RMIS last pulled', ins.fetched_at ? formatDateTime(ins.fetched_at) : null) +
     fld('Hard stops', hardStops) +
     '</table></div></div>' +
     locationSection +
     '<div class="sec">Insurance</div>' +
     '<table>' +
-    fld('Auto liability', (ins.auto_status || '—') + (ins.auto_expiration_date ? ' · exp ' + ins.auto_expiration_date : '')) +
-    fld('Cargo', (ins.cargo_status || '—') + (ins.cargo_expiration_date ? ' · exp ' + ins.cargo_expiration_date : '')) +
-    fld('General liability', (ins.general_status || '—') + (ins.general_expiration_date ? ' · exp ' + ins.general_expiration_date : '')) +
+    fld('Auto liability', (ins.auto_status || '—') + (ins.auto_expiration_date ? ' · exp ' + formatDate(ins.auto_expiration_date) : '')) +
+    fld('Cargo', (ins.cargo_status || '—') + (ins.cargo_expiration_date ? ' · exp ' + formatDate(ins.cargo_expiration_date) : '')) +
+    fld('General liability', (ins.general_status || '—') + (ins.general_expiration_date ? ' · exp ' + formatDate(ins.general_expiration_date) : '')) +
     '</table>' +
     '<div class="sec">Compliance documents</div>' +
     '<div class="cols"><div><table>' +
@@ -127,7 +140,7 @@ export function buildCarrierProfileHtml(
     fld('W-9 tax ID', id.w9_tax_id_last4 ? 'ending ' + id.w9_tax_id_last4 : null) +
     '</table></div><div><table>' +
     fld('Broker-carrier agreement', yn(id.bca_on_file)) +
-    fld('Agreement date', id.bca_date) +
+    fld('Agreement date', id.bca_date ? formatDate(id.bca_date) : null) +
     '</table></div></div>' +
     '<div class="sec">Business registration (SOS)</div>' +
     '<table>' +
@@ -137,21 +150,25 @@ export function buildCarrierProfileHtml(
     fld('Principal address', sos.principal_address) +
     fld('Registered agent', sos.registered_agent) +
     (sos.summary ? fld('Summary', sos.summary) : '') +
+    fldRaw('SoS search', sosSearchLink) +
     '</table>' +
     (fac.is_factoring === true
       ? '<div class="sec">Factoring</div><div class="cols"><div><table>' +
         fld('Factoring?', yn(fac.is_factoring)) +
         fld('Pay-to entity', fac.pay_to_entity) +
         fld('Pay-to address', fac.pay_to_address) +
-        '</table></div><div><table>' +
         fld('Factor (registry)', factor.name) +
         fld('Factor approval', factor.approval_status) +
+        '</table></div><div><table>' +
         fld('Factor SOS status', factor.sos_status_normalized) +
-        fld('Factor state', factor.sos_state) +
+        fld('Factor SOS state', factor.sos_state) +
+        fld('Factor SOS entity type', factor.sos_entity_type) +
+        fld('Factor registered agent', factor.sos_registered_agent) +
         '</table></div></div>' +
+        (factor.sos_summary ? '<table>' + fld('Factor SOS summary', factor.sos_summary) + '</table>' : '') +
         '<table>' +
         fld('NOA result', noaResultStr) +
-        fld('NOA checked', noa.checked_at) +
+        fld('NOA checked', noa.checked_at ? formatDateTime(noa.checked_at) : null) +
         '</table>'
       : '') +
     '<div class="sub" style="margin-top:16px">Generated from the DTS Carrier Compliance Portal.</div>' +

@@ -412,9 +412,6 @@ export default function CarrierDetailPage({
       {/* ELD — live fleet location */}
       <EldPanel dot={dot} eldEnrolled={insurance?.rmis_eld_enrolled ?? null} />
 
-      {/* Notice of Assignment — factoring carriers only */}
-      {insurance?.is_factoring && <NoaPanel dot={dot} />}
-
       {/* RMIS monitoring — detach + disabled-in-TMS prompt. */}
       <RmisMonitoring
         dot={dot}
@@ -458,6 +455,10 @@ export default function CarrierDetailPage({
 
       {/* Documents */}
       <CarrierDocuments dot={dot} reloadKey={docReload} onChanged={load} />
+
+      {/* Accounts-payable section — NOA + invoice payment vetting together. */}
+      {/* Notice of Assignment — factoring carriers only */}
+      {insurance?.is_factoring && <NoaPanel dot={dot} />}
 
       {/* Accounts-payable: upload load docs to vet a carrier invoice for payment */}
       <PaymentVetting dot={dot} />

@@ -180,6 +180,12 @@ export function AuthorityPanel({
               if (insurance.common_authority_status === 'A') active.push('Common')
               if (insurance.contract_authority_status === 'A') active.push('Contract')
               if (insurance.broker_authority_status === 'A') active.push('Broker')
+              // Distinguish "no authority data" (e.g. a non-monitored carrier) from
+              // "we have data and none is active" — only the latter is a red flag.
+              const hasData =
+                !!insurance.common_authority_status ||
+                !!insurance.contract_authority_status ||
+                !!insurance.broker_authority_status
               return active.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {active.map((a) => (
@@ -188,8 +194,10 @@ export function AuthorityPanel({
                     </Badge>
                   ))}
                 </div>
-              ) : (
+              ) : hasData ? (
                 <Badge tone="red">None active</Badge>
+              ) : (
+                <span className="text-gray-400">—</span>
               )
             })()}
           />

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase'
+import { stateFromZip } from '@/lib/sosNormalize'
 
 // The carrier snapshot the payment-vetting workflow (and the carrier-profile PDF)
 // build on: identity, physical address, authority, insurance, W-9/BCA, factoring,
@@ -67,12 +68,21 @@ export async function getCarrierContext(
   const last4 = (v?: string | null) =>
     v ? String(v).replace(/\D/g, '').slice(-4) || null : null
 
+  // When RMIS gives us the carrier's real physical address, use its state — and
+  // if RMIS left the state blank, derive it from the RMIS ZIP rather than
+  // borrowing the carriers-table state (which is often the FACTOR's remit-address
+  // state, e.g. ONKAR's stored "IL" is really Capital Depot in Des Plaines, while
+  // the carrier sits at Whiteland ZIP 46184 = IN). Only fall back to the
+  // carriers-table address when RMIS has nothing.
+  const usingRmisAddr = !!i.rmis_carrier_street
   const physical_address = {
     street: i.rmis_carrier_street ?? c.street ?? null,
     city: i.rmis_carrier_city ?? c.city ?? null,
-    state: i.rmis_carrier_state ?? c.state ?? null,
+    state: usingRmisAddr
+      ? i.rmis_carrier_state ?? stateFromZip(i.rmis_carrier_zip) ?? null
+      : c.state ?? null,
     zip: i.rmis_carrier_zip ?? c.zip ?? null,
-    source: i.rmis_carrier_street ? 'RMIS/FMCSA' : 'Brokerware/TMS',
+    source: usingRmisAddr ? 'RMIS/FMCSA' : 'Brokerware/TMS',
   }
 
   return {

@@ -58,6 +58,65 @@ export async function GET(
   }
 }
 
+// DELETE — remove a single document (by ?id=). Deletes the stored file from
+// Storage and the metadata row, and records it on the Activity timeline. Used
+// by the payment-vetting panel to clear out test reports.
+export async function DELETE(
+  request: Request,
+  { params }: { params: { dot: string } }
+) {
+  try {
+    const dot = params.dot
+    const id = new URL(request.url).searchParams.get('id')
+    if (!id) {
+      return NextResponse.json({ error: 'Missing document id' }, { status: 400 })
+    }
+
+    // Scope the lookup to this carrier so an id can't delete another's doc.
+    const { data: doc, error: findError } = await supabaseAdmin
+      .from('vetting_documents')
+      .select('*')
+      .eq('id', id)
+      .eq('dot_number', dot)
+      .maybeSingle()
+    if (findError) throw findError
+    if (!doc) {
+      return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+    }
+
+    // Best-effort remove the underlying file, then the metadata row.
+    if ((doc as any).storage_path) {
+      await supabaseAdmin.storage
+        .from((doc as any).storage_bucket || BUCKET)
+        .remove([(doc as any).storage_path])
+    }
+    const { error: delError } = await supabaseAdmin
+      .from('vetting_documents')
+      .delete()
+      .eq('id', id)
+      .eq('dot_number', dot)
+    if (delError) throw delError
+
+    const typeLabel =
+      DOC_TYPE_LABELS[String((doc as any).document_type ?? '')] ?? 'Document'
+    const user = await getSessionUser()
+    const actor = user
+      ? `${user.fullName || user.email}${user.role ? ` (${ROLE_LABEL[user.role]})` : ''}`
+      : 'DTS'
+    await logCarrierEvent({
+      dot,
+      carrierId: (doc as any).carrier_id ?? null,
+      type: 'document_delete',
+      summary: `Deleted ${typeLabel}${(doc as any).file_name ? `: ${(doc as any).file_name}` : ''}`,
+      actor,
+    })
+
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })
+  }
+}
+
 // POST — record a document that the client already uploaded to Supabase Storage
 // via a signed upload URL (see ./sign). We take metadata + the storage path in
 // JSON — NOT the file bytes — so uploads of any size bypass Vercel's 4.5 MB

@@ -51,6 +51,7 @@ export function PaymentVetting({ dot }: { dot: string }) {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reports, setReports] = useState<PvDoc[]>([])
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Default the destination email + staff name to the signed-in user.
   useEffect(() => {
@@ -82,6 +83,27 @@ export function PaymentVetting({ dot }: { dot: string }) {
   useEffect(() => {
     loadHistory()
   }, [loadHistory])
+
+  async function deleteReport(d: PvDoc) {
+    if (!confirm(`Delete "${d.file_name || 'this report'}"? This cannot be undone.`)) {
+      return
+    }
+    setDeletingId(d.id)
+    setError(null)
+    try {
+      const res = await fetch(
+        `/api/carriers/${dot}/documents?id=${encodeURIComponent(d.id)}`,
+        { method: 'DELETE' }
+      )
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not delete report')
+      setReports((rs) => rs.filter((r) => r.id !== d.id))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete report')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   async function submit() {
     setError(null)
@@ -215,7 +237,14 @@ export function PaymentVetting({ dot }: { dot: string }) {
             </h4>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {reports.map((d) => (
-                <DocRow key={d.id} d={d} tone="blue" label="Report" />
+                <DocRow
+                  key={d.id}
+                  d={d}
+                  tone="blue"
+                  label="Report"
+                  onDelete={() => deleteReport(d)}
+                  deleting={deletingId === d.id}
+                />
               ))}
             </div>
           </div>
@@ -229,28 +258,46 @@ function DocRow({
   d,
   tone,
   label,
+  onDelete,
+  deleting,
 }: {
   d: PvDoc
   tone: 'blue' | 'gray'
   label: string
+  onDelete?: () => void
+  deleting?: boolean
 }) {
   return (
-    <a
-      href={d.url || '#'}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 hover:bg-gray-50"
-    >
-      <div className="min-w-0">
-        <span className="block truncate text-sm font-medium text-gray-900">
-          {d.file_name || 'Document'}
-        </span>
-        <span className="text-xs text-gray-500">
-          {formatDateTime(d.uploaded_at)}
-          {d.uploaded_by ? ` · ${d.uploaded_by}` : ''}
-        </span>
-      </div>
-      <Badge tone={tone}>{label}</Badge>
-    </a>
+    <div className="flex items-center justify-between gap-2 rounded-md border border-gray-200 px-3 py-2 hover:bg-gray-50">
+      <a
+        href={d.url || '#'}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex min-w-0 flex-1 items-center justify-between gap-3"
+      >
+        <div className="min-w-0">
+          <span className="block truncate text-sm font-medium text-gray-900">
+            {d.file_name || 'Document'}
+          </span>
+          <span className="text-xs text-gray-500">
+            {formatDateTime(d.uploaded_at)}
+            {d.uploaded_by ? ` · ${d.uploaded_by}` : ''}
+          </span>
+        </div>
+        <Badge tone={tone}>{label}</Badge>
+      </a>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          title="Delete report"
+          aria-label="Delete report"
+          className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+        >
+          {deleting ? <Spinner size={14} /> : '✕'}
+        </button>
+      )}
+    </div>
   )
 }

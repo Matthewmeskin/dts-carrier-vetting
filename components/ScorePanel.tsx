@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { ScoreRecord } from '@/lib/types'
 import {
@@ -104,6 +105,8 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
   const latest = scores[0]
   const prev = scores[1]
   const chron = [...scores].reverse() // oldest → newest for trend reading
+  // The trend chart + history table are tall; collapse them by default.
+  const [showTrend, setShowTrend] = useState(false)
   const gapDelta =
     latest?.gap_score != null && prev?.gap_score != null
       ? latest.gap_score - prev.gap_score
@@ -254,11 +257,23 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
               considered.
             </p>
 
-            <div className="mt-6">
-              <ScoreTrend scores={scores} />
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowTrend((v) => !v)}
+                className="text-xs font-medium text-dts-blue hover:underline"
+              >
+                {showTrend ? 'Hide score trend & history' : 'Show score trend & history'}
+              </button>
             </div>
 
-            {scores.length > 1 && (
+            {showTrend && (
+            <div className="mt-4">
+              <ScoreTrend scores={scores} />
+            </div>
+            )}
+
+            {showTrend && scores.length > 1 && (
               <div className="mt-6">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
                   Score history — trend by category

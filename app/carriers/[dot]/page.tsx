@@ -358,39 +358,34 @@ export default function CarrierDetailPage({
 
       <AlertBanner hardStops={displayHardStops} flags={displayFlags} />
 
-      {/* Secondary panels flow into a 2-column grid to cut the vertical stack.
-          Address check spans full width (it needs room for the satellite +
-          Street View); the rest pair up. */}
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        {/* Address check — satellite + Street View of the FMCSA physical
-            address (never the TMS mailing / P.O. Box), to verify the site. */}
-        <div className="lg:col-span-2">
-          <AddressCheck
-            street={insurance?.rmis_carrier_street}
-            city={insurance?.rmis_carrier_city}
-            state={insurance?.rmis_carrier_state}
-            zip={insurance?.rmis_carrier_zip}
-            source="FMCSA-registered physical address (RMIS)"
-          />
-        </div>
+      {/* Full-width panels — kept short by their own collapse toggles rather than
+          squeezing them into a cramped 2-column grid. */}
+      {/* Address check — satellite + Street View of the FMCSA physical address
+          (never the TMS mailing / P.O. Box), to verify the site. */}
+      <AddressCheck
+        street={insurance?.rmis_carrier_street}
+        city={insurance?.rmis_carrier_city}
+        state={insurance?.rmis_carrier_state}
+        zip={insurance?.rmis_carrier_zip}
+        source="FMCSA-registered physical address (RMIS)"
+      />
 
-        {/* Insurance */}
-        <InsurancePanel insurance={displayInsurance} dot={dot} onRefreshed={load} />
+      {/* Insurance — full width so the Auto / Cargo / GL cards aren't scrunched */}
+      <InsurancePanel insurance={displayInsurance} dot={dot} onRefreshed={load} />
 
-        {/* ELD — live fleet location */}
-        <EldPanel dot={dot} eldEnrolled={insurance?.rmis_eld_enrolled ?? null} />
+      {/* ELD — live fleet location */}
+      <EldPanel dot={dot} eldEnrolled={insurance?.rmis_eld_enrolled ?? null} />
 
-        {/* Notice of Assignment — factoring carriers only */}
-        {insurance?.is_factoring && <NoaPanel dot={dot} />}
+      {/* Notice of Assignment — factoring carriers only */}
+      {insurance?.is_factoring && <NoaPanel dot={dot} />}
 
-        {/* RMIS monitoring — detach + disabled-in-TMS prompt. */}
-        <RmisMonitoring
-          dot={dot}
-          disabledInTms={disabled}
-          brokerwareStatus={carrier.brokerware_status}
-          onChanged={load}
-        />
-      </div>
+      {/* RMIS monitoring — detach + disabled-in-TMS prompt. */}
+      <RmisMonitoring
+        dot={dot}
+        disabledInTms={disabled}
+        brokerwareStatus={carrier.brokerware_status}
+        onChanged={load}
+      />
 
       {/* Safety Scores */}
       <ScorePanel scores={scores} />

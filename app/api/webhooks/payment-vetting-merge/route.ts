@@ -76,13 +76,11 @@ export async function POST(request: Request) {
     }
 
     const out = await merged.save()
-    return new NextResponse(Buffer.from(out), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        // Surface what couldn't be embedded (n8n can log it if needed).
-        'X-Skipped-Docs': skipped.join('; ').slice(0, 500),
-      },
+    // Return the merged PDF as base64 JSON — easier for the n8n workflow to
+    // carry through Code nodes than raw bytes (which n8n may spool to disk).
+    return NextResponse.json({
+      mergedBase64: Buffer.from(out).toString('base64'),
+      skipped,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Merge failed' }, { status: 500 })

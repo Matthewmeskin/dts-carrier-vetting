@@ -22,6 +22,7 @@ import { NoaPanel } from '@/components/NoaPanel'
 import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
+import { PaymentVetting } from '@/components/PaymentVetting'
 import { CarrierActivity } from '@/components/CarrierActivity'
 import { AddressCheck } from '@/components/AddressCheck'
 import { IntrastateToggle } from '@/components/IntrastateToggle'
@@ -409,6 +410,9 @@ export default function CarrierDetailPage({
 
       {/* Documents */}
       <CarrierDocuments dot={dot} reloadKey={docReload} onChanged={load} />
+
+      {/* Accounts-payable: upload load docs to vet a carrier invoice for payment */}
+      <PaymentVetting dot={dot} />
 
       {/* Unified activity timeline (RMIS changes + event log) */}
       <CarrierActivity deltaLog={deltaLog} events={events ?? []} />

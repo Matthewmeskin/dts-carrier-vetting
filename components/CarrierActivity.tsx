@@ -37,6 +37,7 @@ const EVENT_META: Record<string, { label: string; tone: BadgeTone }> = {
   checklist_change: { label: 'Checklist', tone: 'blue' },
   document_upload: { label: 'Document', tone: 'blue' },
   vetting_saved: { label: 'Vetting', tone: 'green' },
+  payment_vetting: { label: 'Payment', tone: 'maroon' },
 }
 
 const DOT: Record<BadgeTone, string> = {

@@ -182,7 +182,14 @@ export async function GET(request: NextRequest) {
         carrier_status: c.carrier_status ?? null,
         do_not_use: c.do_not_use ?? null,
         gap_score: s?.gap_score ?? null,
-        requires_revetting: s?.requires_revetting ?? null,
+        // An Exception-Approved carrier was knowingly cleared despite a failing
+        // score, so it must never show as "requires re-vetting" — even if a
+        // stored score flag is stale. (Grants clear the flag; this makes the
+        // list robust regardless.) The scheduled re-vet clock still applies.
+        requires_revetting:
+          c.carrier_status === 'Exception Approved'
+            ? false
+            : s?.requires_revetting ?? null,
         flagged_scores: s?.flagged_scores ?? null,
         approval_level: s?.approval_level ?? null,
         score_upload_date: s?.upload_date ?? null,

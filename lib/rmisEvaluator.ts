@@ -130,7 +130,11 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     const detail = autoExpiring
       ? `RMIS status "${data.autoStatus}"${data.autoExpirationDate ? `, expires ${data.autoExpirationDate}` : ''}`
       : `expires in ${autoDaysLeft} day(s) (${data.autoExpirationDate})`
-    flags.push(
+    // Expiring-but-still-valid coverage is informational, NOT a review flag:
+    // the delta cron already emails RMIS to request the renewed certificate, and
+    // it only becomes a hard stop once the policy actually lapses. Keeping it out
+    // of `flags` stops it from marking the carrier "Needs review".
+    info.push(
       `Auto liability coverage is expiring — ${detail} — request an updated ` +
       `certificate before it lapses`
     )
@@ -160,7 +164,8 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     const detail = cargoExpiring
       ? `RMIS status "${data.cargoStatus}"${data.cargoExpirationDate ? `, expires ${data.cargoExpirationDate}` : ''}`
       : `expires in ${cargoDaysLeft} day(s) (${data.cargoExpirationDate})`
-    flags.push(
+    // Informational, not a review flag (see the auto-liability note above).
+    info.push(
       `Cargo coverage is expiring — ${detail} — request an updated certificate ` +
       `before it lapses`
     )

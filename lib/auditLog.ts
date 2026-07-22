@@ -19,6 +19,7 @@ export type CarrierEventType =
   | 'checklist_change'
   | 'document_upload'
   | 'vetting_saved'
+  | 'payment_vetting'
 
 export interface CarrierEventInput {
   dot: string

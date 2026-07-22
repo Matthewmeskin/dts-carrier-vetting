@@ -3,7 +3,10 @@ import type { CarrierContext } from '@/lib/carrierContext'
 // Build a print-friendly, standalone Carrier Profile HTML page from the carrier
 // context. Rendered to PDF (via the PDF service) and appended to the payment
 // vetting report so the file bundles a full profile snapshot.
-export function buildCarrierProfileHtml(ctx: CarrierContext): string {
+export function buildCarrierProfileHtml(
+  ctx: CarrierContext,
+  opts?: { mapsKey?: string | null }
+): string {
   const c = ctx.carrier || {}
   const addr = ctx.physical_address || {}
   const auth = ctx.authority || {}
@@ -35,8 +38,25 @@ export function buildCarrierProfileHtml(ctx: CarrierContext): string {
       ? ins.hard_stops.join('; ')
       : 'none'
 
+  // Satellite + Street View of the physical address, rendered into the PDF.
+  const mapsKey = opts?.mapsKey || null
+  let locationSection = ''
+  if (mapsKey && addrStr) {
+    const enc = encodeURIComponent(addrStr)
+    const sat = `https://maps.googleapis.com/maps/api/staticmap?center=${enc}&zoom=19&size=640x360&scale=2&maptype=satellite&markers=color:red%7C${enc}&key=${mapsKey}`
+    const sv = `https://maps.googleapis.com/maps/api/streetview?size=640x360&location=${enc}&fov=80&pitch=0&source=outdoor&key=${mapsKey}`
+    locationSection =
+      '<div class="sec">Location (FMCSA-registered physical address)</div>' +
+      `<div class="sub">${esc(addrStr)}${addr.source ? ' &middot; ' + esc(addr.source) : ''}</div>` +
+      '<div class="cols"><div>' +
+      `<div class="cap">Satellite</div><img class="map" src="${sat}" alt="Satellite view" />` +
+      '</div><div>' +
+      `<div class="cap">Street View</div><img class="map" src="${sv}" alt="Street View" />` +
+      '</div></div>'
+  }
+
   const style =
-    '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12px;margin:0;padding:24px}h1{font-size:18px;margin:0 0 2px}.sub{color:#666;font-size:11px;margin-bottom:10px}table{border-collapse:collapse;width:100%;margin:6px 0}td{padding:4px 6px;border:1px solid #e2e2e2;vertical-align:top}td.l{background:#f6f6f6;font-weight:bold;width:45%}.sec{font-weight:bold;color:#00547f;margin:14px 0 4px;font-size:13px;border-bottom:2px solid #00547f;padding-bottom:2px}.cols{display:flex;gap:16px}.cols>div{flex:1}'
+    '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12px;margin:0;padding:24px}h1{font-size:18px;margin:0 0 2px}.sub{color:#666;font-size:11px;margin-bottom:10px}table{border-collapse:collapse;width:100%;margin:6px 0}td{padding:4px 6px;border:1px solid #e2e2e2;vertical-align:top}td.l{background:#f6f6f6;font-weight:bold;width:45%}.sec{font-weight:bold;color:#00547f;margin:14px 0 4px;font-size:13px;border-bottom:2px solid #00547f;padding-bottom:2px}.cols{display:flex;gap:16px}.cols>div{flex:1}img.map{width:100%;height:auto;border:1px solid #e2e2e2;border-radius:4px}.cap{font-size:11px;color:#666;margin:2px 0}'
 
   return (
     '<!doctype html><html><head><meta charset="utf-8"><style>' +
@@ -72,6 +92,7 @@ export function buildCarrierProfileHtml(ctx: CarrierContext): string {
     fld('RMIS last pulled', ins.fetched_at) +
     fld('Hard stops', hardStops) +
     '</table></div></div>' +
+    locationSection +
     '<div class="sec">Insurance</div>' +
     '<table>' +
     fld('Auto liability', (ins.auto_status || '—') + (ins.auto_expiration_date ? ' · exp ' + ins.auto_expiration_date : '')) +

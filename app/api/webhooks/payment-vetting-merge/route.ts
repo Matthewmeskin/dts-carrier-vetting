@@ -72,7 +72,14 @@ export async function POST(request: Request) {
       try {
         const ctx = await getCarrierContext(dot)
         if (ctx) {
-          const profilePdf = await renderHtmlToPdf(buildCarrierProfileHtml(ctx))
+          const profilePdf = await renderHtmlToPdf(
+            buildCarrierProfileHtml(ctx, {
+              mapsKey:
+                process.env.GOOGLE_MAPS_STATIC_KEY ||
+                process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+                null,
+            })
+          )
           if (profilePdf) {
             const pDoc = await PDFDocument.load(profilePdf, { ignoreEncryption: true })
             const pPages = await merged.copyPages(pDoc, pDoc.getPageIndices())

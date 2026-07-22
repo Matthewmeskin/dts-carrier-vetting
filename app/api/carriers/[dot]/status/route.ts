@@ -30,8 +30,26 @@ export async function PATCH(
   try {
     const dot = params.dot
     const body = await request.json()
-    const { carrier_status, do_not_use, do_not_use_reason, revet_interval_days, is_intrastate } =
-      body ?? {}
+    const {
+      carrier_status,
+      do_not_use,
+      do_not_use_reason,
+      revet_interval_days,
+      is_intrastate,
+      revet_due_override,
+    } = body ?? {}
+
+    // A manually-set re-vet due date (YYYY-MM-DD), or null to clear it.
+    if (
+      revet_due_override !== undefined &&
+      revet_due_override !== null &&
+      !/^\d{4}-\d{2}-\d{2}$/.test(String(revet_due_override))
+    ) {
+      return NextResponse.json(
+        { error: `Invalid revet_due_override: ${revet_due_override}` },
+        { status: 400 }
+      )
+    }
 
     if (carrier_status !== undefined && !ALLOWED_STATUSES.includes(carrier_status)) {
       return NextResponse.json(
@@ -106,6 +124,8 @@ export async function PATCH(
     if (revet_interval_days !== undefined)
       updates.revet_interval_days = revet_interval_days
     if (is_intrastate !== undefined) (updates as any).is_intrastate = !!is_intrastate
+    if (revet_due_override !== undefined)
+      (updates as any).revet_due_override = revet_due_override || null
 
     const { data, error } = await supabaseAdmin
       .from('carriers')
@@ -124,6 +144,12 @@ export async function PATCH(
     if (do_not_use !== undefined) parts.push(`do-not-use → ${do_not_use ? 'yes' : 'no'}`)
     if (revet_interval_days !== undefined)
       parts.push(`re-vet interval → ${revet_interval_days}d`)
+    if (revet_due_override !== undefined)
+      parts.push(
+        revet_due_override
+          ? `re-vet due date set → ${revet_due_override}`
+          : 're-vet due date override cleared'
+      )
     if (is_intrastate !== undefined)
       parts.push(`intrastate designation → ${is_intrastate ? 'ON (interstate authority not required)' : 'OFF'}`)
     if (parts.length > 0) {

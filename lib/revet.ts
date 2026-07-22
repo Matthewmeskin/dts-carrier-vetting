@@ -89,15 +89,23 @@ function toDate(value: string | null | undefined): Date | null {
 export function computeRevetStatus(
   lastReviewed: string | null | undefined,
   createdAt: string | null | undefined,
-  intervalDays: number | null | undefined
+  intervalDays: number | null | undefined,
+  // A manually-set due date wins over the interval-based calculation.
+  dueOverride?: string | null
 ): RevetStatus {
   const interval = intervalDays ?? DEFAULT_REVET_INTERVAL
-  const base = toDate(lastReviewed) ?? toDate(createdAt)
-  if (!base) {
-    return { intervalDays: interval, dueDate: null, daysUntil: null, state: 'unknown', label: 'No review date' }
+  const override = toDate(dueOverride)
+  let dueDate: Date
+  if (override) {
+    dueDate = override
+  } else {
+    const base = toDate(lastReviewed) ?? toDate(createdAt)
+    if (!base) {
+      return { intervalDays: interval, dueDate: null, daysUntil: null, state: 'unknown', label: 'No review date' }
+    }
+    dueDate = new Date(base.getTime())
+    dueDate.setDate(dueDate.getDate() + interval)
   }
-  const dueDate = new Date(base.getTime())
-  dueDate.setDate(dueDate.getDate() + interval)
   const daysUntil = differenceInDays(dueDate, new Date())
 
   let state: RevetState

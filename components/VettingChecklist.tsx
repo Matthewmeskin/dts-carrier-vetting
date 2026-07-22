@@ -122,6 +122,8 @@ export function VettingChecklist({
   onCarrierStatusChange,
   revetIntervalDays,
   onRevetIntervalChange,
+  revetDueOverride,
+  onRevetDueOverrideChange,
   revet,
   revetDisabled,
   statusSaving,
@@ -142,6 +144,8 @@ export function VettingChecklist({
   onCarrierStatusChange: (status: string) => void
   revetIntervalDays: number | null
   onRevetIntervalChange: (days: number) => void
+  revetDueOverride?: string | null
+  onRevetDueOverrideChange?: (date: string | null) => void
   revet: RevetStatus
   revetDisabled?: boolean
   statusSaving?: boolean
@@ -233,6 +237,13 @@ export function VettingChecklist({
   useEffect(() => {
     setPendingInterval(revetIntervalDays ?? 120)
   }, [revetIntervalDays])
+  // Manual re-vet due date (YYYY-MM-DD or ''), held locally and saved on Save.
+  const [pendingDueOverride, setPendingDueOverride] = useState<string>(
+    revetDueOverride ?? ''
+  )
+  useEffect(() => {
+    setPendingDueOverride(revetDueOverride ?? '')
+  }, [revetDueOverride])
   const [exceptionNote, setExceptionNote] = useState(
     latest?.exception_note || ''
   )
@@ -492,6 +503,13 @@ export function VettingChecklist({
       if (pendingInterval !== (revetIntervalDays ?? 120)) {
         await onRevetIntervalChange(pendingInterval)
       }
+      // Persist a manually-set (or cleared) re-vet due date, only if it changed.
+      if (
+        onRevetDueOverrideChange &&
+        pendingDueOverride !== (revetDueOverride ?? '')
+      ) {
+        await onRevetDueOverrideChange(pendingDueOverride || null)
+      }
       await onSaved?.()
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Save failed')
@@ -622,6 +640,40 @@ export function VettingChecklist({
                       </span>
                     )}
                   </div>
+                  {onRevetDueOverrideChange && !revetDisabled && (
+                    <div className="mt-2">
+                      <label className="mb-1 block text-xs font-medium text-gray-600">
+                        Or set a specific due date
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={pendingDueOverride}
+                          disabled={statusSaving}
+                          onChange={(e) => {
+                            setDirty(true)
+                            setPendingDueOverride(e.target.value)
+                          }}
+                          className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+                        />
+                        {pendingDueOverride && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDirty(true)
+                              setPendingDueOverride('')
+                            }}
+                            className="text-xs text-dts-blue hover:underline"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <p className="mt-1 text-[11px] text-gray-400">
+                        Overrides the cadence-based due date. Save to apply.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <Input
                   label="Reviewed by"

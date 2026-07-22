@@ -102,6 +102,22 @@ export default function CarrierDetailPage({
     }
   }
 
+  // Set (or clear, with null) a manual re-vet due date.
+  async function updateRevetDueOverride(date: string | null) {
+    if (!detail) return
+    setSavingStatus(true)
+    try {
+      const res = await fetch(`/api/carriers/${dot}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revet_due_override: date }),
+      })
+      if (res.ok) await load()
+    } finally {
+      setSavingStatus(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -162,7 +178,8 @@ export default function CarrierDetailPage({
   const revet = computeRevetStatus(
     revetAnchor,
     carrier.created_at,
-    carrier.revet_interval_days
+    carrier.revet_interval_days,
+    (carrier as any).revet_due_override
   )
   const disabled = isBrokerwareDisabled(carrier.brokerware_status)
 
@@ -431,6 +448,8 @@ export default function CarrierDetailPage({
         onCarrierStatusChange={updateStatus}
         revetIntervalDays={carrier.revet_interval_days}
         onRevetIntervalChange={updateRevetInterval}
+        revetDueOverride={(carrier as any).revet_due_override ?? null}
+        onRevetDueOverrideChange={updateRevetDueOverride}
         revet={revet}
         revetDisabled={disabled}
         statusSaving={savingStatus}

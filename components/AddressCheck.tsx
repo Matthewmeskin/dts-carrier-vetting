@@ -28,7 +28,7 @@ function loadMaps(): Promise<any> {
   if (mapsPromise) return mapsPromise
   mapsPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script')
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${KEY}&v=weekly`
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${KEY}&v=weekly&libraries=places`
     s.async = true
     s.onload = () => resolve((window as any).google)
     s.onerror = () => reject(new Error('maps js failed'))
@@ -104,6 +104,166 @@ function InteractiveStreetView({
   return <div ref={ref} className="h-64 w-full overflow-hidden rounded-md border border-gray-200" />
 }
 
+// Rough great-circle distance in meters between two lat/lng points, so we can
+// tell whether the nearest business actually sits AT the address (vs. a
+// prominent business down the block).
+function metersBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6371000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(bLat - aLat)
+  const dLng = toRad(bLng - aLng)
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(s))
+}
+
+type LocTone = 'green' | 'amber' | 'red' | 'gray'
+
+// Map a place's Google types + name to a friendly location-type estimate, with
+// a vetting-oriented tone: a legitimate motor carrier should operate from a
+// commercial/industrial site, not a home or a mailbox store.
+function classifyPlace(
+  types: string[],
+  name: string
+): { label: string; tone: LocTone; note?: string } {
+  const t = new Set(types)
+  const n = (name || '').toLowerCase()
+  const mailish =
+    t.has('post_office') ||
+    /(ups store|the ups store|mail\s?box|mailboxes|postal|pak\s?mail|postnet|parcel|pack\s?ship|ipostal)/.test(n)
+  if (mailish)
+    return {
+      label: 'Mail / parcel store',
+      tone: 'red',
+      note: 'Looks like a mailbox or parcel store — a common virtual-address / chameleon-carrier signal. Verify a real physical yard or office.',
+    }
+  const industrial = ['moving_company', 'storage', 'general_contractor'].some((x) => t.has(x))
+  if (industrial) return { label: 'Trucking / industrial business', tone: 'green' }
+  const commercial =
+    t.has('establishment') || t.has('point_of_interest') || t.has('store') || t.has('car_repair')
+  if (commercial) return { label: 'Commercial / business', tone: 'green' }
+  return { label: 'Non-business (likely residential)', tone: 'amber' }
+}
+
+const LOC_DOT: Record<LocTone, string> = {
+  green: 'bg-green-500',
+  amber: 'bg-amber-500',
+  red: 'bg-red-500',
+  gray: 'bg-gray-300',
+}
+
+// "Estimated location type" line. Geocodes the address, looks for a business at
+// that exact point via the Places library, and classifies the result. Degrades
+// silently (shows a hint) when Maps JS / Places isn't available.
+function LocationTypeEstimate({ address }: { address: string }) {
+  const [result, setResult] = useState<{
+    label: string
+    tone: LocTone
+    note?: string
+    name?: string
+    types?: string[]
+  } | null>(null)
+  const [status, setStatus] = useState<'loading' | 'done' | 'unavailable'>('loading')
+
+  useEffect(() => {
+    let cancelled = false
+    setStatus('loading')
+    setResult(null)
+    loadMaps()
+      .then((google) => {
+        if (cancelled) return
+        if (!google?.maps?.places) {
+          setStatus('unavailable')
+          return
+        }
+        new google.maps.Geocoder().geocode({ address }, (res: any, st: string) => {
+          if (cancelled) return
+          if (st !== 'OK' || !res?.[0]) {
+            setStatus('unavailable')
+            return
+          }
+          const loc = res[0].geometry.location
+          const svc = new google.maps.places.PlacesService(document.createElement('div'))
+          svc.findPlaceFromQuery(
+            {
+              query: address,
+              fields: ['name', 'types', 'geometry'],
+              locationBias: { lat: loc.lat(), lng: loc.lng() },
+            },
+            (cands: any, pst: string) => {
+              if (cancelled) return
+              const top = pst === 'OK' ? cands?.[0] : null
+              if (top?.geometry?.location) {
+                const d = metersBetween(
+                  loc.lat(),
+                  loc.lng(),
+                  top.geometry.location.lat(),
+                  top.geometry.location.lng()
+                )
+                // Only trust it if the business sits at (not near) the address.
+                if (d <= 80) {
+                  setResult({
+                    ...classifyPlace(top.types || [], top.name || ''),
+                    name: top.name,
+                    types: top.types,
+                  })
+                  setStatus('done')
+                  return
+                }
+              }
+              // No business found at this exact address — typically residential.
+              setResult({
+                label: 'Non-business (likely residential)',
+                tone: 'amber',
+                note: 'No business is registered at this exact address on Google — often a residence. A real carrier usually operates from a commercial or industrial site.',
+              })
+              setStatus('done')
+            }
+          )
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setStatus('unavailable')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [address])
+
+  if (status === 'unavailable') {
+    return (
+      <p className="mt-2 text-xs text-gray-400">
+        Estimated location type unavailable — enable the Google{' '}
+        <span className="font-mono">Places API</span> to show it.
+      </p>
+    )
+  }
+
+  return (
+    <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-xs font-medium text-gray-500">Estimated location type:</span>
+        {status === 'loading' ? (
+          <span className="text-xs text-gray-400">estimating…</span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 font-medium text-gray-900">
+            <span className={`h-2 w-2 rounded-full ${LOC_DOT[result!.tone]}`} />
+            {result!.label}
+          </span>
+        )}
+        {result?.name && (
+          <span className="text-xs text-gray-500">· {result.name}</span>
+        )}
+      </div>
+      {result?.note && <p className="mt-1 text-xs text-gray-500">{result.note}</p>}
+      <p className="mt-1 text-[11px] text-gray-400">
+        Best-guess from Google Places — confirm with the satellite &amp; Street View below.
+      </p>
+    </div>
+  )
+}
+
 export function AddressCheck({
   street,
   city,
@@ -159,11 +319,14 @@ export function AddressCheck({
         }
       />
       <CardBody>
-        <div className="mb-3 flex items-start gap-2">
-          <span aria-hidden className="mt-0.5 text-gray-400">
-            📍
-          </span>
-          <span className="text-sm font-medium text-gray-900">{address}</span>
+        <div className="mb-3">
+          <div className="flex items-start gap-2">
+            <span aria-hidden className="mt-0.5 text-gray-400">
+              📍
+            </span>
+            <span className="text-sm font-medium text-gray-900">{address}</span>
+          </div>
+          {KEY && <LocationTypeEstimate address={address} />}
         </div>
 
         {KEY ? (

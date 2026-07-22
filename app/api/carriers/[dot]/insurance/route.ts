@@ -15,6 +15,15 @@ function nullIfEmpty(v: string | null | undefined): string | null {
   return v && v.trim() !== '' ? v : null
 }
 
+// RMIS signals a carrier isn't in OUR monitored list a few different ways:
+//   "Insured not found", "Carrier does not belong to this client", etc.
+// Any of these means we should fall back to the non-monitored / FMCSA path
+// rather than surfacing the raw RMIS error to the user.
+const NOT_ATTACHED_RE = /not\s*found|does\s*not\s*belong|not\s*attached/i
+function isNotAttachedError(err: unknown): boolean {
+  return NOT_ATTACHED_RE.test(String((err as any)?.message ?? ''))
+}
+
 // First non-empty value across a set of candidate tag names (the non-monitored
 // endpoint isn't documented field-by-field, so we try the likely aliases).
 function pickTag(text: string, names: string[]): string {
@@ -163,13 +172,23 @@ export async function GET(
         dotNumber: (carrier as any).dot_number,
       })
     } catch (expandedErr: any) {
-      // The carrier isn't attached to our monitored list ("Insured not found").
-      if (!/not\s*found/i.test(String(expandedErr?.message ?? ''))) throw expandedErr
+      // The carrier isn't attached to our monitored list ("Insured not found",
+      // "Carrier does not belong to this client", …). Anything else is a real
+      // error we surface.
+      if (!isNotAttachedError(expandedErr)) throw expandedErr
 
-      const text = await fetchNonMonitoredCarrier({
-        dotNumber: (carrier as any).dot_number,
-        mcNumber: (carrier as any).mc_number || undefined,
-      })
+      // Best-effort: the non-monitored endpoint gives identity + COI + the RMIS
+      // carrier id. If it errors too (or the carrier isn't in RMIS at all), we
+      // still fall through to the FMCSA fallback below rather than failing.
+      let text = ''
+      try {
+        text = await fetchNonMonitoredCarrier({
+          dotNumber: (carrier as any).dot_number,
+          mcNumber: (carrier as any).mc_number || undefined,
+        })
+      } catch {
+        /* non-monitored lookup unavailable — FMCSA fallback still runs */
+      }
       const basics = parseNonMonitoredBasics(text)
 
       // The non-monitored response has no authority/insurance/safety — but it
@@ -185,7 +204,7 @@ export async function GET(
         try {
           fullXml = await fetchExpandedCarrierXML({ insdID: basics.rmisCarrierId })
         } catch (retryErr: any) {
-          if (!/not\s*found/i.test(String(retryErr?.message ?? ''))) throw retryErr
+          if (!isNotAttachedError(retryErr)) throw retryErr
         }
       }
 

@@ -51,7 +51,6 @@ export function PaymentVetting({ dot }: { dot: string }) {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reports, setReports] = useState<PvDoc[]>([])
-  const [loadDocs, setLoadDocs] = useState<PvDoc[]>([])
 
   // Default the destination email + staff name to the signed-in user.
   useEffect(() => {
@@ -75,7 +74,6 @@ export function PaymentVetting({ dot }: { dot: string }) {
       if (!res.ok) return
       const all: PvDoc[] = data.documents ?? []
       setReports(all.filter((d) => d.document_type === 'payment_vetting_log'))
-      setLoadDocs(all.filter((d) => d.document_type === 'payment_load_doc'))
     } catch {
       /* best-effort */
     }
@@ -210,32 +208,16 @@ export function PaymentVetting({ dot }: { dot: string }) {
           {error && <span className="text-sm text-red-700">{error}</span>}
         </div>
 
-        {(reports.length > 0 || loadDocs.length > 0) && (
-          <div className="mt-5 space-y-4 border-t border-gray-200 pt-4">
-            {reports.length > 0 && (
-              <div>
-                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Vetting reports ({reports.length})
-                </h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {reports.map((d) => (
-                    <DocRow key={d.id} d={d} tone="blue" label="Report" />
-                  ))}
-                </div>
-              </div>
-            )}
-            {loadDocs.length > 0 && (
-              <div>
-                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Uploaded load documents ({loadDocs.length})
-                </h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {loadDocs.map((d) => (
-                    <DocRow key={d.id} d={d} tone="gray" label="Load doc" />
-                  ))}
-                </div>
-              </div>
-            )}
+        {reports.length > 0 && (
+          <div className="mt-5 border-t border-gray-200 pt-4">
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Vetting reports ({reports.length})
+            </h4>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {reports.map((d) => (
+                <DocRow key={d.id} d={d} tone="blue" label="Report" />
+              ))}
+            </div>
           </div>
         )}
       </CardBody>

@@ -1,8 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { ROLE_LABEL, isRole } from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+
+// Actors are stamped inconsistently across code paths — sometimes the full name,
+// sometimes the email, sometimes with or without a "(Role)" suffix — so the same
+// person appears as several distinct strings. Canonicalize each actor against the
+// profiles directory so one person collapses to one label: "Full Name (Role)".
+function buildCanonicalizer(
+  profiles: { email: string | null; full_name: string | null; role: string | null }[]
+) {
+  const byEmail = new Map<string, { name: string; role: string | null }>()
+  const byName = new Map<string, { name: string; role: string | null }>()
+  for (const p of profiles) {
+    const name = (p.full_name ?? '').trim()
+    const role = p.role ?? null
+    if (p.email) byEmail.set(p.email.trim().toLowerCase(), { name, role })
+    if (name) byName.set(name.toLowerCase(), { name, role })
+  }
+  return (raw: string | null): string => {
+    if (!raw) return 'system'
+    // Strip a trailing "(Staff|Manager|Director)" to get the bare identity.
+    const base = raw.replace(/\s*\((?:Staff|Manager|Director)\)\s*$/i, '').trim()
+    const hit =
+      byEmail.get(base.toLowerCase()) ?? byName.get(base.toLowerCase()) ?? null
+    if (!hit || !hit.name) return raw // automated actors / unknown people: leave as-is
+    const roleLabel =
+      hit.role && isRole(hit.role) ? ` (${ROLE_LABEL[hit.role]})` : ''
+    return `${hit.name}${roleLabel}`
+  }
+}
 
 // GET — a cross-carrier audit log: every logged action, filterable by day and by
 // user (actor), so you can see who did what on a given date. Reads the shared
@@ -32,16 +61,22 @@ export async function GET(request: NextRequest) {
     const start = new Date(startGuess - offsetMs(startGuess)).toISOString()
     const end = new Date(endGuess - offsetMs(endGuess)).toISOString()
 
-    let query = (supabaseAdmin as any)
+    // Fetch the whole day's events (unfiltered by actor) so we can canonicalize
+    // actors and then filter/aggregate by the merged identity in memory.
+    const { data: events, error } = await (supabaseAdmin as any)
       .from('carrier_events')
       .select('id, dot_number, event_type, summary, actor, created_at')
       .gte('created_at', start)
       .lte('created_at', end)
       .order('created_at', { ascending: false })
       .limit(3000)
-    if (actor) query = query.eq('actor', actor)
-    const { data: events, error } = await query
     if (error) throw error
+
+    // Directory of real users, to merge email/name variants of the same person.
+    const { data: profileRows } = await (supabaseAdmin as any)
+      .from('profiles')
+      .select('email, full_name, role')
+    const canon = buildCanonicalizer(profileRows ?? [])
 
     // Attach carrier names (batch lookup by DOT).
     const dots = Array.from(
@@ -58,27 +93,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Distinct actors active on this day (for the user filter), independent of
-    // the currently-selected actor.
-    const { data: actorRows } = await (supabaseAdmin as any)
-      .from('carrier_events')
-      .select('actor')
-      .gte('created_at', start)
-      .lte('created_at', end)
-      .limit(5000)
+    // Distinct canonical actors active on this day (for the user filter).
     const actors = Array.from(
-      new Set((actorRows ?? []).map((r: any) => r.actor).filter(Boolean))
+      new Set((events ?? []).map((e: any) => canon(e.actor)).filter(Boolean))
     ).sort() as string[]
 
-    const rows = (events ?? []).map((e: any) => ({
-      id: e.id,
-      dot_number: e.dot_number,
-      carrier_name: e.dot_number ? nameByDot.get(String(e.dot_number)) ?? null : null,
-      event_type: e.event_type,
-      summary: e.summary,
-      actor: e.actor,
-      created_at: e.created_at,
-    }))
+    const rows = (events ?? [])
+      .map((e: any) => ({
+        id: e.id,
+        dot_number: e.dot_number,
+        carrier_name: e.dot_number ? nameByDot.get(String(e.dot_number)) ?? null : null,
+        event_type: e.event_type,
+        summary: e.summary,
+        actor: canon(e.actor),
+        created_at: e.created_at,
+      }))
+      // The actor filter now matches the merged identity, so selecting one chip
+      // catches every email/name variant that person was logged under.
+      .filter((r: any) => !actor || r.actor === actor)
 
     return NextResponse.json({ date, actors, events: rows })
   } catch (err: any) {

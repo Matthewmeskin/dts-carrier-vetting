@@ -82,6 +82,32 @@ export async function POST(
       return NextResponse.json({ error: 'Uploaded documents could not be read from storage' }, { status: 500 })
     }
 
+    // Also attach the carrier's on-file NOA (uploaded to their profile) so the
+    // workflow can check the invoice's remit-to against the NOA we already have,
+    // not only the NOA that came with this load's paperwork.
+    const { data: onfileNoaRows } = await supabaseAdmin
+      .from('vetting_documents')
+      .select('storage_path, storage_bucket, file_name, mime_type')
+      .eq('dot_number', dot)
+      .eq('document_type', 'noa')
+      .not('storage_path', 'is', null)
+      .order('uploaded_at', { ascending: false })
+      .limit(1)
+    const onfileNoa = (onfileNoaRows as any)?.[0]
+    if (onfileNoa?.storage_path) {
+      const { data: signed } = await supabaseAdmin.storage
+        .from(onfileNoa.storage_bucket || BUCKET)
+        .createSignedUrl(onfileNoa.storage_path, SIGNED_TTL)
+      if (signed?.signedUrl) {
+        usableDocs.push({
+          type: 'onfile_noa',
+          fileName: onfileNoa.file_name ?? 'On-file NOA',
+          mimeType: onfileNoa.mime_type ?? null,
+          url: signed.signedUrl,
+        })
+      }
+    }
+
     const base = new URL(request.url).origin
     const payload = {
       dot,

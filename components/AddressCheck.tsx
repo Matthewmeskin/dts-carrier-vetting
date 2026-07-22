@@ -118,9 +118,9 @@ export function AddressCheck({
   source?: string
 }) {
   const address = buildAddress(street, city, state, zip)
-  // Maps are collapsed by default — they make the tile very tall and are only
-  // needed when someone actually wants to eyeball the site.
-  const [showMaps, setShowMaps] = useState(false)
+  // Maps show by default (they're the reliable signal for judging the site); the
+  // toggle lets you hide them to shorten the page.
+  const [showMaps, setShowMaps] = useState(true)
 
   if (!address) {
     return (

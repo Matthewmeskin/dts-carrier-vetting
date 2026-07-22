@@ -147,17 +147,22 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
     }
   }
 
-  async function recheck() {
+  async function recheck(chooseState = false) {
     setError(null)
     setOkMsg(null)
     let state: string | undefined
-    if (!factor?.sos_state) {
+    // Always let the user pick/override the state when they explicitly ask to
+    // (e.g. the SOS matched the wrong state), or when we have no state yet.
+    if (chooseState || !factor?.sos_state) {
       const entered =
         typeof window !== 'undefined'
-          ? window.prompt(`2-letter state to search for "${factor?.name}"?`, '')
+          ? window.prompt(
+              `2-letter state to search Secretary of State for "${factor?.name}":`,
+              factor?.sos_state || ''
+            )
           : ''
       if (!entered) return
-      state = entered
+      state = entered.trim().toUpperCase()
     }
     setBusy(true)
     try {
@@ -243,8 +248,11 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
                   Reject
                 </Button>
               )}
-              <Button size="sm" variant="ghost" onClick={recheck} disabled={busy}>
+              <Button size="sm" variant="ghost" onClick={() => recheck()} disabled={busy}>
                 Re-check SOS
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => recheck(true)} disabled={busy}>
+                Re-check in another state
               </Button>
             </div>
           </div>

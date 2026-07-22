@@ -272,6 +272,8 @@ export function EldPanel({
   const [vinMessage, setVinMessage] = useState<string | null>(null)
   const [vinResult, setVinResult] = useState<EldLocation | null>(null)
   const [vinSearched, setVinSearched] = useState(false)
+  // The single-VIN lookup is collapsed by default to keep the tile compact.
+  const [showVin, setShowVin] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -512,15 +514,18 @@ export function EldPanel({
           </>
         )}
 
-        {/* Single-VIN lookup */}
+        {/* Single-VIN lookup — collapsed by default to keep the tile short. */}
         {configured && (
-          <div className="mt-5 border-t border-gray-100 pt-4">
-            <div className="mb-2 flex items-baseline gap-2">
-              <h4 className="text-sm font-semibold text-gray-900">
-                Look up a single vehicle
-              </h4>
-              <span className="text-xs text-gray-400">by VIN</span>
-            </div>
+          <div className="mt-4 border-t border-gray-100 pt-3">
+            <button
+              type="button"
+              onClick={() => setShowVin((v) => !v)}
+              className="text-xs font-medium text-dts-blue hover:underline"
+            >
+              {showVin ? 'Hide VIN lookup' : 'Look up a single vehicle by VIN'}
+            </button>
+            {showVin && (
+            <>
             <form
               className="flex flex-wrap items-center gap-2"
               onSubmit={(e) => {
@@ -565,6 +570,8 @@ export function EldPanel({
               <p className="mt-3 text-sm text-gray-500">
                 No location found for that VIN.
               </p>
+            )}
+            </>
             )}
           </div>
         )}

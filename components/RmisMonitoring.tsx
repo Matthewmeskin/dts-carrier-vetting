@@ -68,47 +68,36 @@ export function RmisMonitoring({
 
   return (
     <Card>
-      <CardBody>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="text-sm font-medium text-gray-900">RMIS monitoring</div>
+      <CardBody className="py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 text-sm">
+            <span className="font-medium text-gray-900">RMIS monitoring</span>
             {disabledInTms ? (
-              <div className="mt-0.5 max-w-2xl text-xs text-amber-700">
-                This carrier is <span className="font-semibold">disabled in the TMS</span>
-                {brokerwareStatus ? ` (${brokerwareStatus})` : ''} — you likely no
-                longer work with them. Detach them from RMIS monitoring so RMIS
-                stops tracking and billing for this carrier.
-              </div>
-            ) : (
-              <div className="mt-0.5 max-w-2xl text-xs text-gray-500">
-                Remove this carrier from the RMIS monitored list (stops RMIS
-                tracking &amp; billing). Use for carriers you no longer work with.
-              </div>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {done ? (
-              <span className="text-xs font-medium text-green-700">
-                Detached from RMIS
+              <span className="ml-2 text-xs text-amber-700">
+                Disabled in TMS{brokerwareStatus ? ` (${brokerwareStatus})` : ''} —
+                detach to stop RMIS tracking &amp; billing.
               </span>
             ) : (
-              <Button
-                variant={disabledInTms ? 'primary' : 'secondary'}
-                onClick={detach}
-                disabled={!canEdit || saving}
-                title={canEdit ? '' : 'Manager or Director only'}
-              >
-                {saving ? <Spinner size={14} className="text-white" /> : null}
-                {saving ? 'Detaching…' : 'Detach from RMIS'}
-              </Button>
+              <span className="ml-2 text-xs text-gray-500">
+                Detach carriers you no longer work with (stops RMIS tracking &amp; billing).
+              </span>
             )}
           </div>
+          {done ? (
+            <span className="text-xs font-medium text-green-700">Detached from RMIS</span>
+          ) : (
+            <Button
+              size="sm"
+              variant={disabledInTms ? 'primary' : 'secondary'}
+              onClick={detach}
+              disabled={!canEdit || saving}
+              title={canEdit ? '' : 'Manager or Director only'}
+            >
+              {saving ? <Spinner size={14} className="text-white" /> : null}
+              {saving ? 'Detaching…' : 'Detach from RMIS'}
+            </Button>
+          )}
         </div>
-        {!canEdit && disabledInTms && (
-          <p className="mt-2 text-xs text-gray-400">
-            Only a Manager or Director can detach a carrier.
-          </p>
-        )}
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
       </CardBody>
     </Card>

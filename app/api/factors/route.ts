@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { TablesUpdate } from '@/lib/database.types'
+import { getSessionUser } from '@/lib/authServer'
+import { ROLE_LABEL } from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -58,7 +60,11 @@ export async function PATCH(request: Request) {
       }
       update.approval_status = body.approval_status
       if (body.approval_status === 'approved') {
-        update.approved_by = body.approved_by ?? 'DTS'
+        // Attribute the approval to the signed-in user (not a generic "DTS").
+        const user = await getSessionUser()
+        update.approved_by = user
+          ? `${user.fullName || user.email}${user.role ? ` (${ROLE_LABEL[user.role]})` : ''}`
+          : body.approved_by ?? 'DTS'
         update.approved_at = new Date().toISOString()
       } else {
         update.approved_by = null

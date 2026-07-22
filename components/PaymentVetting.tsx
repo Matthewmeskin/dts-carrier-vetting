@@ -1,13 +1,25 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
+import { Badge } from './ui/Badge'
 import { Spinner } from './ui/Spinner'
+import { formatDateTime } from '@/lib/utils'
 import { createSupabaseBrowserClient } from '@/lib/supabaseBrowser'
 
 const BUCKET = 'carrier-documents'
+
+interface PvDoc {
+  id: string
+  document_type: string | null
+  file_name: string | null
+  uploaded_at: string | null
+  uploaded_by: string | null
+  source: string | null
+  url: string | null
+}
 
 // Upload one file straight to Supabase Storage via a signed URL (bypasses the
 // Vercel 4.5 MB body limit) and return its storage path.
@@ -38,6 +50,8 @@ export function PaymentVetting({ dot }: { dot: string }) {
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [reports, setReports] = useState<PvDoc[]>([])
+  const [loadDocs, setLoadDocs] = useState<PvDoc[]>([])
 
   // Default the destination email + staff name to the signed-in user.
   useEffect(() => {
@@ -50,6 +64,26 @@ export function PaymentVetting({ dot }: { dot: string }) {
       })
       .catch(() => {})
   }, [])
+
+  // Load this carrier's past payment-vetting reports + the original load docs.
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/carriers/${dot}/documents`, {
+        cache: 'no-store',
+      })
+      const data = await res.json()
+      if (!res.ok) return
+      const all: PvDoc[] = data.documents ?? []
+      setReports(all.filter((d) => d.document_type === 'payment_vetting_log'))
+      setLoadDocs(all.filter((d) => d.document_type === 'payment_load_doc'))
+    } catch {
+      /* best-effort */
+    }
+  }, [dot])
+
+  useEffect(() => {
+    loadHistory()
+  }, [loadHistory])
 
   async function submit() {
     setError(null)
@@ -94,12 +128,15 @@ export function PaymentVetting({ dot }: { dot: string }) {
       if (!res.ok) throw new Error(data.error || 'Could not start payment vetting')
 
       setMessage(
-        `Submitted. The payment vetting log will be emailed to ${email} and attached to this carrier's Documents within a few minutes.`
+        `Submitted. The vetting report will be emailed to ${email} and appear below under this carrier's payment-vetting history within a few minutes.`
       )
       // Reset the file picker for the next load.
       setFiles([])
       setLoadNumber('')
       if (fileInput.current) fileInput.current.value = ''
+      // Originals are saved immediately; the report lands when the workflow
+      // posts back — refresh so the uploaded docs show right away.
+      loadHistory()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start payment vetting')
     } finally {
@@ -172,7 +209,66 @@ export function PaymentVetting({ dot }: { dot: string }) {
           {message && <span className="text-sm text-green-700">{message}</span>}
           {error && <span className="text-sm text-red-700">{error}</span>}
         </div>
+
+        {(reports.length > 0 || loadDocs.length > 0) && (
+          <div className="mt-5 space-y-4 border-t border-gray-200 pt-4">
+            {reports.length > 0 && (
+              <div>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Vetting reports ({reports.length})
+                </h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {reports.map((d) => (
+                    <DocRow key={d.id} d={d} tone="blue" label="Report" />
+                  ))}
+                </div>
+              </div>
+            )}
+            {loadDocs.length > 0 && (
+              <div>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Uploaded load documents ({loadDocs.length})
+                </h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {loadDocs.map((d) => (
+                    <DocRow key={d.id} d={d} tone="gray" label="Load doc" />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </CardBody>
     </Card>
+  )
+}
+
+function DocRow({
+  d,
+  tone,
+  label,
+}: {
+  d: PvDoc
+  tone: 'blue' | 'gray'
+  label: string
+}) {
+  return (
+    <a
+      href={d.url || '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 hover:bg-gray-50"
+    >
+      <div className="min-w-0">
+        <span className="block truncate text-sm font-medium text-gray-900">
+          {d.file_name || 'Document'}
+        </span>
+        <span className="text-xs text-gray-500">
+          {formatDateTime(d.uploaded_at)}
+          {d.uploaded_by ? ` · ${d.uploaded_by}` : ''}
+        </span>
+      </div>
+      <Badge tone={tone}>{label}</Badge>
+    </a>
   )
 }

@@ -112,6 +112,27 @@ export async function POST(
     const actor = user
       ? `${user.fullName || user.email}${user.role ? ` (${ROLE_LABEL[user.role]})` : ''}`
       : staffName || 'DTS'
+
+    // Persist the original uploaded load documents (already in Storage) so they
+    // stay attached to the carrier under the Payment vetting section — as
+    // `payment_load_doc`, tagged with the load number for grouping with the log.
+    const loadDocRows = docs
+      .filter((d) => d.storagePath)
+      .map((d) => ({
+        carrier_id: (carrier as any).id,
+        dot_number: dot,
+        document_type: 'payment_load_doc',
+        file_name: d.fileName ?? null,
+        mime_type: d.mimeType ?? null,
+        storage_bucket: BUCKET,
+        storage_path: d.storagePath,
+        uploaded_by: actor,
+        source: loadNumber ? `payment_vetting:${loadNumber}` : 'payment_vetting',
+      }))
+    if (loadDocRows.length > 0) {
+      await supabaseAdmin.from('vetting_documents').insert(loadDocRows)
+    }
+
     await logCarrierEvent({
       dot,
       carrierId: (carrier as any).id ?? null,

@@ -20,9 +20,12 @@ const DOC_TYPES = [
   { value: 'osint_report', label: 'OSINT Report' },
   { value: 'fmcsa_screenshot', label: 'FMCSA Screenshot' },
   { value: 'safety_plan', label: 'Safety Plan' },
-  { value: 'payment_vetting_log', label: 'Payment Vetting Log' },
   { value: 'other', label: 'Other' },
 ]
+
+// Payment-vetting artifacts live under the Payment vetting (AP) section, not in
+// the general Documents list.
+const PAYMENT_TYPES = new Set(['payment_vetting_log', 'payment_load_doc'])
 
 function typeLabel(v?: string | null): string {
   return DOC_TYPES.find((t) => t.value === v)?.label || v || 'Document'
@@ -82,7 +85,13 @@ export function CarrierDocuments({
         cache: 'no-store',
       })
       const data = await res.json()
-      if (res.ok) setDocuments(data.documents ?? [])
+      if (res.ok)
+        setDocuments(
+          (data.documents ?? []).filter(
+            (d: VettingDocumentRecord) =>
+              !PAYMENT_TYPES.has(d.document_type || '')
+          )
+        )
     } finally {
       setLoading(false)
     }

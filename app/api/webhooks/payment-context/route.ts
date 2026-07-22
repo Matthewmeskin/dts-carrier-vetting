@@ -1,9 +1,24 @@
 import { NextResponse } from 'next/server'
 import { isMachineOrSessionAuthorized } from '@/lib/machineAuth'
 import { getCarrierContext } from '@/lib/carrierContext'
+import { runCarrierSos, sosPipelineConfigured } from '@/lib/sos'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+// A first-time carrier SOS scrape (below) can take a couple of minutes on slow
+// states, so give this webhook room. It stays well under the n8n node timeout.
+export const maxDuration = 300
+
+// Cap the on-demand SOS scrape so a slow/flaky state can never hang the whole
+// vetting run — if it doesn't finish in time we return context without SOS.
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('SOS lookup timed out')), ms)
+    ),
+  ])
+}
 
 // GET /api/webhooks/payment-context?dot=1234567
 //
@@ -25,10 +40,24 @@ export async function GET(request: Request) {
     if (!dot) {
       return NextResponse.json({ error: 'Missing dot' }, { status: 400 })
     }
-    const context = await getCarrierContext(dot)
+    let context = await getCarrierContext(dot)
     if (!context) {
       return NextResponse.json({ error: 'Carrier not found' }, { status: 404 })
     }
+
+    // If we don't yet have a Secretary-of-State record for this carrier, run the
+    // check now so the vetting log and the merged Carrier Profile page both show
+    // real SOS data instead of "not checked". Best-effort: any failure/timeout
+    // just leaves SOS unpopulated and the report still generates.
+    if (!context.sos && sosPipelineConfigured().ok) {
+      try {
+        await withTimeout(runCarrierSos(dot), 180_000)
+        context = (await getCarrierContext(dot)) ?? context
+      } catch (e) {
+        console.error('payment-context: carrier SOS lookup failed:', e)
+      }
+    }
+
     return NextResponse.json(context)
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

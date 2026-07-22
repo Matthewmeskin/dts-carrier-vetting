@@ -1,11 +1,8 @@
 'use client'
 
-import { useState } from 'react'
 import { InsuranceRecord } from '@/lib/types'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge, coverageStatusTone } from './ui/Badge'
-import { Button } from './ui/Button'
-import { Spinner } from './ui/Spinner'
 import {
   cn,
   formatCurrency,
@@ -118,48 +115,11 @@ function CoverageCard({ c }: { c: Coverage }) {
 
 export function InsurancePanel({
   insurance,
-  dot,
-  onRefreshed,
 }: {
   insurance: InsuranceRecord | null
-  dot: string
-  onRefreshed?: () => void | Promise<void>
+  // dot / onRefreshed kept off the panel now that the Refresh control lives in
+  // the carrier header; the panel is display-only.
 }) {
-  const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string[] | null>(null)
-  const [showInfo, setShowInfo] = useState(false)
-  const [docMsg, setDocMsg] = useState<string | null>(null)
-
-  async function refresh() {
-    setRefreshing(true)
-    setError(null)
-    setDocMsg(null)
-    try {
-      const res = await fetch(`/api/carriers/${dot}/insurance`, {
-        cache: 'no-store',
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Refresh failed')
-      if (data?.evaluation?.info) setInfo(data.evaluation.info)
-      const d = data?.documents
-      if (d) {
-        if (d.archived > 0) {
-          setDocMsg(
-            `Archived ${d.archived} new document version(s); ${d.unchanged} unchanged.`
-          )
-        } else if (d.unchanged > 0) {
-          setDocMsg(`Documents up to date (${d.unchanged} unchanged).`)
-        }
-      }
-      await onRefreshed?.()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Refresh failed')
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
   const coverages: Coverage[] = insurance
     ? [
         {
@@ -203,63 +163,24 @@ export function InsurancePanel({
         title="Insurance Coverage"
         subtitle={
           insurance?.fetched_at
-            ? `RMIS pulled ${formatRelative(insurance.fetched_at)}`
+            ? `RMIS/SAFER pulled ${formatRelative(insurance.fetched_at)}`
             : 'No RMIS data on file'
-        }
-        action={
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={refresh}
-            disabled={refreshing}
-          >
-            {refreshing ? <Spinner size={14} /> : null}
-            {refreshing ? 'Refreshing…' : 'Refresh from RMIS'}
-          </Button>
         }
       />
       <CardBody>
-        {error && (
-          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-        {docMsg && (
-          <div className="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-            {docMsg}
-          </div>
-        )}
-
         {/* Hard stops + flags are surfaced once, in the page-level AlertBanner
             above — not duplicated here. This card shows coverage details only. */}
         {!insurance ? (
           <p className="text-sm text-gray-500">
-            No coverage data yet. Click “Refresh RMIS” to pull the latest
-            insurance and authority data for this carrier.
+            No coverage data yet. Use “Refresh from RMIS/SAFER” at the top of the
+            profile to pull the latest insurance and authority data for this
+            carrier.
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {coverages.map((c) => (
               <CoverageCard key={c.title} c={c} />
             ))}
-          </div>
-        )}
-
-        {info && info.length > 0 && (
-          <div className="mt-4 border-t border-gray-100 pt-3">
-            <button
-              onClick={() => setShowInfo((v) => !v)}
-              className="text-xs font-medium text-dts-blue hover:underline"
-            >
-              {showInfo ? 'Hide' : 'Show'} additional info ({info.length})
-            </button>
-            {showInfo && (
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">
-                {info.map((n, i) => (
-                  <li key={i}>{n}</li>
-                ))}
-              </ul>
-            )}
           </div>
         )}
       </CardBody>

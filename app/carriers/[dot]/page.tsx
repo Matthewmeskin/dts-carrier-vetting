@@ -17,6 +17,7 @@ import { AlertBanner } from '@/components/AlertBanner'
 import { AuthorityPanel } from '@/components/AuthorityPanel'
 import { SosPanel } from '@/components/SosPanel'
 import { InsurancePanel } from '@/components/InsurancePanel'
+import { RmisRefreshButton } from '@/components/RmisRefreshButton'
 import { EldPanel } from '@/components/EldPanel'
 import { NoaPanel } from '@/components/NoaPanel'
 import { ScorePanel } from '@/components/ScorePanel'
@@ -303,7 +304,8 @@ export default function CarrierDetailPage({
               })()}
             </div>
             <div className="text-right text-sm text-gray-500">
-              <div className="flex flex-col items-end gap-1">
+              <div className="flex flex-col items-end gap-2">
+                <RmisRefreshButton dot={dot} onRefreshed={load} />
                 {disabled ? (
                   <span>Disabled — re-vetting not required</span>
                 ) : (
@@ -371,7 +373,7 @@ export default function CarrierDetailPage({
       />
 
       {/* Insurance — full width so the Auto / Cargo / GL cards aren't scrunched */}
-      <InsurancePanel insurance={displayInsurance} dot={dot} onRefreshed={load} />
+      <InsurancePanel insurance={displayInsurance} />
 
       {/* ELD — live fleet location */}
       <EldPanel dot={dot} eldEnrolled={insurance?.rmis_eld_enrolled ?? null} />

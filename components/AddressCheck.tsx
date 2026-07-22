@@ -185,39 +185,83 @@ function LocationTypeEstimate({ address }: { address: string }) {
           }
           const loc = res[0].geometry.location
           const svc = new google.maps.places.PlacesService(document.createElement('div'))
-          svc.findPlaceFromQuery(
-            {
-              query: address,
-              fields: ['name', 'types', 'geometry'],
-              locationBias: { lat: loc.lat(), lng: loc.lng() },
-            },
-            (cands: any, pst: string) => {
+          // Scan for businesses AROUND the address (not just at the exact pin) —
+          // multi-tenant industrial parks geocode to a point between units, so
+          // requiring a business at the pin falsely reads as "residential". We
+          // classify from nearby business density instead.
+          svc.nearbySearch(
+            { location: loc, radius: 150 },
+            (places: any, pst: string) => {
               if (cancelled) return
-              const top = pst === 'OK' ? cands?.[0] : null
-              if (top?.geometry?.location) {
-                const d = metersBetween(
-                  loc.lat(),
-                  loc.lng(),
-                  top.geometry.location.lat(),
-                  top.geometry.location.lng()
-                )
-                // Only trust it if the business sits at (not near) the address.
-                if (d <= 80) {
-                  setResult({
-                    ...classifyPlace(top.types || [], top.name || ''),
-                    name: top.name,
-                    types: top.types,
-                  })
-                  setStatus('done')
-                  return
+              const list = pst === 'OK' && Array.isArray(places) ? places : []
+              const ests = list
+                .filter((p: any) => {
+                  const t: string[] = p.types || []
+                  return (
+                    (t.includes('establishment') || t.includes('point_of_interest')) &&
+                    !t.includes('locality') &&
+                    !t.includes('route') &&
+                    !t.includes('postal_code') &&
+                    !t.includes('political')
+                  )
+                })
+                .map((p: any) => ({
+                  name: p.name || '',
+                  types: (p.types || []) as string[],
+                  dist: p.geometry?.location
+                    ? metersBetween(
+                        loc.lat(),
+                        loc.lng(),
+                        p.geometry.location.lat(),
+                        p.geometry.location.lng()
+                      )
+                    : 99999,
+                }))
+                .sort((a: any, b: any) => a.dist - b.dist)
+
+              const nearest = ests[0]
+              const within150 = ests.filter((e: any) => e.dist <= 150)
+
+              let out: {
+                label: string
+                tone: LocTone
+                note?: string
+                name?: string
+                types?: string[]
+              }
+              if (nearest && nearest.dist <= 60) {
+                // A business sits right at the address — classify by it.
+                out = {
+                  ...classifyPlace(nearest.types, nearest.name),
+                  name: nearest.name,
+                  types: nearest.types,
+                }
+              } else if (within150.length >= 2) {
+                const names = within150
+                  .map((e: any) => e.name)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                out = {
+                  label: 'Commercial / industrial area',
+                  tone: 'green',
+                  note: `${within150.length} businesses at or around this address${names.length ? ` (e.g. ${names.join(', ')})` : ''}.`,
+                  name: nearest?.name,
+                  types: nearest?.types,
+                }
+              } else if (within150.length === 1) {
+                out = {
+                  ...classifyPlace(within150[0].types, within150[0].name),
+                  name: within150[0].name,
+                  types: within150[0].types,
+                }
+              } else {
+                out = {
+                  label: 'No businesses found nearby — possibly residential',
+                  tone: 'amber',
+                  note: 'Google shows no businesses at or near this address — often a residence or vacant lot. A real carrier usually operates from a commercial or industrial site; confirm with the satellite & Street View below.',
                 }
               }
-              // No business found at this exact address — typically residential.
-              setResult({
-                label: 'Non-business (likely residential)',
-                tone: 'amber',
-                note: 'No business is registered at this exact address on Google — often a residence. A real carrier usually operates from a commercial or industrial site.',
-              })
+              setResult(out)
               setStatus('done')
             }
           )

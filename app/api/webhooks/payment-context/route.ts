@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { isMachineOrSessionAuthorized } from '@/lib/machineAuth'
 import { getCarrierContext } from '@/lib/carrierContext'
 import { runCarrierSos, sosPipelineConfigured } from '@/lib/sos'
+import { runNoaCheck } from '@/lib/noaCheck'
+import { noaVerifyConfigured } from '@/lib/noaVerify'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -55,6 +57,18 @@ export async function GET(request: Request) {
         context = (await getCarrierContext(dot)) ?? context
       } catch (e) {
         console.error('payment-context: carrier SOS lookup failed:', e)
+      }
+    }
+
+    // Likewise, if there's an on-file NOA but we've never verified it, run the
+    // NOA check now so the "NOA result / checked" fields populate on the report
+    // and the carrier profile. Best-effort, bounded.
+    if (!context.noa && noaVerifyConfigured()) {
+      try {
+        const ran = await withTimeout(runNoaCheck(dot), 75_000)
+        if (ran) context = (await getCarrierContext(dot)) ?? context
+      } catch (e) {
+        console.error('payment-context: NOA verification failed:', e)
       }
     }
 

@@ -56,6 +56,25 @@ export function buildCarrierProfileHtml(
       '</div></div>'
   }
 
+  // The NOA verification is stored as a JSON object; render a readable one-liner
+  // rather than "[object Object]".
+  const noaRes: any = (noa && (noa as any).result) || null
+  let noaResultStr: string | null = null
+  if (noaRes) {
+    const clean =
+      noaRes.is_noa &&
+      noaRes.assignee_matches_factor &&
+      noaRes.payto_address_match === 'match' &&
+      Array.isArray(noaRes.discrepancies) &&
+      noaRes.discrepancies.length === 0
+    const head = !noaRes.is_noa
+      ? 'Not a NOA'
+      : clean
+        ? 'Verified — assignee & pay-to match'
+        : `Reviewed — ${(noaRes.discrepancies || []).length} discrepancy(ies)`
+    noaResultStr = head + (noaRes.summary ? ' — ' + noaRes.summary : '')
+  }
+
   const style =
     '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12px;margin:0;padding:24px}h1{font-size:18px;margin:0 0 2px}.sub{color:#666;font-size:11px;margin-bottom:10px}table{border-collapse:collapse;width:100%;margin:6px 0}td{padding:4px 6px;border:1px solid #e2e2e2;vertical-align:top}td.l{background:#f6f6f6;font-weight:bold;width:45%}.sec{font-weight:bold;color:#00547f;margin:14px 0 4px;font-size:13px;border-bottom:2px solid #00547f;padding-bottom:2px}.cols{display:flex;gap:16px}.cols>div{flex:1}img.map{width:100%;height:auto;border:1px solid #e2e2e2;border-radius:4px}.cap{font-size:11px;color:#666;margin:2px 0}'
 
@@ -131,7 +150,7 @@ export function buildCarrierProfileHtml(
         fld('Factor state', factor.sos_state) +
         '</table></div></div>' +
         '<table>' +
-        fld('NOA result', noa.result) +
+        fld('NOA result', noaResultStr) +
         fld('NOA checked', noa.checked_at) +
         '</table>'
       : '') +

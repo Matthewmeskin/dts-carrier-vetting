@@ -39,12 +39,12 @@ function ratingTone(r: string | null | undefined): string {
 function CoverageCard({ c }: { c: Coverage }) {
   const due = c.status === 'Valid' ? daysUntil(c.expiration) : null
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
+    <div className="rounded-lg border border-gray-200 p-3">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold text-gray-900">{c.title}</h4>
         <Badge tone={coverageStatusTone(c.status)}>{c.status ?? '—'}</Badge>
       </div>
-      <div className="mt-2 text-2xl font-bold text-gray-900">
+      <div className="mt-1 text-xl font-bold text-gray-900">
         {formatCurrency(c.limit)}
       </div>
       {c.secondaryLimit && (
@@ -52,7 +52,7 @@ function CoverageCard({ c }: { c: Coverage }) {
           {c.secondaryLimit.label}: {formatCurrency(c.secondaryLimit.value)}
         </div>
       )}
-      <dl className="mt-3 space-y-1 text-xs text-gray-600">
+      <dl className="mt-2 space-y-0.5 text-xs text-gray-600">
         {c.effective !== undefined && (
           <div className="flex justify-between">
             <dt className="text-gray-400">Effective</dt>

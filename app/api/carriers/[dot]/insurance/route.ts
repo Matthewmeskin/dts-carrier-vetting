@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { fetchExpandedCarrierXML } from '@/lib/rmisClient'
+import { fetchExpandedCarrierXML, fetchNonMonitoredCarrier } from '@/lib/rmisClient'
 import { parseRMISXML, ParsedRMISData } from '@/lib/rmisParser'
 import { evaluateRMIS, RMISEvaluation } from '@/lib/rmisEvaluator'
 import { logCarrierEvent } from '@/lib/auditLog'
@@ -12,6 +12,42 @@ export const runtime = 'nodejs'
 
 function nullIfEmpty(v: string | null | undefined): string | null {
   return v && v.trim() !== '' ? v : null
+}
+
+// First non-empty value across a set of candidate tag names (the non-monitored
+// endpoint isn't documented field-by-field, so we try the likely aliases).
+function pickTag(text: string, names: string[]): string {
+  for (const n of names) {
+    const m = new RegExp(`<${n}>([\\s\\S]*?)</${n}>`, 'i').exec(text)
+    if (m && m[1].trim()) return m[1].trim()
+  }
+  return ''
+}
+
+// Best-effort basic fields from the RMIS "non-monitored carrier" response. Kept
+// deliberately shallow (identity + address + authority) — we do NOT synthesize
+// insurance hard stops from it, since it isn't the full compliance record.
+function parseNonMonitoredBasics(text: string) {
+  return {
+    legalName: pickTag(text, ['dot_LegalName', 'LegalName', 'CompanyName', 'Name']),
+    mcNumber: pickTag(text, ['MCNumber', 'MC_MX', 'MC']),
+    dotNumber: pickTag(text, ['DOTNumber', 'DOT']),
+    phone: pickTag(text, ['Phone']),
+    street: pickTag(text, [
+      'dot_PhysicalStreet', 'PhysicalStreet', 'Mailing_Street', 'Physical_Address', 'Street', 'Address1',
+    ]),
+    city: pickTag(text, ['dot_PhysicalCity', 'PhysicalCity', 'Mailing_City', 'City']),
+    state: pickTag(text, ['dot_PhysicalState', 'PhysicalState', 'Mailing_State', 'State']),
+    zip: pickTag(text, ['dot_PhysicalZip', 'PhysicalZip', 'Mailing_Zip', 'Zip', 'PostalCode']),
+    commonAuthority: pickTag(text, ['dot_CommonAuthority', 'CommonAuthority']),
+    contractAuthority: pickTag(text, ['dot_ContractAuthority', 'ContractAuthority']),
+    safetyRating: pickTag(text, ['SafetyRating']),
+    passesBusinessRules:
+      /<(?:Pass|PassBusinessRules|BusinessRulesPass|Passed)>\s*(?:true|yes|pass|1)\s*<\/(?:Pass|PassBusinessRules|BusinessRulesPass|Passed)>/i.test(text) ||
+      /business rules[^<]*pass/i.test(text)
+        ? true
+        : null,
+  }
 }
 
 // Map ParsedRMISData + evaluation to carrier_insurance row
@@ -110,10 +146,65 @@ export async function GET(
       return NextResponse.json({ error: 'Carrier not found' }, { status: 404 })
     }
 
-    const xml = await fetchExpandedCarrierXML({
-      insdID: (carrier as any).rmis_insured_id || undefined,
-      dotNumber: (carrier as any).dot_number,
-    })
+    let xml: string
+    try {
+      xml = await fetchExpandedCarrierXML({
+        insdID: (carrier as any).rmis_insured_id || undefined,
+        dotNumber: (carrier as any).dot_number,
+      })
+    } catch (expandedErr: any) {
+      // The carrier isn't in our monitored list ("Insured not found"). Fall back
+      // to the non-monitored check to at least pull basic info + business-rule
+      // pass, instead of surfacing a bare error.
+      if (!/not\s*found/i.test(String(expandedErr?.message ?? ''))) throw expandedErr
+
+      const text = await fetchNonMonitoredCarrier({
+        dotNumber: (carrier as any).dot_number,
+        mcNumber: (carrier as any).mc_number || undefined,
+      })
+      const basics = parseNonMonitoredBasics(text)
+
+      const basicRow: TablesInsert<'carrier_insurance'> = {
+        carrier_id: (carrier as any).id,
+        dot_number: dot,
+        operating_status: nullIfEmpty(basics.commonAuthority),
+        contract_authority_status: nullIfEmpty(basics.contractAuthority),
+        rmis_carrier_street: nullIfEmpty(basics.street),
+        rmis_carrier_city: nullIfEmpty(basics.city),
+        rmis_carrier_state: nullIfEmpty(basics.state),
+        rmis_carrier_zip: nullIfEmpty(basics.zip),
+        // Not a full compliance pull — do not fabricate hard stops / certification.
+        hard_stops: [],
+        rmis_flags: [],
+        rmis_overall_pass: null,
+        rmis_is_certified: null,
+        rmis_certification_notes: [
+          'Basic info from the RMIS non-monitored check — this carrier is not in our monitored list, so full insurance/compliance data was not returned.',
+        ],
+        raw_rmis_response: { source: 'non_monitored', text } as any,
+        fetched_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      await supabaseAdmin.from('carrier_insurance').insert([basicRow])
+
+      const cu: TablesUpdate<'carriers'> = {}
+      if (basics.safetyRating) cu.safety_rating = basics.safetyRating
+      if (Object.keys(cu).length > 0) {
+        await supabaseAdmin.from('carriers').update(cu).eq('dot_number', dot)
+      }
+
+      await logCarrierEvent({
+        dot,
+        carrierId: (carrier as any).id ?? null,
+        type: 'rmis_refresh',
+        summary:
+          'Pulled basic info via the RMIS non-monitored check (carrier is not in our monitored list).',
+        detail: { source: 'non_monitored', passesBusinessRules: basics.passesBusinessRules },
+        actor: 'system (manual RMIS refresh)',
+      })
+
+      return NextResponse.json({ ok: true, source: 'non_monitored', basic: basics })
+    }
 
     const parsed = parseRMISXML(xml)
     const evaluation = evaluateRMIS(parsed)

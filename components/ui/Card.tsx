@@ -33,7 +33,7 @@ export function CardHeader({
   return (
     <div
       className={cn(
-        'flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-3.5',
+        'flex items-start justify-between gap-4 border-b border-gray-100 px-4 py-3',
         className
       )}
     >
@@ -55,5 +55,5 @@ export function CardBody({
   children: React.ReactNode
   className?: string
 }) {
-  return <div className={cn('px-5 py-4', className)}>{children}</div>
+  return <div className={cn('px-4 py-3.5', className)}>{children}</div>
 }

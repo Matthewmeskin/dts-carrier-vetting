@@ -168,7 +168,7 @@ export function AuthorityPanel({
         </div>
       )}
 
-      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
           <Field
             label="Operating Status"
             value={insurance.operating_status}

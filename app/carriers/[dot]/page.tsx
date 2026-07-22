@@ -166,7 +166,7 @@ export default function CarrierDetailPage({
   const disabled = isBrokerwareDisabled(carrier.brokerware_status)
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <Link href="/carriers" className="text-sm text-dts-blue hover:underline">
         ← Back to carriers
       </Link>
@@ -361,7 +361,7 @@ export default function CarrierDetailPage({
       {/* Secondary panels flow into a 2-column grid to cut the vertical stack.
           Address check spans full width (it needs room for the satellite +
           Street View); the rest pair up. */}
-      <div className="grid items-start gap-5 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         {/* Address check — satellite + Street View of the FMCSA physical
             address (never the TMS mailing / P.O. Box), to verify the site. */}
         <div className="lg:col-span-2">

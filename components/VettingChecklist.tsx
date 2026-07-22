@@ -217,6 +217,14 @@ export function VettingChecklist({
     setReviewedBy((v) => v || me.name)
     setApprovedBy((v) => v || me.name)
   }, [me])
+  // Status is held locally and only written on Save (like the cadence below),
+  // so changing the dropdown no longer auto-saves the moment you touch it.
+  const [pendingStatus, setPendingStatus] = useState(
+    carrierStatus ?? 'Pending Review'
+  )
+  useEffect(() => {
+    setPendingStatus(carrierStatus ?? 'Pending Review')
+  }, [carrierStatus])
   // Re-vet cadence is held locally and only persisted on Save, so toggling the
   // dropdown to compare options doesn't write (and log) a change each time.
   const [pendingInterval, setPendingInterval] = useState<number>(
@@ -414,8 +422,9 @@ export function VettingChecklist({
         body: JSON.stringify({
           dotNumber: dot,
           vettingType,
-          // The single carrier status is the vetting decision/outcome.
-          vettingStatus: carrierStatus ?? 'Pending Review',
+          // The single carrier status is the vetting decision/outcome — the
+          // locally-held value, written only now (on Save), not on each change.
+          vettingStatus: pendingStatus,
           checklist: { ...checklist, exceptionNote },
           exceptionNote,
           internalNotes,
@@ -532,9 +541,12 @@ export function VettingChecklist({
                 <div>
                   <Select
                     label="Carrier status (vetting decision)"
-                    value={carrierStatus ?? 'Pending Review'}
+                    value={pendingStatus}
                     disabled={statusSaving}
-                    onChange={(e) => onCarrierStatusChange(e.target.value)}
+                    onChange={(e) => {
+                      setDirty(true)
+                      setPendingStatus(e.target.value)
+                    }}
                   >
                     {CARRIER_STATUSES.map((s) => {
                       const roleGated =

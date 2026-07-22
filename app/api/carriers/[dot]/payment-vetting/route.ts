@@ -95,6 +95,8 @@ export async function POST(
       resultUrl: `${base}/api/webhooks/payment-vetting-result`,
       // Merges the original load docs into the final report PDF before emailing.
       mergeUrl: `${base}/api/webhooks/payment-vetting-merge`,
+      // Look up the booked load (by number from the docs) to cross-check the invoice.
+      loadsUrl: `${base}/api/loads`,
     }
 
     const res = await fetch(webhookUrl, {

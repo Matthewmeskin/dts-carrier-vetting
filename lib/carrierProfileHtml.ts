@@ -45,9 +45,10 @@ export function buildCarrierProfileHtml(
     const enc = encodeURIComponent(addrStr)
     const sat = `https://maps.googleapis.com/maps/api/staticmap?center=${enc}&zoom=19&size=640x360&scale=2&maptype=satellite&markers=color:red%7C${enc}&key=${mapsKey}`
     const sv = `https://maps.googleapis.com/maps/api/streetview?size=640x360&location=${enc}&fov=80&pitch=0&source=outdoor&key=${mapsKey}`
+    const mapsLink = `https://www.google.com/maps/search/?api=1&query=${enc}`
     locationSection =
       '<div class="sec">Location (FMCSA-registered physical address)</div>' +
-      `<div class="sub">${esc(addrStr)}${addr.source ? ' &middot; ' + esc(addr.source) : ''}</div>` +
+      `<div class="sub">${esc(addrStr)}${addr.source ? ' &middot; ' + esc(addr.source) : ''} &middot; <a href="${mapsLink}">Open in Google Maps</a></div>` +
       '<div class="cols"><div>' +
       `<div class="cap">Satellite</div><img class="map" src="${sat}" alt="Satellite view" />` +
       '</div><div>' +

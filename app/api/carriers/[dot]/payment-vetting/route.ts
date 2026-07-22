@@ -93,6 +93,8 @@ export async function POST(
       // The workflow pulls carrier data from the portal and posts the PDF back.
       contextUrl: `${base}/api/webhooks/payment-context?dot=${encodeURIComponent(dot)}`,
       resultUrl: `${base}/api/webhooks/payment-vetting-result`,
+      // Merges the original load docs into the final report PDF before emailing.
+      mergeUrl: `${base}/api/webhooks/payment-vetting-merge`,
     }
 
     const res = await fetch(webhookUrl, {

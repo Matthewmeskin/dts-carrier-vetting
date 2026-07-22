@@ -502,7 +502,9 @@ function computeAutoEvaluations(
     const rmisOn = ins?.broker_carrier_agreement_on_file
     const portalBca = docTypes.has('broker_carrier_agreement')
     const portalTariff = docTypes.has('tariff')
-    const portalOn = portalBca || portalTariff
+    // Also accept a generic "Other" upload — some agreements get filed there.
+    const portalOther = docTypes.has('other')
+    const portalOn = portalBca || portalTariff || portalOther
     if (rmisOn != null || portalOn) {
       const on = rmisOn === true || portalOn
       out.broker_carrier_agreement = {

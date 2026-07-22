@@ -275,7 +275,7 @@ export function AuthorityPanel({
             label="Broker-Carrier Agreement"
             value={renderDocStatus(
               insurance.broker_carrier_agreement_on_file,
-              ['broker_carrier_agreement', 'tariff'],
+              ['broker_carrier_agreement', 'tariff', 'other'],
               'Missing'
             )}
           />

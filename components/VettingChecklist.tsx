@@ -595,7 +595,10 @@ export function VettingChecklist({
                     label="Re-vetting cadence"
                     value={String(pendingInterval)}
                     disabled={statusSaving || revetDisabled}
-                    onChange={(e) => setPendingInterval(Number(e.target.value))}
+                    onChange={(e) => {
+                      setDirty(true)
+                      setPendingInterval(Number(e.target.value))
+                    }}
                   >
                     {REVET_INTERVAL_OPTIONS.map((d) => (
                       <option key={d} value={d}>
@@ -623,13 +626,19 @@ export function VettingChecklist({
                 <Input
                   label="Reviewed by"
                   value={reviewedBy}
-                  onChange={(e) => setReviewedBy(e.target.value)}
+                  onChange={(e) => {
+                    setDirty(true)
+                    setReviewedBy(e.target.value)
+                  }}
                   placeholder="Name / role"
                 />
                 <Input
                   label="Approved by"
                   value={approvedBy}
-                  onChange={(e) => setApprovedBy(e.target.value)}
+                  onChange={(e) => {
+                    setDirty(true)
+                    setApprovedBy(e.target.value)
+                  }}
                   placeholder="Name, title"
                 />
               </div>

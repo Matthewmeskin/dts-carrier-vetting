@@ -105,8 +105,8 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
   const latest = scores[0]
   const prev = scores[1]
   const chron = [...scores].reverse() // oldest → newest for trend reading
-  // The trend chart + history table are tall; collapse them by default.
-  const [showTrend, setShowTrend] = useState(false)
+  // Trend chart + history show by default (you use them); the toggle hides them.
+  const [showTrend, setShowTrend] = useState(true)
   const gapDelta =
     latest?.gap_score != null && prev?.gap_score != null
       ? latest.gap_score - prev.gap_score

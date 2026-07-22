@@ -1,6 +1,33 @@
 import { NextResponse } from 'next/server'
 import { PDFDocument } from 'pdf-lib'
 import { isMachineOrSessionAuthorized } from '@/lib/machineAuth'
+import { getCarrierContext } from '@/lib/carrierContext'
+import { buildCarrierProfileHtml } from '@/lib/carrierProfileHtml'
+
+// PDF renderer (browserless) — same service the n8n workflow uses to render the
+// vetting log. Full URL incl. token, e.g.
+//   https://production-sfo.browserless.io/pdf?token=XXXX
+const BROWSERLESS_PDF_URL = process.env.BROWSERLESS_PDF_URL
+
+// Render an HTML string to a PDF via browserless. Returns null on any failure so
+// the merge degrades gracefully (report + originals without the profile page).
+async function renderHtmlToPdf(html: string): Promise<Uint8Array | null> {
+  if (!BROWSERLESS_PDF_URL) return null
+  try {
+    const res = await fetch(BROWSERLESS_PDF_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        html,
+        options: { printBackground: true, preferCSSPageSize: true },
+      }),
+    })
+    if (!res.ok) return null
+    return new Uint8Array(await res.arrayBuffer())
+  } catch {
+    return null
+  }
+}
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,16 +56,39 @@ export async function POST(request: Request) {
     }
     const docUrls: Array<{ url?: string; mimeType?: string; fileName?: string }> =
       Array.isArray(body?.docUrls) ? body.docUrls : []
+    const dot = body?.dot ? String(body.dot).replace(/\D/g, '') : ''
 
     const merged = await PDFDocument.create()
+    const skipped: string[] = []
 
     // 1) The vetting log itself.
     const logDoc = await PDFDocument.load(Buffer.from(vettingLogBase64, 'base64'))
     const logPages = await merged.copyPages(logDoc, logDoc.getPageIndices())
     logPages.forEach((p) => merged.addPage(p))
 
-    // 2) Append each original document.
-    const skipped: string[] = []
+    // 2) A rendered Carrier Profile page (best-effort — skipped if the renderer
+    //    isn't configured or the carrier isn't found).
+    if (dot) {
+      try {
+        const ctx = await getCarrierContext(dot)
+        if (ctx) {
+          const profilePdf = await renderHtmlToPdf(buildCarrierProfileHtml(ctx))
+          if (profilePdf) {
+            const pDoc = await PDFDocument.load(profilePdf, { ignoreEncryption: true })
+            const pPages = await merged.copyPages(pDoc, pDoc.getPageIndices())
+            pPages.forEach((p) => merged.addPage(p))
+          } else {
+            skipped.push('carrier profile page (renderer unavailable)')
+          }
+        }
+      } catch (e) {
+        skipped.push(
+          `carrier profile page (${e instanceof Error ? e.message : 'error'})`
+        )
+      }
+    }
+
+    // 3) Append each original document.
     for (const d of docUrls) {
       if (!d?.url) continue
       try {

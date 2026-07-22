@@ -17,14 +17,79 @@ export const maxDuration = 60
 interface LoadCarrier {
   carrierMCNumber?: string | null
   carrierName?: string | null
+  carrierProNumber?: string | null
+  remitTo?: string | null
+  remitAddress?: string | null
   isPrimary?: boolean
+}
+interface LoadStop {
+  stopType?: string | null
+  fullAddress?: string | null
 }
 interface LoadObj {
   loadId?: number | string
+  bolNum?: string | null
+  pickNum?: string | null
+  shipmentStatus?: string | null
+  shipmentMode?: string | null
+  customerName?: string | null
+  targetRate?: number | null
+  value?: number | null
+  items?: Array<{ billed?: number | null }> | null
+  accessorials?: Array<{ bill?: number | null }> | null
+  stops?: LoadStop[] | null
+  estimatedDelivery?: string | null
   deliveryDate?: string | null
   pickupDate?: string | null
   createdate?: string | null
   carriers?: LoadCarrier[] | null
+}
+
+function num(v: any): number | null {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+function nullIf(v: any): string | null {
+  const s = v == null ? '' : String(v).trim()
+  return s && s !== '-' ? s : null
+}
+
+// Map a full Hyperion load to a `loads` row (null when it has no loadId).
+function toLoadRow(load: LoadObj): Record<string, any> | null {
+  const loadId = num(load.loadId)
+  if (loadId === null) return null
+  const carriers = load.carriers ?? []
+  const primary = carriers.find((c) => c.isPrimary === true) ?? carriers[0] ?? null
+  const stops = load.stops ?? []
+  const origin = stops.find((s) => /pick/i.test(s.stopType || ''))?.fullAddress ?? null
+  const destination =
+    stops.find((s) => /drop|deliv/i.test(s.stopType || ''))?.fullAddress ?? null
+  const itemsBilled = (load.items ?? []).reduce((a, it) => a + (num(it.billed) ?? 0), 0)
+  const accBilled = (load.accessorials ?? []).reduce((a, ac) => a + (num(ac.bill) ?? 0), 0)
+  const totalBilled = itemsBilled + accBilled
+  return {
+    load_id: loadId,
+    bol_num: nullIf(load.bolNum),
+    pick_num: nullIf(load.pickNum),
+    shipment_status: nullIf(load.shipmentStatus),
+    shipment_mode: nullIf(load.shipmentMode),
+    customer_name: nullIf(load.customerName),
+    primary_carrier_name: nullIf(primary?.carrierName),
+    primary_carrier_mc: nullIf(primary?.carrierMCNumber),
+    primary_carrier_pro: nullIf(primary?.carrierProNumber),
+    remit_to: nullIf(primary?.remitTo),
+    remit_address: nullIf(primary?.remitAddress),
+    target_rate: num(load.targetRate),
+    value: num(load.value),
+    total_billed: totalBilled || null,
+    origin,
+    destination,
+    pickup_date: nullIf(load.pickupDate),
+    delivery_date: nullIf(load.deliveryDate),
+    estimated_delivery: nullIf(load.estimatedDelivery),
+    raw: load as any,
+    synced_at: new Date().toISOString(),
+  }
 }
 
 /** MC number reduced to digits so "MC-307158" and "307158" compare equal. */
@@ -145,12 +210,33 @@ export async function POST(request: Request) {
       )
     }
 
+    // 5. Store the full load records (upsert by load_id) so payment vetting can
+    //    cross-check invoices locally without extra TMS calls. Only fires when
+    //    the batch includes full load objects (has loadId); the reduced haul
+    //    payload is ignored here.
+    let loadsStored = 0
+    const loadRows = loads.map(toLoadRow).filter(Boolean) as Record<string, any>[]
+    // De-dupe by load_id (a batch can repeat a load); keep the last.
+    const byId = new Map<number, Record<string, any>>()
+    for (const r of loadRows) byId.set(r.load_id, r)
+    const dedupedRows = Array.from(byId.values())
+    const CHUNK = 500
+    for (let i = 0; i < dedupedRows.length; i += CHUNK) {
+      const slice = dedupedRows.slice(i, i + CHUNK)
+      const { error } = await (supabaseAdmin as any)
+        .from('loads')
+        .upsert(slice as any, { onConflict: 'load_id' })
+      if (!error) loadsStored += slice.length
+      else console.error('loads upsert failed:', error.message)
+    }
+
     return NextResponse.json({
       loadsReceived: loads.length,
       loadsWithoutMc,
       distinctMc: latestByMc.size,
       mcMatched,
       carriersUpdated,
+      loadsStored,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

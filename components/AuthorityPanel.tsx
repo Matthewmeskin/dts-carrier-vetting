@@ -74,10 +74,14 @@ export function AuthorityPanel({
   // it's missing (red).
   const renderDocStatus = (
     onFile: boolean | null | undefined,
-    type: string,
+    type: string | string[],
     missingLabel: string
   ) => {
-    const archived = docByType.get(type)
+    // A document requirement can be satisfied by any of several uploaded types
+    // (e.g. a Broker-Carrier Agreement OR a Carrier Tariff / alternative
+    // agreement). Take the first uploaded match.
+    const types = Array.isArray(type) ? type : [type]
+    const archived = types.map((t) => docByType.get(t)).find(Boolean)
     if (archived) {
       return archived.url ? (
         <a
@@ -271,7 +275,7 @@ export function AuthorityPanel({
             label="Broker-Carrier Agreement"
             value={renderDocStatus(
               insurance.broker_carrier_agreement_on_file,
-              'broker_carrier_agreement',
+              ['broker_carrier_agreement', 'tariff'],
               'Missing'
             )}
           />

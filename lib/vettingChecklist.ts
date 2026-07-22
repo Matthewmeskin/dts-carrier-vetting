@@ -83,7 +83,7 @@ Issue(s) identified:
 [Describe the specific non-hard-stop issue — e.g., "Carrier has 45 days of authority and limited inspection history"]
 
 Information reviewed:
-[List what was checked — Bluewire scores, RMIS, FMCSA, OSINT, direct carrier conversation, etc.]
+[List what was checked — Bluewire scores, RMIS, FMCSA, direct carrier conversation, etc.]
 
 Mitigating factors:
 [Describe why this carrier is still appropriate despite the issue — prior experience, low-risk freight, strong insurance, etc.]
@@ -182,7 +182,7 @@ export function createDefaultChecklist(): VettingChecklist {
       {
         id: 'identity_verification',
         category: 'verification',
-        label: 'Verified carrier identity via FMCSA and OSINT',
+        label: 'Verified carrier identity via FMCSA',
         description: 'Confirm contact information matches FMCSA-reported data. No mismatched ownership, phone numbers, email domains, or documents.',
         policyRef: 'Section 11',
         required: true,

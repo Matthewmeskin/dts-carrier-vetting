@@ -285,7 +285,7 @@ export function VettingChecklist({
     if (safetyRating) reviewed.push('- FMCSA safety rating')
     if (sos) reviewed.push('- Secretary of State business registration')
     reviewed.push(
-      '- [Add any: direct carrier conversation, OSINT / web search, references, prior load history]'
+      '- [Add any: direct carrier conversation, web search, references, prior load history]'
     )
 
     const snap: string[] = []

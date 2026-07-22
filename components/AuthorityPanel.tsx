@@ -30,11 +30,16 @@ export function AuthorityPanel({
   carrier,
   dot,
   bare,
+  reviewConfirmed,
 }: {
   insurance: InsuranceRecord | null
   carrier?: { legal_name: string | null; dba_name: string | null } | null
   dot?: string
   bare?: boolean
+  // Requirements a reviewer manually confirmed on the latest vetting checklist
+  // even though there's no file/RMIS flag (keyed by requirement: 'bca' | 'w9').
+  // Lets the panel show "Confirmed in review" instead of a red "Missing".
+  reviewConfirmed?: { bca?: boolean; w9?: boolean }
 }) {
   const [showNotes, setShowNotes] = useState(false)
 
@@ -75,7 +80,8 @@ export function AuthorityPanel({
   const renderDocStatus = (
     onFile: boolean | null | undefined,
     type: string | string[],
-    missingLabel: string
+    missingLabel: string,
+    confirmedInReview?: boolean
   ) => {
     // A document requirement can be satisfied by any of several uploaded types
     // (e.g. a Broker-Carrier Agreement OR a Carrier Tariff / alternative
@@ -104,6 +110,15 @@ export function AuthorityPanel({
         </span>
       ) : (
         <Badge tone="gray">On file (RMIS)</Badge>
+      )
+    }
+    // No file and no RMIS flag, but a reviewer manually confirmed it on the
+    // vetting checklist — reflect that attestation instead of a red "Missing".
+    if (confirmedInReview) {
+      return (
+        <span title="A reviewer marked this satisfied on the vetting checklist, but no copy is stored in the portal. Upload the document to keep a retrievable record.">
+          <Badge tone="amber">Confirmed in review · no file</Badge>
+        </span>
       )
     }
     return <Badge tone="red">{missingLabel}</Badge>
@@ -268,7 +283,12 @@ export function AuthorityPanel({
           )}
           <Field
             label="W-9 on File"
-            value={renderDocStatus(insurance.w9_on_file, 'w9', 'No')}
+            value={renderDocStatus(
+              insurance.w9_on_file,
+              'w9',
+              'No',
+              reviewConfirmed?.w9
+            )}
           />
           {insurance.w9_business_name && (
             <Field label="W-9 Business Name" value={insurance.w9_business_name} />
@@ -284,7 +304,8 @@ export function AuthorityPanel({
             value={renderDocStatus(
               insurance.broker_carrier_agreement_on_file,
               ['broker_carrier_agreement', 'tariff', 'other'],
-              'Missing'
+              'Missing',
+              reviewConfirmed?.bca
             )}
           />
           {insurance.broker_carrier_agreement_date && (

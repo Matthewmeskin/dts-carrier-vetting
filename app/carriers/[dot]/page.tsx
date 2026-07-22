@@ -341,7 +341,24 @@ export default function CarrierDetailPage({
           </div>
 
           {/* Authority & Identity, in the same tile as the carrier header */}
-          <AuthorityPanel insurance={insurance} carrier={carrier} dot={dot} bare />
+          <AuthorityPanel
+            insurance={insurance}
+            carrier={carrier}
+            dot={dot}
+            bare
+            reviewConfirmed={(() => {
+              // Reflect a reviewer's manual BCA / W-9 attestation from the latest
+              // vetting checklist so the panel doesn't show a red "Missing" for a
+              // requirement the team has already confirmed (even without a file).
+              const steps = (vettingRecords[0]?.checklist as any)?.steps ?? []
+              const done = (id: string) =>
+                steps.some((s: any) => s.id === id && s.completed)
+              return {
+                bca: done('broker_carrier_agreement'),
+                w9: done('w9'),
+              }
+            })()}
+          />
 
           {/* Business registration (Secretary of State) + factor */}
           <SosPanel dot={dot} sos={sos} factor={factor} onRefreshed={load} />

@@ -14,6 +14,7 @@ const NAV = [
   { href: '/activity', label: 'Activity' },
   { href: '/factors', label: 'Factors' },
   { href: '/upload', label: 'Upload Scores' },
+  { href: '/w9-upload', label: 'W-9 Upload' },
 ]
 
 export function SiteHeader() {

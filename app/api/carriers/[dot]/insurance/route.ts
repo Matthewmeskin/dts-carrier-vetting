@@ -5,6 +5,7 @@ import { parseRMISXML, ParsedRMISData } from '@/lib/rmisParser'
 import { evaluateRMIS, RMISEvaluation } from '@/lib/rmisEvaluator'
 import { logCarrierEvent } from '@/lib/auditLog'
 import { archiveCarrierDocuments } from '@/lib/rmisArchive'
+import { fetchFmcsaCarrier, fmcsaConfigured } from '@/lib/fmcsaClient'
 import { TablesInsert, TablesUpdate } from '@/lib/database.types'
 
 export const dynamic = 'force-dynamic'
@@ -189,53 +190,127 @@ export async function GET(
       }
 
       if (!fullXml) {
-        // Couldn't get the full record — store the accurate basics (identity +
-        // COI coverages + client-rule result). Do NOT fabricate authority or
-        // hard stops from data the endpoint never returned.
+        // Couldn't get the full record from RMIS — the carrier isn't in RMIS's
+        // system. Fall back to FMCSA (via our proxy) for the authority /
+        // operating-status / safety data RMIS can't give us here. Still do NOT
+        // fabricate hard stops — we only surface the facts FMCSA reports.
+        let fmcsa: Awaited<ReturnType<typeof fetchFmcsaCarrier>> | null = null
+        if (fmcsaConfigured()) {
+          try {
+            fmcsa = await fetchFmcsaCarrier(dot)
+          } catch {
+            /* best-effort — fall through to identity-only basics */
+          }
+        }
+
         const coiNote = basics.coiCoverages.length
           ? `COI on file: ${basics.coiCoverages.join(', ')}. `
           : ''
+        // FMCSA's allowedToOperate → a human operating-status string.
+        const fmcsaOperating =
+          fmcsa?.allowedToOperate == null
+            ? null
+            : /^y/i.test(fmcsa.allowedToOperate)
+              ? 'AUTHORIZED'
+              : 'NOT AUTHORIZED'
+        const fmcsaNote = fmcsa
+          ? `FMCSA: operating ${fmcsaOperating ?? 'unknown'}, safety rating ` +
+            `${fmcsa.safetyRating || 'none'}, authority ` +
+            `[common ${fmcsa.commonAuthority || '—'}, contract ${
+              fmcsa.contractAuthority || '—'
+            }, broker ${fmcsa.brokerAuthority || '—'}]. `
+          : ''
+
         const basicRow: TablesInsert<'carrier_insurance'> = {
           carrier_id: (carrier as any).id,
           dot_number: dot,
-          rmis_carrier_street: nullIfEmpty(basics.street),
-          rmis_carrier_city: nullIfEmpty(basics.city),
-          rmis_carrier_state: nullIfEmpty(basics.state),
-          rmis_carrier_zip: nullIfEmpty(basics.zip),
+          operating_status: fmcsaOperating,
+          common_authority_status: fmcsa?.commonAuthority ?? null,
+          contract_authority_status: fmcsa?.contractAuthority ?? null,
+          broker_authority_status: fmcsa?.brokerAuthority ?? null,
+          rmis_carrier_street: nullIfEmpty(fmcsa?.street ?? basics.street),
+          rmis_carrier_city: nullIfEmpty(fmcsa?.city ?? basics.city),
+          rmis_carrier_state: nullIfEmpty(fmcsa?.state ?? basics.state),
+          rmis_carrier_zip: nullIfEmpty(fmcsa?.zip ?? basics.zip),
+          rmis_legal_name: nullIfEmpty(fmcsa?.legalName ?? basics.legalName),
+          rmis_dba_name: nullIfEmpty(fmcsa?.dbaName ?? null),
+          rmis_phone: nullIfEmpty(fmcsa?.phone ?? basics.phone),
           hard_stops: [],
           rmis_flags: [],
           rmis_overall_pass: basics.passesBusinessRules,
           rmis_is_certified: null,
           rmis_certification_notes: [
             `Non-monitored RMIS check — this carrier isn't attached to our RMIS ` +
-              `client, so authority/insurance detail isn't available. ` +
-              `${coiNote}Client rules: DOT ${basics.dotOk ? 'OK' : 'not OK'}, ` +
+              `client, so RMIS compliance detail isn't available. ` +
+              `${coiNote}${fmcsaNote}Client rules: DOT ${basics.dotOk ? 'OK' : 'not OK'}, ` +
               `Insurance ${basics.insuranceOk ? 'OK' : 'not OK'}. ` +
               `Attach the carrier in RMIS to pull the full compliance record.`,
           ],
-          raw_rmis_response: { source: 'non_monitored', text } as any,
+          raw_rmis_response: {
+            source: 'non_monitored',
+            text,
+            fmcsa: fmcsa?.raw ?? null,
+          } as any,
           fetched_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }
         await supabaseAdmin.from('carrier_insurance').insert([basicRow])
 
+        // Backfill carrier identity/safety facts from FMCSA where we're missing them.
+        if (fmcsa) {
+          const cu: TablesUpdate<'carriers'> = {}
+          if (fmcsa.safetyRating) cu.safety_rating = fmcsa.safetyRating
+          if (fmcsa.powerUnits != null) cu.power_units = fmcsa.powerUnits
+          if (fmcsa.legalName && !(carrier as any).legal_name)
+            cu.legal_name = fmcsa.legalName
+          if (fmcsa.dbaName && !(carrier as any).dba_name) cu.dba_name = fmcsa.dbaName
+          if (fmcsa.phone && !(carrier as any).phone) cu.phone = fmcsa.phone
+          if (Object.keys(cu).length > 0) {
+            await supabaseAdmin.from('carriers').update(cu).eq('dot_number', dot)
+          }
+        }
+
         await logCarrierEvent({
           dot,
           carrierId: (carrier as any).id ?? null,
           type: 'rmis_refresh',
-          summary:
-            'Non-monitored RMIS check (carrier not attached) — identity + COI/client-rule status only.',
+          summary: fmcsa
+            ? 'Non-monitored carrier — identity + COI from RMIS, authority/operating/safety from FMCSA.'
+            : 'Non-monitored RMIS check (carrier not attached) — identity + COI/client-rule status only.',
           detail: {
             source: 'non_monitored',
             existsInRmis: basics.existsInRmis,
             coiCoverages: basics.coiCoverages,
             dotOk: basics.dotOk,
             insuranceOk: basics.insuranceOk,
+            fmcsa: fmcsa
+              ? {
+                  operating: fmcsaOperating,
+                  safetyRating: fmcsa.safetyRating,
+                  commonAuthority: fmcsa.commonAuthority,
+                  contractAuthority: fmcsa.contractAuthority,
+                  brokerAuthority: fmcsa.brokerAuthority,
+                  powerUnits: fmcsa.powerUnits,
+                }
+              : null,
           },
           actor: 'system (manual RMIS refresh)',
         })
 
-        return NextResponse.json({ ok: true, source: 'non_monitored', basic: basics })
+        return NextResponse.json({
+          ok: true,
+          source: fmcsa ? 'non_monitored+fmcsa' : 'non_monitored',
+          basic: basics,
+          fmcsa: fmcsa
+            ? {
+                operating: fmcsaOperating,
+                safetyRating: fmcsa.safetyRating,
+                commonAuthority: fmcsa.commonAuthority,
+                contractAuthority: fmcsa.contractAuthority,
+                brokerAuthority: fmcsa.brokerAuthority,
+              }
+            : null,
+        })
       }
 
       // Got the full Expanded record by insured id — parse it like a normal pull.

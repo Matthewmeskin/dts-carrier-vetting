@@ -9,17 +9,6 @@ import { createSupabaseBrowserClient } from '@/lib/supabaseBrowser'
 
 const BUCKET = 'carrier-documents'
 
-// The documents a staffer prints/collects to clear a carrier invoice for
-// payment (mirrors the paper "Vetting Log"). Invoice is required; the rest are
-// attached when available.
-const DOC_SLOTS: { key: string; label: string; required?: boolean }[] = [
-  { key: 'invoice', label: 'Carrier Invoice', required: true },
-  { key: 'bol', label: 'Bill of Lading (BOL)' },
-  { key: 'dispatch', label: 'Dispatch Sheet / Rate Con' },
-  { key: 'pod', label: 'Proof of Delivery (POD)' },
-  { key: 'noa', label: 'Notice of Assignment (NOA)' },
-]
-
 // Upload one file straight to Supabase Storage via a signed URL (bypasses the
 // Vercel 4.5 MB body limit) and return its storage path.
 async function uploadToStorage(dot: string, file: File): Promise<string> {
@@ -44,8 +33,8 @@ export function PaymentVetting({ dot }: { dot: string }) {
   const [email, setEmail] = useState('')
   const [staffName, setStaffName] = useState('')
   const [loadNumber, setLoadNumber] = useState('')
-  const [files, setFiles] = useState<Record<string, File | null>>({})
-  const inputs = useRef<Record<string, HTMLInputElement | null>>({})
+  const [files, setFiles] = useState<File[]>([])
+  const fileInput = useRef<HTMLInputElement | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -69,8 +58,8 @@ export function PaymentVetting({ dot }: { dot: string }) {
       setError('Enter a valid email to send the report to.')
       return
     }
-    if (!files.invoice) {
-      setError('The carrier invoice is required.')
+    if (files.length === 0) {
+      setError('Attach at least one load document.')
       return
     }
     setSubmitting(true)
@@ -81,12 +70,10 @@ export function PaymentVetting({ dot }: { dot: string }) {
         fileName: string
         mimeType: string
       }[] = []
-      for (const slot of DOC_SLOTS) {
-        const f = files[slot.key]
-        if (!f) continue
+      for (const f of files) {
         const storagePath = await uploadToStorage(dot, f)
         docs.push({
-          type: slot.key,
+          type: 'load_doc',
           storagePath,
           fileName: f.name,
           mimeType: f.type || 'application/octet-stream',
@@ -109,12 +96,10 @@ export function PaymentVetting({ dot }: { dot: string }) {
       setMessage(
         `Submitted. The payment vetting log will be emailed to ${email} and attached to this carrier's Documents within a few minutes.`
       )
-      // Reset the file pickers for the next load.
-      setFiles({})
+      // Reset the file picker for the next load.
+      setFiles([])
       setLoadNumber('')
-      Object.values(inputs.current).forEach((el) => {
-        if (el) el.value = ''
-      })
+      if (fileInput.current) fileInput.current.value = ''
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start payment vetting')
     } finally {
@@ -126,7 +111,7 @@ export function PaymentVetting({ dot }: { dot: string }) {
     <Card>
       <CardHeader
         title="Payment vetting (AP)"
-        subtitle="Upload the load documents to verify this carrier's invoice before paying. The system analyzes the docs, cross-checks the remit-to against the carrier's pay-to on file, runs OSINT, and returns a vetting log."
+        subtitle="Upload the load documents to verify this carrier's invoice before paying. The system analyzes the docs, cross-checks the remit-to against the carrier's pay-to on file, and returns a vetting log."
       />
       <CardBody>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -151,30 +136,36 @@ export function PaymentVetting({ dot }: { dot: string }) {
           />
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {DOC_SLOTS.map((slot) => (
-            <div key={slot.key}>
-              <label className="mb-1 block text-xs font-medium text-gray-600">
-                {slot.label}
-                {slot.required && <span className="ml-1 text-red-600">*</span>}
-              </label>
-              <input
-                ref={(el) => {
-                  inputs.current[slot.key] = el
-                }}
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff"
-                onChange={(e) =>
-                  setFiles((f) => ({ ...f, [slot.key]: e.target.files?.[0] ?? null }))
-                }
-                className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-dts-blue file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
-              />
-            </div>
-          ))}
+        <div className="mt-4">
+          <label className="mb-1 block text-xs font-medium text-gray-600">
+            Load documents
+            <span className="ml-1 text-red-600">*</span>
+            <span className="ml-2 font-normal text-gray-400">
+              Invoice, BOL, rate con, POD, NOA — attach as many as you have
+            </span>
+          </label>
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff"
+            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+            className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-dts-blue file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
+          />
+          {files.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-gray-600">
+              {files.map((f, i) => (
+                <li key={i} className="flex items-center gap-1.5">
+                  <span className="text-gray-400">•</span>
+                  <span className="truncate">{f.name}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-4">
-          <Button onClick={submit} disabled={submitting || !files.invoice}>
+          <Button onClick={submit} disabled={submitting || files.length === 0}>
             {submitting ? <Spinner size={14} className="text-white" /> : null}
             {submitting ? 'Submitting…' : 'Run payment vetting'}
           </Button>

@@ -39,9 +39,9 @@ export async function POST(
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       return NextResponse.json({ error: 'A valid destination email is required' }, { status: 400 })
     }
-    if (docs.length === 0 || !docs.some((d) => d.type === 'invoice')) {
+    if (docs.length === 0) {
       return NextResponse.json(
-        { error: 'At least the carrier invoice is required' },
+        { error: 'At least one load document is required' },
         { status: 400 }
       )
     }

@@ -130,7 +130,7 @@ function matchToFactorRow(match: SosMatch, state: string | null, raw?: any) {
  */
 export async function recheckFactorSos(
   factorId: string,
-  opts: { state?: string } = {}
+  opts: { state?: string; name?: string } = {}
 ): Promise<any> {
   const cfg = sosPipelineConfigured()
   if (!cfg.ok) {
@@ -139,7 +139,7 @@ export async function recheckFactorSos(
 
   const { data: factor, error } = await supabaseAdmin
     .from('factors')
-    .select('id, name, sos_state')
+    .select('id, name, sos_state, sos_search_name')
     .eq('id', factorId)
     .single()
   if (error || !factor) throw new Error('Factor not found')
@@ -149,20 +149,30 @@ export async function recheckFactorSos(
     throw new Error('No state on file for this factor — provide a 2-letter state to re-check')
   }
 
+  // The name to search: an explicit override this run, else a previously-saved
+  // override, else the factor's display name. A brand shorthand like "Triumph"
+  // often 404s at OpenSOS, so the override lets staff search the registered
+  // legal name (e.g. "Triumph Financial Services") and have it stick.
+  const overrideName = typeof opts.name === 'string' ? opts.name.trim() : ''
+  const searchName =
+    overrideName || (factor as any).sos_search_name || (factor as any).name
+
   const { raw } = await lookupEntity({
-    entityName: (factor as any).name,
+    entityName: searchName,
     state,
     fresh: true,
     timeoutMs: 200_000,
   })
   const match = await matchSosRecord(
-    { kind: 'factor', name: (factor as any).name, state },
+    { kind: 'factor', name: searchName, state },
     raw
   )
-  const { data: saved } = await supabaseAdmin
+  const { data: saved } = await (supabaseAdmin as any)
     .from('factors')
     .update({
       ...matchToFactorRow(match, state, raw),
+      // Persist an explicit override so future re-checks reuse it.
+      ...(overrideName ? { sos_search_name: overrideName } : {}),
       sos_raw: raw as any,
       updated_at: new Date().toISOString(),
     })

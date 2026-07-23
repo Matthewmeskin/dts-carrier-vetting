@@ -46,6 +46,7 @@ interface FactorDetail {
   sos_summary: string | null
   sos_checked_at: string | null
   sos_source_url: string | null
+  sos_search_name: string | null
 }
 
 interface LinkedCarrier {
@@ -147,13 +148,14 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
     }
   }
 
-  async function recheck(chooseState = false) {
+  async function recheck(opts: { chooseState?: boolean; chooseName?: boolean } = {}) {
     setError(null)
     setOkMsg(null)
     let state: string | undefined
+    let name: string | undefined
     // Always let the user pick/override the state when they explicitly ask to
     // (e.g. the SOS matched the wrong state), or when we have no state yet.
-    if (chooseState || !factor?.sos_state) {
+    if (opts.chooseState || !factor?.sos_state) {
       const entered =
         typeof window !== 'undefined'
           ? window.prompt(
@@ -164,12 +166,30 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
       if (!entered) return
       state = entered.trim().toUpperCase()
     }
+    // Let the user search a different legal name — a brand shorthand like
+    // "Triumph" often 404s; the registered name (e.g. "Triumph Financial
+    // Services") resolves. The entered name is saved for future re-checks.
+    if (opts.chooseName) {
+      const enteredName =
+        typeof window !== 'undefined'
+          ? window.prompt(
+              'Legal name to search the Secretary of State for (the registered entity name):',
+              factor?.sos_search_name || factor?.name || ''
+            )
+          : ''
+      if (enteredName == null) return
+      name = enteredName.trim()
+      if (!name) return
+    }
     setBusy(true)
     try {
+      const payload: Record<string, string> = {}
+      if (state) payload.state = state
+      if (name) payload.name = name
       const res = await fetch(`/api/factors/${id}/sos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state ? { state } : {}),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Re-check failed')
@@ -251,8 +271,11 @@ export default function FactorDetailPage({ params }: { params: { id: string } })
               <Button size="sm" variant="ghost" onClick={() => recheck()} disabled={busy}>
                 Re-check SOS
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => recheck(true)} disabled={busy}>
+              <Button size="sm" variant="ghost" onClick={() => recheck({ chooseState: true })} disabled={busy}>
                 Re-check in another state
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => recheck({ chooseName: true })} disabled={busy}>
+                Search a different name
               </Button>
             </div>
           </div>

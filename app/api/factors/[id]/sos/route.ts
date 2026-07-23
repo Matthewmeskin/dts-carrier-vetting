@@ -33,6 +33,7 @@ export async function POST(
 
     const factor = await recheckFactorSos(params.id, {
       state: typeof body?.state === 'string' ? body.state : undefined,
+      name: typeof body?.name === 'string' ? body.name : undefined,
     })
     return NextResponse.json({ factor })
   } catch (err: any) {

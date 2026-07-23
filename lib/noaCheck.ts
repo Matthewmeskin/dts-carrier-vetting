@@ -68,6 +68,7 @@ export async function runNoaCheck(dot: string): Promise<boolean> {
     ])
     const clean =
       verification.is_noa &&
+      verification.carrier_name_matches !== false &&
       verification.assignee_matches_factor &&
       verification.payto_address_match === 'match' &&
       verification.discrepancies.length === 0

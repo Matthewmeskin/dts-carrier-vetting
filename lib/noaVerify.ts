@@ -23,6 +23,7 @@ export interface NoaVerification {
   remittance_address: string | null
   effective_date: string | null
   carrier_name_on_doc: string | null
+  carrier_name_matches: boolean
   assignee_matches_factor: boolean
   payto_name_matches: boolean
   payto_address_match: 'match' | 'partial' | 'mismatch' | 'unknown'
@@ -39,6 +40,7 @@ const OUTPUT_SCHEMA = {
     remittance_address: { type: ['string', 'null'], description: 'The remittance / pay-to mailing address printed on the NOA.' },
     effective_date: { type: ['string', 'null'], description: 'Effective/issue date of the NOA (ISO YYYY-MM-DD if determinable).' },
     carrier_name_on_doc: { type: ['string', 'null'], description: 'The carrier/client named on the NOA.' },
+    carrier_name_matches: { type: 'boolean', description: 'Does the carrier named on the NOA match the EXPECTED carrier name exactly, ignoring ONLY corporate suffix/punctuation/case? A different word (e.g. "Express" vs "Expedite") is NOT a match — set false.' },
     assignee_matches_factor: { type: 'boolean', description: 'Does the assignee named on the NOA match the linked factor / expected pay-to entity (ignore corporate suffixes/punctuation/case)?' },
     payto_name_matches: { type: 'boolean', description: 'Does the remittance name match the RMIS pay-to entity?' },
     payto_address_match: { type: 'string', enum: ['match', 'partial', 'mismatch', 'unknown'], description: 'How the NOA remittance address compares to the RMIS pay-to address.' },
@@ -47,7 +49,8 @@ const OUTPUT_SCHEMA = {
   },
   required: [
     'is_noa', 'assignee_name', 'remittance_name', 'remittance_address',
-    'effective_date', 'carrier_name_on_doc', 'assignee_matches_factor',
+    'effective_date', 'carrier_name_on_doc', 'carrier_name_matches',
+    'assignee_matches_factor',
     'payto_name_matches', 'payto_address_match', 'discrepancies', 'summary',
   ],
   additionalProperties: false,
@@ -71,7 +74,11 @@ EXPECTED details from our system (FMCSA/RMIS):
 - RMIS pay-to entity: ${input.payToEntity ?? 'unknown'}
 - RMIS pay-to address: ${input.payToAddress ?? 'unknown'}
 
-Read the attached document. Confirm it is a genuine Notice of Assignment, then extract the assignee (factoring company), the remittance/pay-to name and address, the carrier named, and the effective date. Compare them to the expected details above (ignore corporate-suffix, punctuation, and case differences when matching names). Flag anything a reviewer must resolve — e.g. the assignee is a different factor than expected, the remittance address does not match the RMIS pay-to address, the NOA is undated/expired, or the carrier named differs. Return only via the record_noa_verification tool.`
+Read the attached document. Confirm it is a genuine Notice of Assignment, then extract the assignee (factoring company), the remittance/pay-to name and address, the carrier named, and the effective date. Compare them to the expected details above (ignore corporate-suffix, punctuation, and case differences when matching names).
+
+The carrier name on the NOA MUST match the expected carrier name exactly apart from suffix/punctuation/case. A single different word — e.g. "USKO Express Inc" vs the expected "USKO Expedite Inc" — is NOT a match: set carrier_name_matches=false and add a HIGH-PRIORITY discrepancy first in the list ("Carrier name on NOA (X) does not match expected carrier (Y) — possible wrong or fraudulent NOA"), because an NOA naming a different carrier may belong to another entity entirely. Only set carrier_name_matches=true on an exact match.
+
+Flag anything else a reviewer must resolve — the assignee is a different factor than expected, the remittance address does not match the RMIS pay-to address, or the NOA is undated/expired. Lead the summary with the most serious discrepancy. Return only via the record_noa_verification tool.`
 
   const msg = await client.messages.create({
     model: MODEL,

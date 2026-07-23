@@ -74,17 +74,21 @@ export function buildCarrierProfileHtml(
   const noaRes: any = (noa && (noa as any).result) || null
   let noaResultStr: string | null = null
   if (noaRes) {
+    const nameMismatch = noaRes.carrier_name_matches === false
     const clean =
       noaRes.is_noa &&
+      !nameMismatch &&
       noaRes.assignee_matches_factor &&
       noaRes.payto_address_match === 'match' &&
       Array.isArray(noaRes.discrepancies) &&
       noaRes.discrepancies.length === 0
     const head = !noaRes.is_noa
       ? 'Not a NOA'
-      : clean
-        ? 'Verified — assignee & pay-to match'
-        : `Reviewed — ${(noaRes.discrepancies || []).length} discrepancy(ies)`
+      : nameMismatch
+        ? 'FLAG — NOA names a different carrier'
+        : clean
+          ? 'Verified — assignee & pay-to match'
+          : `Reviewed — ${(noaRes.discrepancies || []).length} discrepancy(ies)`
     noaResultStr = head + (noaRes.summary ? ' — ' + noaRes.summary : '')
   }
 

@@ -586,26 +586,26 @@ function computeAutoEvaluations(
     }
   }
 
-  // Carrier identity verified — auto-pass unless an identity discrepancy is
-  // detected. FMCSA identity is always present; SOS (when pulled) is the
-  // discriminator, so a clean or absent SOS clears it and a mismatch fails it.
+  // Carrier identity verified — this step is about identity DATA consistency
+  // (name / address matching between FMCSA and SOS). It auto-passes unless the
+  // SOS entity name or address actually mismatches. Forward-looking fraud
+  // signals (chameleon / reincarnation risk_flags) are NOT an identity-data
+  // discrepancy — those are handled by the fraud/risk step below, so they do
+  // not fail this one.
   {
     const checked = !!sos?.checked_at
-    const sosClean =
-      !checked ||
-      (sos!.name_match !== false &&
-        sos!.address_match !== 'mismatch' &&
-        (sos!.risk_flags?.length ?? 0) === 0)
+    const idMismatch =
+      checked &&
+      (sos!.name_match === false || sos!.address_match === 'mismatch')
     out.identity_verification = {
-      status: sosClean ? 'pass' : 'fail',
+      status: idMismatch ? 'fail' : 'pass',
       evidence: checked
-        ? sosClean
-          ? 'FMCSA identity consistent with SOS registration — no discrepancies'
-          : `Identity discrepancy: ${
-              [...(sos!.risk_flags ?? []), ...(sos!.mismatches ?? [])]
-                .slice(0, 2)
-                .join('; ') || 'name/address mismatch'
+        ? idMismatch
+          ? `Identity discrepancy: ${
+              (sos!.mismatches ?? []).slice(0, 2).join('; ') ||
+              'SOS name/address does not match'
             }`
+          : 'FMCSA identity consistent with SOS registration — no name/address mismatch'
         : 'No identity discrepancies detected in FMCSA/RMIS data',
     }
   }

@@ -8,6 +8,7 @@ import { Badge } from './ui/Badge'
 import { Spinner } from './ui/Spinner'
 import { formatDateTime } from '@/lib/utils'
 import { createSupabaseBrowserClient } from '@/lib/supabaseBrowser'
+import { PaymentVettingReviewModal } from './PaymentVettingReviewModal'
 
 const BUCKET = 'carrier-documents'
 
@@ -52,6 +53,7 @@ export function PaymentVetting({ dot }: { dot: string }) {
   const [error, setError] = useState<string | null>(null)
   const [reports, setReports] = useState<PvDoc[]>([])
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [reviewDoc, setReviewDoc] = useState<PvDoc | null>(null)
 
   // Default the destination email + staff name to the signed-in user.
   useEffect(() => {
@@ -244,12 +246,21 @@ export function PaymentVetting({ dot }: { dot: string }) {
                   label="Report"
                   onDelete={() => deleteReport(d)}
                   deleting={deletingId === d.id}
+                  onReview={() => setReviewDoc(d)}
                 />
               ))}
             </div>
           </div>
         )}
       </CardBody>
+      {reviewDoc && (
+        <PaymentVettingReviewModal
+          dot={dot}
+          doc={reviewDoc}
+          onClose={() => setReviewDoc(null)}
+          onSaved={loadHistory}
+        />
+      )}
     </Card>
   )
 }
@@ -260,12 +271,14 @@ function DocRow({
   label,
   onDelete,
   deleting,
+  onReview,
 }: {
   d: PvDoc
   tone: 'blue' | 'gray'
   label: string
   onDelete?: () => void
   deleting?: boolean
+  onReview?: () => void
 }) {
   return (
     <div className="flex items-center justify-between gap-2 rounded-md border border-gray-200 px-3 py-2 hover:bg-gray-50">
@@ -286,6 +299,16 @@ function DocRow({
         </div>
         <Badge tone={tone}>{label}</Badge>
       </a>
+      {onReview && (
+        <button
+          type="button"
+          onClick={onReview}
+          title="Open in portal & log review notes"
+          className="shrink-0 rounded-md border border-dts-blue/30 px-2 py-1 text-xs font-medium text-dts-blue hover:bg-dts-blue/5"
+        >
+          Review
+        </button>
+      )}
       {onDelete && (
         <button
           type="button"

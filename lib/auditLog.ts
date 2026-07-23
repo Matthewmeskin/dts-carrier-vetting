@@ -21,6 +21,7 @@ export type CarrierEventType =
   | 'document_delete'
   | 'vetting_saved'
   | 'payment_vetting'
+  | 'payment_vetting_review'
 
 export interface CarrierEventInput {
   dot: string

@@ -12,6 +12,7 @@ import {
   type RevetState,
 } from '@/lib/revet'
 import { formatPhone } from '@/lib/utils'
+import { stateFromZip } from '@/lib/sosNormalize'
 import { Spinner } from '@/components/ui/Spinner'
 import { AlertBanner } from '@/components/AlertBanner'
 import { AuthorityPanel } from '@/components/AuthorityPanel'
@@ -238,10 +239,28 @@ export default function CarrierDetailPage({
                       <span>MC {carrier.mc_number}</span>
                     )
                   })()}
-                <span>
-                  {[carrier.city, carrier.state].filter(Boolean).join(', ') ||
-                    '—'}
-                </span>
+                {(() => {
+                  // City/state of the carrier's PHYSICAL location. Prefer the
+                  // RMIS/DOT address; the Brokerware/TMS record often holds the
+                  // factor's remit-to (e.g. a PO Box in another state).
+                  const physCity = insurance?.rmis_carrier_city || null
+                  const physState =
+                    insurance?.rmis_carrier_state ||
+                    stateFromZip(insurance?.rmis_carrier_zip)
+                  const city = physCity || carrier.city
+                  const state = physCity ? physState : carrier.state
+                  return (
+                    <span
+                      title={
+                        physCity
+                          ? 'Physical location — RMIS/DOT'
+                          : 'Address on file in Brokerware/TMS (may be a mailing / remit-to address)'
+                      }
+                    >
+                      {[city, state].filter(Boolean).join(', ') || '—'}
+                    </span>
+                  )
+                })()}
                 <span>{carrier.power_units ?? '—'} power units</span>
                 <span>
                   Safety rating:{' '}
@@ -277,7 +296,14 @@ export default function CarrierDetailPage({
                 const addr = rmisAddr || carrierAddr
                 const addrSource = rmisAddr
                   ? 'Physical address (RMIS/DOT)'
-                  : 'Physical address (Brokerware/TMS)'
+                  : 'Address on file in Brokerware/TMS'
+                // If Brokerware/TMS holds a different address than the RMIS
+                // physical one (commonly the factor's remit-to PO Box), show it
+                // too, labeled, so it's clear where each address comes from.
+                const nrmAddr = (s: string) =>
+                  s.toLowerCase().replace(/[^a-z0-9]/g, '')
+                const tmsDiffers =
+                  !!rmisAddr && !!carrierAddr && nrmAddr(rmisAddr) !== nrmAddr(carrierAddr)
                 // Prefer the carrier's real contact from RMIS over the
                 // Brokerware/TMS value (which is often a placeholder like
                 // na@na.com); fall back to TMS when RMIS has none.
@@ -296,8 +322,16 @@ export default function CarrierDetailPage({
                   : 'Contact email (Brokerware/TMS)'
                 if (!addr && !phone && !email) return null
                 return (
+                  <>
                   <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
-                    {addr && <span title={addrSource}>{addr}</span>}
+                    {addr && (
+                      <span title={addrSource}>
+                        {addr}{' '}
+                        <span className="text-xs text-gray-400">
+                          ({rmisAddr ? 'RMIS/DOT' : 'Brokerware/TMS'})
+                        </span>
+                      </span>
+                    )}
                     {phone && (
                       <a
                         href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
@@ -317,6 +351,13 @@ export default function CarrierDetailPage({
                       </a>
                     )}
                   </div>
+                  {tmsDiffers && (
+                    <div className="mt-0.5 text-xs text-gray-400">
+                      Brokerware/TMS address on file: {carrierAddr} — usually
+                      the mailing / remit-to address
+                    </div>
+                  )}
+                  </>
                 )
               })()}
             </div>

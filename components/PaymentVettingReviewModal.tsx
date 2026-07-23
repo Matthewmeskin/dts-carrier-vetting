@@ -123,11 +123,11 @@ export function PaymentVettingReviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-3"
       onClick={onClose}
     >
       <div
-        className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-xl"
+        className="flex h-[97vh] w-full max-w-[1800px] flex-col overflow-hidden rounded-lg bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
@@ -158,7 +158,9 @@ export function PaymentVettingReviewModal({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2">
+        {/* Report gets the lion's share of the width; the call form keeps a
+            fixed comfortable column on large screens. */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_440px]">
           {/* Report shown inline in the portal */}
           <div className="min-h-0 border-b border-gray-200 bg-gray-50 lg:border-b-0 lg:border-r">
             {doc.url ? (

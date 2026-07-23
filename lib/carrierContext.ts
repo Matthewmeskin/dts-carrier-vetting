@@ -107,13 +107,18 @@ export async function getCarrierContext(
       isIntrastate: !!c.is_intrastate,
     })
   )
-  const checklist = evaluated.steps.map((s) => ({
-    category: s.category as string,
-    label: s.label,
-    required: s.required,
-    auto_status: (s.autoStatus ?? null) as 'pass' | 'fail' | null,
-    evidence: s.evidence ?? null,
-  }))
+  // Only surface steps we could actually auto-evaluate (pass/fail). Manual-review
+  // steps (no data-derived status) would just render as empty boxes in the
+  // report, so they are omitted.
+  const checklist = evaluated.steps
+    .filter((s) => (s.autoStatus ?? null) !== null)
+    .map((s) => ({
+      category: s.category as string,
+      label: s.label,
+      required: s.required,
+      auto_status: (s.autoStatus ?? null) as 'pass' | 'fail' | null,
+      evidence: s.evidence ?? null,
+    }))
 
   const last4 = (v?: string | null) =>
     v ? String(v).replace(/\D/g, '').slice(-4) || null : null

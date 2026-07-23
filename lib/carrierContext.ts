@@ -1,5 +1,10 @@
 import { supabaseAdmin } from '@/lib/supabase'
 import { stateFromZip } from '@/lib/sosNormalize'
+import {
+  createDefaultChecklist,
+  attachAutoEvidence,
+  applyAutoCompletion,
+} from '@/lib/vettingChecklist'
 
 // The carrier snapshot the payment-vetting workflow (and the carrier-profile PDF)
 // build on: identity, physical address, authority, insurance, W-9/BCA, factoring,
@@ -15,6 +20,14 @@ export interface CarrierContext {
   factor: any
   sos: any
   noa: any
+  /** Auto-evaluated vetting checklist (safety assessment, verification, etc.). */
+  checklist: Array<{
+    category: string
+    label: string
+    required: boolean
+    auto_status: 'pass' | 'fail' | null
+    evidence: string | null
+  }>
 }
 
 export async function getCarrierContext(
@@ -64,6 +77,43 @@ export async function getCarrierContext(
     .order('checked_at', { ascending: false })
     .limit(1)
   const noa = (noaRows?.[0] as any) ?? null
+
+  // Latest safety scores + documents on file, used to auto-evaluate the vetting
+  // checklist (the same evaluation the carrier page shows).
+  const { data: scoreRows } = await supabaseAdmin
+    .from('carrier_scores')
+    .select('*')
+    .eq('dot_number', dot)
+    .order('release_month', { ascending: false })
+    .order('upload_date', { ascending: false })
+    .limit(1)
+  const scoreRecord = (scoreRows?.[0] as any) ?? null
+
+  const { data: docRows } = await supabaseAdmin
+    .from('vetting_documents')
+    .select('document_type')
+    .eq('dot_number', dot)
+  const docTypes = Array.from(
+    new Set((docRows ?? []).map((d: any) => d.document_type).filter(Boolean))
+  ) as string[]
+
+  const evaluated = applyAutoCompletion(
+    attachAutoEvidence(createDefaultChecklist(), {
+      safetyRating: c.safety_rating ?? null,
+      insurance: i as any,
+      score: scoreRecord,
+      sos: (sos as any) ?? null,
+      documentTypes: docTypes,
+      isIntrastate: !!c.is_intrastate,
+    })
+  )
+  const checklist = evaluated.steps.map((s) => ({
+    category: s.category as string,
+    label: s.label,
+    required: s.required,
+    auto_status: (s.autoStatus ?? null) as 'pass' | 'fail' | null,
+    evidence: s.evidence ?? null,
+  }))
 
   const last4 = (v?: string | null) =>
     v ? String(v).replace(/\D/g, '').slice(-4) || null : null
@@ -147,5 +197,6 @@ export async function getCarrierContext(
         }
       : null,
     noa,
+    checklist,
   }
 }

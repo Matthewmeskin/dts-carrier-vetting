@@ -139,9 +139,15 @@ export function buildCarrierProfileHtml(
     '<div class="sec">Compliance documents</div>' +
     '<div class="cols"><div><table>' +
     fld('W-9 on file', yn(id.w9_on_file)) +
-    fld('W-9 business name', id.w9_business_name) +
-    fld('W-9 type', id.w9_company_type) +
-    fld('W-9 tax ID', id.w9_tax_id_last4 ? 'ending ' + id.w9_tax_id_last4 : null) +
+    // RMIS only returns the itemized W-9 fields when the carrier filled them into
+    // the structured W-9 section. When the W-9 is on file only as an uploaded PDF,
+    // those fields come back blank — show that plainly instead of empty rows that
+    // read as missing data.
+    ((id.w9_on_file && !id.w9_business_name && !id.w9_company_type && !id.w9_tax_id_last4)
+      ? fld('W-9 details', 'On file as uploaded document — not itemized in RMIS')
+      : fld('W-9 business name', id.w9_business_name) +
+        fld('W-9 type', id.w9_company_type) +
+        fld('W-9 tax ID', id.w9_tax_id_last4 ? 'ending ' + id.w9_tax_id_last4 : null)) +
     '</table></div><div><table>' +
     fld('Broker-carrier agreement', yn(id.bca_on_file)) +
     fld('Agreement date', id.bca_date ? formatDate(id.bca_date) : null) +

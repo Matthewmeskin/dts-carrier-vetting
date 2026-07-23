@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { Spinner } from './ui/Spinner'
+import { formatDateTime } from '@/lib/utils'
+
+interface Baseline {
+  remit_to_name: string | null
+  remit_to_address: string | null
+  approved_by: string | null
+  approved_at: string | null
+}
 
 interface ReviewDoc {
   id: string
@@ -56,6 +64,8 @@ export function PaymentVettingReviewModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  const [baseline, setBaseline] = useState<Baseline | null>(null)
+  const [justSetBaseline, setJustSetBaseline] = useState(false)
 
   const set = (k: keyof ReviewState, v: string) =>
     setForm((f) => ({ ...f, [k]: v }))
@@ -64,14 +74,18 @@ export function PaymentVettingReviewModal({
     let alive = true
     ;(async () => {
       try {
-        const [rev, me] = await Promise.all([
+        const [rev, me, bl] = await Promise.all([
           fetch(
             `/api/carriers/${dot}/payment-vetting/review?documentId=${encodeURIComponent(doc.id)}`,
             { cache: 'no-store' }
           ).then((r) => (r.ok ? r.json() : null)),
           fetch('/api/me', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
+          fetch(`/api/carriers/${dot}/payment-vetting`, { cache: 'no-store' }).then((r) =>
+            r.ok ? r.json() : null
+          ),
         ])
         if (!alive) return
+        setBaseline(bl?.baseline ?? null)
         const r = rev?.review
         if (r) {
           setForm({
@@ -113,6 +127,15 @@ export function PaymentVettingReviewModal({
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Could not save review')
       setSavedAt(data.review?.reviewed_at ?? new Date().toISOString())
+      if (data.baselineSet) {
+        setJustSetBaseline(true)
+        setBaseline({
+          remit_to_name: null,
+          remit_to_address: null,
+          approved_by: form.confirmed_by || null,
+          approved_at: new Date().toISOString(),
+        })
+      }
       onSaved?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save review')
@@ -221,7 +244,40 @@ export function PaymentVettingReviewModal({
                     <option value="hold">Hold</option>
                     <option value="rejected">Rejected</option>
                   </select>
+                  <span className="mt-1 block text-xs text-gray-500">
+                    Marking &ldquo;OK to pay&rdquo; sets this carrier&rsquo;s payment
+                    baseline — future everyday bills are quick-checked against it.
+                  </span>
                 </label>
+
+                {(baseline || justSetBaseline) && (
+                  <div
+                    className={`rounded-md border px-3 py-2 text-xs ${
+                      justSetBaseline
+                        ? 'border-green-200 bg-green-50 text-green-800'
+                        : 'border-gray-200 bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    {justSetBaseline ? (
+                      <>✓ Payment baseline set from this report.</>
+                    ) : (
+                      <>Payment baseline on file</>
+                    )}
+                    {baseline?.approved_at ? (
+                      <>
+                        {' '}
+                        · {formatDateTime(baseline.approved_at)}
+                        {baseline.approved_by ? ` by ${baseline.approved_by}` : ''}
+                      </>
+                    ) : null}
+                    {baseline?.remit_to_name ? (
+                      <div className="mt-0.5 text-gray-500">
+                        Remit-to: {baseline.remit_to_name}
+                        {baseline.remit_to_address ? ` · ${baseline.remit_to_address}` : ''}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
 
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium text-gray-600">Notes / who was reached</span>

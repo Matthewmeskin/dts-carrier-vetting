@@ -89,7 +89,7 @@ export async function matchSosRecord(
 
   const authorityContext =
     target.kind === 'carrier'
-      ? `\nAuthority context (for reincarnation/chameleon detection): original grant ${target.authorityOriginalDate ?? 'unknown'}, reinstatement ${target.authorityReinstatementDate ?? 'none'}. If the SOS formation date is well after the original authority grant, or the entity was formed shortly before a reinstated authority, note it in risk_flags.`
+      ? `\nAuthority context: original FMCSA authority grant ${target.authorityOriginalDate ?? 'unknown'}, reinstatement ${target.authorityReinstatementDate ?? 'none'}.\nDATE ORDERING IS USUALLY NORMAL, NOT A RISK. A company is incorporated FIRST and applies for FMCSA authority afterward, so a formation date that PRE-DATES the original authority grant (by months or even a year+) is the EXPECTED, benign order — do NOT flag it. Likewise a registered-agent change, address change, or officer change that happens YEARS after the authority grant is routine corporate housekeeping — do NOT flag it. ONLY the reincarnation/chameleon pattern is a risk_flag: a NEWLY FORMED entity (formation AT or AFTER the original authority grant, or formed shortly before a REINSTATEMENT of previously-revoked authority) reusing an older MC/DOT — i.e. the entity is newer than the authority it operates under. If the formation simply pre-dates the grant, leave risk_flags empty for that item.`
       : `\nThis is a FACTORING company (payment recipient). Focus on confirming it is a real, active, registered entity whose name/address match the pay-to details.`
 
   const prompt = `You are verifying a ${target.kind}'s legal-entity registration against a Secretary of State record.

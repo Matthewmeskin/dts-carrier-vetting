@@ -5,6 +5,7 @@ import {
   type DigestCarrier,
   type DigestReply,
 } from '@/lib/emailAlerts'
+import { isBrokerwareDisabled } from '@/lib/revet'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -120,22 +121,31 @@ export async function POST(request: Request) {
 
     // Resolve carrier identity for everyone involved.
     const allDots = Array.from(
-      new Set([...Array.from(byDot.keys()), ...replies.map((r) => r.dot)])
+      new Set([
+        ...Array.from(byDot.keys()),
+        ...replies.map((r) => r.dot),
+        ...Array.from(scoreFlaggedDots),
+      ])
     )
     const carrierByDot = new Map<string, any>()
     if (allDots.length > 0) {
       const { data: carriers } = await supabaseAdmin
         .from('carriers')
-        .select('dot_number, legal_name, mc_number')
+        .select('dot_number, legal_name, mc_number, brokerware_status')
         .in('dot_number', allDots)
       for (const c of carriers ?? []) carrierByDot.set(String((c as any).dot_number), c)
     }
     const nameOf = (dot: string) => carrierByDot.get(dot)?.legal_name ?? `DOT ${dot}`
     const mcOf = (dot: string) => carrierByDot.get(dot)?.mc_number ?? null
+    // Carriers disabled in Brokerware aren't being used — their alerts are
+    // noise, so leave them out of every digest section.
+    const disabled = (dot: string) =>
+      isBrokerwareDisabled(carrierByDot.get(dot)?.brokerware_status)
 
     const hardStops: DigestCarrier[] = []
     const reviews: DigestCarrier[] = []
     for (const [dot, b] of Array.from(byDot.entries())) {
+      if (disabled(dot)) continue
       const base = { dotNumber: dot, legalName: nameOf(dot), mcNumber: mcOf(dot) }
       if (b.hardStops.size > 0) {
         hardStops.push({ ...base, hardStops: Array.from(b.hardStops), reviews: [] })
@@ -144,13 +154,17 @@ export async function POST(request: Request) {
         reviews.push({ ...base, hardStops: [], reviews: Array.from(b.reviews) })
       }
     }
-    const replyList: DigestReply[] = replies.map((r) => ({
-      dotNumber: r.dot,
-      legalName: nameOf(r.dot),
-      note: r.note,
-    }))
+    const replyList: DigestReply[] = replies
+      .filter((r) => !disabled(r.dot))
+      .map((r) => ({
+        dotNumber: r.dot,
+        legalName: nameOf(r.dot),
+        note: r.note,
+      }))
 
-    const scoreFlagged = scoreFlaggedDots.size
+    const scoreFlagged = Array.from(scoreFlaggedDots).filter(
+      (dot) => !disabled(dot)
+    ).length
     const itemCount =
       hardStops.length + reviews.length + replyList.length + (scoreFlagged > 0 ? 1 : 0)
     const payload = { since, until, hardStops, reviews, replies: replyList, scoreFlagged }

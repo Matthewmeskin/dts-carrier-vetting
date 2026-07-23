@@ -100,6 +100,52 @@ export async function POST(
       saved = data
     }
 
+    // "OK to pay" promotes this run's extracted payment info to the carrier's
+    // payment BASELINE — the reference future everyday bills are quick-checked
+    // against (remit-to entity/address/phone/bank, factor, carrier identity).
+    let baselineSet = false
+    if (row.decision === 'ok_to_pay' && row.document_id) {
+      try {
+        const { data: runRows } = await db
+          .from('payment_vetting_runs')
+          .select('id, extracted')
+          .eq('document_id', row.document_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+        const run = runRows?.[0]
+        const inv = run?.extracted?.invoice
+        if (run && inv && (inv.remit_to_name || inv.remit_to_address)) {
+          const { error: blErr } = await db.from('payment_baselines').upsert(
+            {
+              dot_number: dot,
+              remit_to_name: inv.remit_to_name ?? null,
+              remit_to_address: inv.remit_to_address ?? null,
+              remit_to_phone: inv.remit_to_phone ?? null,
+              remit_to_bank: inv.remit_to_bank ?? null,
+              remit_to_account: inv.remit_to_account ?? null,
+              remit_to_routing: inv.remit_to_routing ?? null,
+              factor_name:
+                inv.factor_name_on_invoice ??
+                run.extracted?.noa?.factor_legal_name ??
+                null,
+              carrier_name: inv.carrier_name ?? null,
+              carrier_mc: inv.carrier_mc ?? null,
+              source_document_id: row.document_id,
+              source_run_id: run.id,
+              approved_by: actor,
+              approved_at: new Date().toISOString(),
+              extracted: run.extracted,
+            },
+            { onConflict: 'dot_number' }
+          )
+          if (!blErr) baselineSet = true
+          else console.error('review: baseline upsert failed:', blErr)
+        }
+      } catch (e) {
+        console.error('review: could not set payment baseline:', e)
+      }
+    }
+
     const decisionLabel = row.decision ? DECISION_LABEL[row.decision] || row.decision : null
     await logCarrierEvent({
       dot,
@@ -107,12 +153,12 @@ export async function POST(
       type: 'payment_vetting_review',
       summary: `Payment vetting review logged${decisionLabel ? ` — ${decisionLabel}` : ''}${
         row.remit_confirmed ? ` · remit/bank ${row.remit_confirmed}` : ''
-      }.`,
-      detail: { review: row },
+      }${baselineSet ? ' · payment baseline updated' : ''}.`,
+      detail: { review: row, baselineSet },
       actor,
     })
 
-    return NextResponse.json({ review: saved })
+    return NextResponse.json({ review: saved, baselineSet })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })
   }

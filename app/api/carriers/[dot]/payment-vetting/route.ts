@@ -29,6 +29,9 @@ export async function POST(
     const email = String(body?.email ?? '').trim()
     const staffName = body?.staffName ? String(body.staffName).trim() : null
     const loadNumber = body?.loadNumber ? String(body.loadNumber).trim() : null
+    // 'full' = complete vetting; 'quick' = everyday-bill check against the
+    // carrier's approved payment baseline (OK to pay / not OK + reasons).
+    const mode = body?.mode === 'quick' ? 'quick' : 'full'
     const docs: Array<{
       type: string
       storagePath: string
@@ -61,6 +64,24 @@ export async function POST(
       .maybeSingle()
     if (!carrier) {
       return NextResponse.json({ error: 'Carrier not found' }, { status: 404 })
+    }
+
+    // Quick checks only make sense against an approved baseline.
+    if (mode === 'quick') {
+      const { data: baseline } = await (supabaseAdmin as any)
+        .from('payment_baselines')
+        .select('dot_number')
+        .eq('dot_number', dot)
+        .maybeSingle()
+      if (!baseline) {
+        return NextResponse.json(
+          {
+            error:
+              'No payment baseline for this carrier yet. Run a full vetting and mark it "OK to pay" in the review to set the baseline.',
+          },
+          { status: 400 }
+        )
+      }
     }
 
     // Sign each uploaded doc for download by n8n.
@@ -115,6 +136,7 @@ export async function POST(
       email,
       staffName,
       loadNumber,
+      mode,
       docs: usableDocs,
       // The workflow pulls carrier data from the portal and posts the PDF back.
       contextUrl: `${base}/api/webhooks/payment-context?dot=${encodeURIComponent(dot)}`,
@@ -147,12 +169,32 @@ export async function POST(
       dot,
       carrierId: (carrier as any).id ?? null,
       type: 'payment_vetting',
-      summary: `Payment vetting started${loadNumber ? ` for load ${loadNumber}` : ''} — report will be emailed to ${email}.`,
-      detail: { email, loadNumber, docTypes: usableDocs.map((d) => d.type) },
+      summary: `Payment ${mode === 'quick' ? 'quick check (vs baseline)' : 'vetting'} started${loadNumber ? ` for load ${loadNumber}` : ''} — report will be emailed to ${email}.`,
+      detail: { email, loadNumber, mode, docTypes: usableDocs.map((d) => d.type) },
       actor,
     })
 
     return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })
+  }
+}
+
+// GET /api/carriers/[dot]/payment-vetting — baseline status for the panel, so
+// the UI can offer the everyday-bill quick check and show what it compares to.
+export async function GET(
+  _request: Request,
+  { params }: { params: { dot: string } }
+) {
+  try {
+    const { data: baseline } = await (supabaseAdmin as any)
+      .from('payment_baselines')
+      .select(
+        'remit_to_name, remit_to_address, remit_to_phone, factor_name, carrier_name, carrier_mc, approved_by, approved_at'
+      )
+      .eq('dot_number', params.dot)
+      .maybeSingle()
+    return NextResponse.json({ baseline: baseline ?? null })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })
   }

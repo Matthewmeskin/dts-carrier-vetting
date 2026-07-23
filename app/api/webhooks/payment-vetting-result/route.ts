@@ -79,6 +79,26 @@ export async function POST(request: Request) {
       .single()
     if (insErr) throw insErr
 
+    // Persist the structured extraction so a reviewer's "OK to pay" can promote
+    // it to the carrier's payment baseline (and quick checks have a record).
+    const mode = body?.mode === 'quick' ? 'quick' : 'full'
+    if (body?.extracted && typeof body.extracted === 'object') {
+      try {
+        await (supabaseAdmin as any).from('payment_vetting_runs').insert([
+          {
+            dot_number: dot,
+            document_id: (document as any).id,
+            mode,
+            load_number: body?.loadNumber ? String(body.loadNumber) : null,
+            summary: body?.summary ? String(body.summary).slice(0, 500) : null,
+            extracted: body.extracted,
+          },
+        ])
+      } catch (e) {
+        console.error('payment-vetting-result: could not store run extraction:', e)
+      }
+    }
+
     const load = body?.loadNumber ? ` (load ${String(body.loadNumber)})` : ''
     const verdict = body?.summary ? ` — ${String(body.summary).slice(0, 200)}` : ''
     await logCarrierEvent({

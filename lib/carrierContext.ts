@@ -20,6 +20,9 @@ export interface CarrierContext {
   factor: any
   sos: any
   noa: any
+  /** Approved payment baseline (set when a vetting run is marked OK to pay) —
+   *  what everyday-bill quick checks compare the invoice against. */
+  payment_baseline: any
   /** Auto-evaluated vetting checklist (safety assessment, verification, etc.). */
   checklist: Array<{
     category: string
@@ -77,6 +80,16 @@ export async function getCarrierContext(
     .order('checked_at', { ascending: false })
     .limit(1)
   const noa = (noaRows?.[0] as any) ?? null
+
+  // Approved payment baseline for everyday-bill quick checks.
+  const { data: baselineRow } = await (supabaseAdmin as any)
+    .from('payment_baselines')
+    .select(
+      'remit_to_name, remit_to_address, remit_to_phone, remit_to_bank, remit_to_account, remit_to_routing, factor_name, carrier_name, carrier_mc, approved_by, approved_at'
+    )
+    .eq('dot_number', dot)
+    .maybeSingle()
+  const payment_baseline = (baselineRow as any) ?? null
 
   // Latest safety scores + documents on file, used to auto-evaluate the vetting
   // checklist (the same evaluation the carrier page shows).
@@ -188,6 +201,7 @@ export async function getCarrierContext(
       pay_to_address: i.pay_to_address ?? null,
     },
     factor,
+    payment_baseline,
     sos: sos
       ? {
           status: s.sos_status_normalized ?? s.sos_status ?? null,

@@ -22,6 +22,17 @@ interface PvDoc {
   url: string | null
 }
 
+interface Baseline {
+  remit_to_name: string | null
+  remit_to_address: string | null
+  remit_to_phone: string | null
+  factor_name: string | null
+  carrier_name: string | null
+  carrier_mc: string | null
+  approved_by: string | null
+  approved_at: string | null
+}
+
 // Upload one file straight to Supabase Storage via a signed URL (bypasses the
 // Vercel 4.5 MB body limit) and return its storage path.
 async function uploadToStorage(dot: string, file: File): Promise<string> {
@@ -54,6 +65,11 @@ export function PaymentVetting({ dot }: { dot: string }) {
   const [reports, setReports] = useState<PvDoc[]>([])
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [reviewDoc, setReviewDoc] = useState<PvDoc | null>(null)
+  // 'quick' = everyday-bill check against the approved payment baseline;
+  // 'full' = complete vetting. Quick needs a baseline (set by an OK-to-pay review).
+  const [mode, setMode] = useState<'full' | 'quick'>('full')
+  const [baseline, setBaseline] = useState<Baseline | null>(null)
+  const [baselineLoaded, setBaselineLoaded] = useState(false)
 
   // Default the destination email + staff name to the signed-in user.
   useEffect(() => {
@@ -85,6 +101,28 @@ export function PaymentVetting({ dot }: { dot: string }) {
   useEffect(() => {
     loadHistory()
   }, [loadHistory])
+
+  // Baseline status — default to the quick check when one exists.
+  const loadBaseline = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/carriers/${dot}/payment-vetting`, {
+        cache: 'no-store',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setBaseline(data.baseline ?? null)
+        if (data.baseline) setMode((m) => (m === 'full' ? 'quick' : m))
+      }
+    } catch {
+      /* best-effort */
+    } finally {
+      setBaselineLoaded(true)
+    }
+  }, [dot])
+
+  useEffect(() => {
+    loadBaseline()
+  }, [loadBaseline])
 
   async function deleteReport(d: PvDoc) {
     if (!confirm(`Delete "${d.file_name || 'this report'}"? This cannot be undone.`)) {
@@ -143,6 +181,7 @@ export function PaymentVetting({ dot }: { dot: string }) {
           email,
           staffName: staffName || null,
           loadNumber: loadNumber || null,
+          mode,
           docs,
         }),
       })
@@ -173,6 +212,55 @@ export function PaymentVetting({ dot }: { dot: string }) {
         subtitle="Upload the load documents to verify this carrier's invoice before paying. The system analyzes the docs, cross-checks the remit-to against the carrier's pay-to on file, and returns a vetting log."
       />
       <CardBody>
+        {/* Everyday-bill quick check vs full vetting */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-md border border-gray-300">
+            <button
+              type="button"
+              onClick={() => setMode('quick')}
+              disabled={!baseline}
+              title={
+                baseline
+                  ? 'Confirm the payment info has not changed vs the approved baseline — OK to pay / not OK with reasons'
+                  : 'Needs a baseline first: run a full vetting and mark it "OK to pay" in the review'
+              }
+              className={`px-3 py-1.5 text-sm font-medium ${
+                mode === 'quick'
+                  ? 'bg-dts-blue text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40'
+              }`}
+            >
+              Quick check (everyday bill)
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('full')}
+              className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium ${
+                mode === 'full'
+                  ? 'bg-dts-blue text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              Full vetting
+            </button>
+          </div>
+          {baselineLoaded && baseline && (
+            <span
+              className="rounded-full bg-green-50 px-2.5 py-1 text-xs text-green-800"
+              title={`Approved ${baseline.approved_at ? formatDateTime(baseline.approved_at) : ''}${baseline.approved_by ? ` by ${baseline.approved_by}` : ''}`}
+            >
+              Baseline: {baseline.remit_to_name || baseline.factor_name || 'on file'}
+              {baseline.remit_to_address ? ` · ${baseline.remit_to_address}` : ''}
+            </span>
+          )}
+          {baselineLoaded && !baseline && (
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-800">
+              No payment baseline yet — run a full vetting, then mark it &ldquo;OK to
+              pay&rdquo; in the review to enable quick checks
+            </span>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Input
             label="Email the report to"
@@ -226,7 +314,11 @@ export function PaymentVetting({ dot }: { dot: string }) {
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-4">
           <Button onClick={submit} disabled={submitting || files.length === 0}>
             {submitting ? <Spinner size={14} className="text-white" /> : null}
-            {submitting ? 'Submitting…' : 'Run payment vetting'}
+            {submitting
+              ? 'Submitting…'
+              : mode === 'quick'
+                ? 'Run quick check'
+                : 'Run payment vetting'}
           </Button>
           {message && <span className="text-sm text-green-700">{message}</span>}
           {error && <span className="text-sm text-red-700">{error}</span>}

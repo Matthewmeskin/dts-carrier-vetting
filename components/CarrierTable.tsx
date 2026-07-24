@@ -30,19 +30,28 @@ import type { BadgeTone } from './ui/Badge'
 import { ProblemFilter } from './ProblemFilter'
 import { carrierProblems, problemFacets } from '@/lib/problems'
 import { FacetFilter, type FacetOption } from './FacetFilter'
+import {
+  refineBusinessType,
+  BIZ_KEY_SINGLE_MEMBER_LLC,
+  BIZ_KEY_INDIVIDUAL,
+} from '@/lib/businessType'
 
 const UNKNOWN_BIZ = 'Unknown'
 
 /** The carrier's business type key (W-9 company type), 'Unknown' when absent. */
 function businessTypeKey(c: CarrierSummary): string {
   const v = (c.business_type ?? '').trim()
-  return v || UNKNOWN_BIZ
+  if (!v) return UNKNOWN_BIZ
+  // Split the combined Individual/Sole-Prop/single-member-LLC W-9 value by
+  // LLC-in-name so the two can be filtered apart (see lib/businessType).
+  const refined = refineBusinessType(v, c.legal_name)
+  return refined.key || UNKNOWN_BIZ
 }
 
 /** Shorten the verbose FMCSA labels for display. */
 function businessTypeLabel(key: string): string {
-  if (key === 'Individual/Sole Proprietor or single-member LLC')
-    return 'Sole Proprietor / single-member LLC'
+  if (key === BIZ_KEY_SINGLE_MEMBER_LLC) return 'Single-member LLC (inferred)'
+  if (key === BIZ_KEY_INDIVIDUAL) return 'Individual / Sole Proprietor'
   return key
 }
 

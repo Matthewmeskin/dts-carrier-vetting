@@ -5,6 +5,7 @@ import { InsuranceRecord } from '@/lib/types'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge } from './ui/Badge'
 import { formatDate, daysSince } from '@/lib/utils'
+import { refineBusinessType, businessTypeRisk } from '@/lib/businessType'
 
 function Field({
   label,
@@ -162,6 +163,18 @@ export function AuthorityPanel({
   const rmisDba = insurance.rmis_dba_name
   const showNames = tmsName || rmisLegal || rmisDba
 
+  // Liability flags: DTS prefers incorporated carriers that carry their own
+  // liability coverage over paying an individual, and wants a double-check when
+  // there's no EIN to confirm the entity is a business.
+  const bizRisk = businessTypeRisk({
+    companyType: insurance.w9_company_type,
+    legalName: tmsName ?? rmisLegal,
+    w9TaxId: insurance.w9_tax_id,
+  })
+  const bizWarnings = [bizRisk.preferBusiness, bizRisk.missingEin].filter(
+    Boolean
+  ) as string[]
+
   return wrap(
     <>
       {showNames && (
@@ -293,12 +306,25 @@ export function AuthorityPanel({
           {insurance.w9_business_name && (
             <Field label="W-9 Business Name" value={insurance.w9_business_name} />
           )}
-          {insurance.w9_company_type && (
-            <Field
-              label="Business Type (W-9)"
-              value={<Badge tone="blue">{insurance.w9_company_type}</Badge>}
-            />
-          )}
+          {insurance.w9_company_type &&
+            (() => {
+              // Split the combined Individual/Sole-Prop/single-member-LLC W-9 value
+              // by LLC-in-name so the liability distinction is visible.
+              const refined = refineBusinessType(
+                insurance.w9_company_type,
+                carrier?.legal_name ?? insurance.rmis_legal_name
+              )
+              return (
+                <Field
+                  label="Business Type (W-9)"
+                  value={
+                    <Badge tone={refined.category === 'individual' ? 'amber' : 'blue'}>
+                      {refined.label || insurance.w9_company_type}
+                    </Badge>
+                  }
+                />
+              )
+            })()}
           <Field
             label="Broker-Carrier Agreement"
             value={renderDocStatus(
@@ -315,6 +341,19 @@ export function AuthorityPanel({
             />
           )}
         </dl>
+
+        {bizWarnings.length > 0 && (
+          <div className="mt-4 rounded-md border border-amber-200 border-l-4 border-l-amber-500 bg-amber-50 px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+              Entity / liability check
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-amber-900">
+              {bizWarnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {notes.length > 0 && (
           <div className="mt-4 border-t border-gray-100 pt-3">

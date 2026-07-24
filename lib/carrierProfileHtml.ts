@@ -1,5 +1,6 @@
 import type { CarrierContext } from '@/lib/carrierContext'
 import { formatDate, formatDateTime } from '@/lib/utils'
+import { refineBusinessType, businessTypeRisk } from '@/lib/businessType'
 
 // Build a print-friendly, standalone Carrier Profile HTML page from the carrier
 // context. Rendered to PDF (via the PDF service) and appended to the payment
@@ -50,6 +51,15 @@ export function buildCarrierProfileHtml(
     Array.isArray(ins.hard_stops) && ins.hard_stops.length
       ? ins.hard_stops.join('; ')
       : 'none'
+  // Liability flags: DTS prefers incorporated carriers that carry their own
+  // liability coverage over paying an individual, and wants a double-check when
+  // there's no EIN to confirm the entity is a business.
+  const bizRisk = businessTypeRisk({
+    companyType: id.w9_company_type,
+    legalName: c.legal_name,
+    hasEin: !!id.w9_tax_id_last4,
+  })
+  const bizWarnings = [bizRisk.preferBusiness, bizRisk.missingEin].filter(Boolean)
 
   // Satellite + Street View of the physical address, rendered into the PDF.
   const mapsKey = opts?.mapsKey || null
@@ -146,12 +156,20 @@ export function buildCarrierProfileHtml(
     ((id.w9_on_file && !id.w9_business_name && !id.w9_company_type && !id.w9_tax_id_last4)
       ? fld('W-9 details', 'On file as uploaded document — not itemized in RMIS')
       : fld('W-9 business name', id.w9_business_name) +
-        fld('W-9 type', id.w9_company_type) +
+        // Show the refined entity type (single-member LLC vs individual) when the
+        // W-9 lumps them together, so the liability distinction is visible.
+        fld('W-9 type', refineBusinessType(id.w9_company_type, c.legal_name).label || id.w9_company_type) +
         fld('W-9 tax ID', id.w9_tax_id_last4 ? 'ending ' + id.w9_tax_id_last4 : null)) +
     '</table></div><div><table>' +
     fld('Broker-carrier agreement', yn(id.bca_on_file)) +
     fld('Agreement date', id.bca_date ? formatDate(id.bca_date) : null) +
     '</table></div></div>' +
+    (bizWarnings.length
+      ? '<div style="margin-top:6px;padding:8px 10px;border:1px solid #f0d98c;border-left:3px solid #B8860B;border-radius:4px;background:#fff8e6;font-size:11px;color:#7a5c00">' +
+        '<b>Entity / liability check</b><ul style="margin:3px 0 0 16px;padding:0">' +
+        bizWarnings.map((w) => '<li>' + esc(w as string) + '</li>').join('') +
+        '</ul></div>'
+      : '') +
     '<div class="sec">Business registration (SOS)</div>' +
     '<table>' +
     fld('SOS status', sos.status || 'not checked') +

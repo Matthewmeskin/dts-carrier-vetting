@@ -15,6 +15,36 @@ function normalizeStatus(s: string): 'active' | 'inactive' | 'unknown' {
     return 'inactive'
   return 'unknown'
 }
+
+// Compare a manually-entered SOS principal address against the carrier's
+// physical address. Heuristic (no AI): zip5 + leading street number match =>
+// 'match'; same state/city but not the street => 'partial'; else 'mismatch'.
+// Returns null when we don't have enough to compare.
+function compareAddress(
+  sosAddr: string | null,
+  phys: { street?: string | null; city?: string | null; state?: string | null; zip?: string | null }
+): 'match' | 'partial' | 'mismatch' | null {
+  const physStr = [phys.street, phys.city, phys.state, phys.zip]
+    .filter(Boolean)
+    .join(' ')
+  if (!sosAddr || !physStr.trim()) return null
+  const sos = sosAddr.toLowerCase()
+  const p = physStr.toLowerCase()
+  const zip5 = (s: string) => (s.match(/\b(\d{5})\b/) || [])[1] || ''
+  const num = (s: string) => (s.match(/\b(\d{1,6})\b/) || [])[1] || ''
+  const sosZip = zip5(sos)
+  const physZip = (phys.zip || '').replace(/\D/g, '').slice(0, 5) || zip5(p)
+  const sosNum = num(sos)
+  const physNum = (phys.street || '').match(/\b(\d{1,6})\b/)?.[1] || num(p)
+  const st = (phys.state || '').toLowerCase()
+  const cityMatch = !!phys.city && sos.includes(String(phys.city).toLowerCase())
+  const stateMatch = !!st && new RegExp(`\\b${st}\\b`).test(sos)
+  if (sosZip && physZip && sosNum && physNum && sosZip === physZip && sosNum === physNum)
+    return 'match'
+  if ((sosZip && physZip && sosZip === physZip) || cityMatch || stateMatch)
+    return 'partial'
+  return 'mismatch'
+}
 // Live SOS scrapes for some states (CA, IL) can take well over a minute on the
 // first, uncached pull. Give the function room so it doesn't die mid-scrape.
 export const maxDuration = 300
@@ -98,7 +128,7 @@ export async function PUT(
 
     const { data: carrier } = await supabaseAdmin
       .from('carriers')
-      .select('id')
+      .select('id, street, city, state, zip')
       .eq('dot_number', dot)
       .maybeSingle()
 
@@ -109,6 +139,25 @@ export async function PUT(
 
     const statusRaw = str(body?.status)
     const sourceUrl = str(body?.source_url)
+    const principalAddress = str(body?.principal_address)
+
+    // Compare the SOS principal address against the carrier's PHYSICAL address
+    // (prefer RMIS/DOT over Brokerware, which is often the factor's remit-to).
+    let addressMatch: 'match' | 'partial' | 'mismatch' | null = null
+    if (!notFound && principalAddress) {
+      const { data: insRows } = await (supabaseAdmin as any)
+        .from('latest_carrier_insurance')
+        .select('rmis_carrier_street, rmis_carrier_city, rmis_carrier_state, rmis_carrier_zip')
+        .eq('dot_number', dot)
+        .limit(1)
+      const ins = insRows?.[0] ?? {}
+      addressMatch = compareAddress(principalAddress, {
+        street: ins.rmis_carrier_street ?? (carrier as any)?.street,
+        city: ins.rmis_carrier_city ?? (carrier as any)?.city,
+        state: ins.rmis_carrier_state ?? (carrier as any)?.state,
+        zip: ins.rmis_carrier_zip ?? (carrier as any)?.zip,
+      })
+    }
 
     const row: Record<string, any> = notFound
       ? {
@@ -147,10 +196,10 @@ export async function PUT(
           sos_entity_type: str(body?.entity_type),
           sos_formation_date: str(body?.formation_date),
           sos_registered_agent: str(body?.registered_agent),
-          sos_principal_address: str(body?.principal_address),
+          sos_principal_address: principalAddress,
           sos_officers: [],
           name_match: true, // a human confirmed this is the right entity
-          address_match: null,
+          address_match: addressMatch,
           match_confidence: 'manual',
           mismatches: [],
           risk_flags: [],

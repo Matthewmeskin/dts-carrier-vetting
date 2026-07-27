@@ -419,7 +419,17 @@ export default function CarrierDetailPage({
           />
 
           {/* Business registration (Secretary of State) + factor */}
-          <SosPanel dot={dot} sos={sos} factor={factor} onRefreshed={load} />
+          <SosPanel
+            dot={dot}
+            sos={sos}
+            factor={factor}
+            carrierState={
+              insurance?.rmis_carrier_state ||
+              stateFromZip(insurance?.rmis_carrier_zip) ||
+              carrier.state
+            }
+            onRefreshed={load}
+          />
 
           {/* Intrastate-only designation (Manager/Director; suppresses the
               interstate operating-authority hard stop) — grouped with the

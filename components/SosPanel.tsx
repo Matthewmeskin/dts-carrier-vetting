@@ -7,6 +7,7 @@ import { Badge, type BadgeTone } from './ui/Badge'
 import { Button } from './ui/Button'
 import { Spinner } from './ui/Spinner'
 import { formatDate, formatDateTime } from '@/lib/utils'
+import { stateSosSearchUrl } from '@/lib/sosStateLinks'
 
 function statusTone(norm: string | null | undefined): BadgeTone {
   switch ((norm || '').toLowerCase()) {
@@ -72,11 +73,15 @@ export function SosPanel({
   dot,
   sos,
   factor,
+  carrierState,
   onRefreshed,
 }: {
   dot: string
   sos: SosRecord | null
   factor: FactorRecord | null
+  /** Carrier's domicile state, so we can offer a state SOS search link even
+   *  before any record is pulled. */
+  carrierState?: string | null
   onRefreshed?: () => void | Promise<void>
 }) {
   const [configured, setConfigured] = useState<boolean | null>(null)
@@ -293,7 +298,7 @@ export function SosPanel({
         </div>
         {configured && (
           <div className="flex items-center gap-2">
-            {activeSos?.sos_source_url && (
+            {activeSos?.sos_source_url ? (
               <a
                 href={activeSos.sos_source_url}
                 target="_blank"
@@ -302,6 +307,24 @@ export function SosPanel({
               >
                 View on Secretary of State ↗
               </a>
+            ) : (
+              // Fallback: OpenSOS gave no direct record link, so link to the
+              // state's business-entity search (by the record's state, else the
+              // carrier's domicile state).
+              (() => {
+                const url = stateSosSearchUrl(activeSos?.sos_state || carrierState)
+                return url ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-medium text-dts-blue hover:underline"
+                    title="Search the state's business-entity registry"
+                  >
+                    State SOS business search ↗
+                  </a>
+                ) : null
+              })()
             )}
             {running && <Spinner size={16} />}
             <Button size="sm" variant="outline" onClick={() => run(false)} disabled={running}>

@@ -196,7 +196,15 @@ export interface RunSosResult {
  */
 export async function runCarrierSos(
   dot: string,
-  opts: { fresh?: boolean; refreshFactor?: boolean } = {}
+  opts: {
+    fresh?: boolean
+    refreshFactor?: boolean
+    /** Search SOS under this name instead of the FMCSA legal name (DBA, owner
+     *  name, etc.). Persisted so later auto-runs reuse it. */
+    name?: string
+    /** Search in this state instead of the derived domicile state. */
+    state?: string
+  } = {}
 ): Promise<RunSosResult> {
   const cfg = sosPipelineConfigured()
   if (!cfg.ok) {
@@ -231,17 +239,30 @@ export async function runCarrierSos(
   // The carrier's Brokerware address is the FACTOR's remittance address, so use
   // the carrier's real state from RMIS (Mailing_State, else derived from the RMIS
   // ZIP), falling back to Brokerware only if RMIS has nothing.
+  // A previously-saved search-name override (e.g. the DBA or owner name) sticks
+  // across auto-runs. An explicit name this run wins over it.
+  const { data: existingSos } = await (supabaseAdmin as any)
+    .from('carrier_sos')
+    .select('sos_search_name')
+    .eq('dot_number', dot)
+    .maybeSingle()
+  const overrideName = typeof opts.name === 'string' ? opts.name.trim() : ''
+  const savedName = (existingSos as any)?.sos_search_name || ''
+  const searchName = overrideName || savedName || (carrier as any).legal_name
+  const overrideState =
+    typeof opts.state === 'string' ? opts.state.trim().toUpperCase() : ''
   const carrierState =
+    overrideState ||
     insurance?.rmis_carrier_state ||
     stateFromZip(insurance?.rmis_carrier_zip) ||
     (carrier as any).state ||
     null
   if (!carrierState) {
     result.errors.push('Carrier has no domicile state (RMIS or Brokerware) — cannot search SOS')
-  } else if ((carrier as any).legal_name) {
+  } else if (searchName) {
     try {
       const { raw } = await lookupEntity({
-        entityName: (carrier as any).legal_name,
+        entityName: searchName,
         state: carrierState,
         fresh: opts.fresh,
         // Slow-state scrapes (CA, IL) can take a minute-plus on the first pull.
@@ -250,7 +271,7 @@ export async function runCarrierSos(
       const match = await matchSosRecord(
         {
           kind: 'carrier',
-          name: (carrier as any).legal_name,
+          name: searchName,
           address: joinAddress([
             insurance?.rmis_carrier_street ?? (carrier as any).street,
             insurance?.rmis_carrier_city ?? (carrier as any).city,
@@ -268,9 +289,12 @@ export async function runCarrierSos(
         dot_number: dot,
         ...matchToCarrierRow(match, carrierState, raw),
         sos_raw: raw as any,
+        // Remember an explicit override so later auto-runs reuse the name.
+        ...(overrideName ? { sos_search_name: overrideName } : {}),
         updated_at: new Date().toISOString(),
       }
-      const { data: saved } = await supabaseAdmin
+      // Cast: generated types don't yet include sos_search_name (added later).
+      const { data: saved } = await (supabaseAdmin as any)
         .from('carrier_sos')
         .upsert(row, { onConflict: 'dot_number' })
         .select('*')

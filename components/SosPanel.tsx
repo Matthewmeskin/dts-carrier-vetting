@@ -58,6 +58,11 @@ export function SosPanel({
   const [removing, setRemoving] = useState(false)
   const [removed, setRemoved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // "Search a different name" — lets a reviewer look up the SOS registration
+  // under the DBA or an owner's name when the FMCSA legal name doesn't match.
+  const [showNameSearch, setShowNameSearch] = useState(false)
+  const [searchName, setSearchName] = useState('')
+  const [searchState, setSearchState] = useState('')
 
   // Reset the optimistic "removed" flag whenever a different SOS record arrives
   // (e.g. after re-running the check). Once cleared, the parent reload returns a
@@ -77,14 +82,18 @@ export function SosPanel({
     }
   }, [dot])
 
-  async function run(fresh: boolean) {
+  async function run(fresh: boolean, overrides?: { name?: string; state?: string }) {
     setRunning(true)
     setError(null)
     try {
       const res = await fetch(`/api/carriers/${dot}/sos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fresh }),
+        body: JSON.stringify({
+          fresh,
+          ...(overrides?.name ? { name: overrides.name } : {}),
+          ...(overrides?.state ? { state: overrides.state } : {}),
+        }),
       })
       // The response can be a non-JSON platform error page (e.g. a timeout), so
       // parse defensively instead of letting res.json() throw a cryptic error.
@@ -160,6 +169,14 @@ export function SosPanel({
             <Button size="sm" variant="outline" onClick={() => run(false)} disabled={running}>
               {activeSos ? 'Re-check' : 'Run SOS check'}
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowNameSearch((v) => !v)}
+              disabled={running}
+            >
+              Search a different name
+            </Button>
             {activeSos && (
               <Button size="sm" variant="ghost" onClick={() => run(true)} disabled={running}>
                 Force fresh
@@ -179,6 +196,53 @@ export function SosPanel({
           </div>
         )}
       </div>
+
+      {configured && showNameSearch && (
+        <div className="mb-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5">
+          <p className="mb-2 text-xs text-gray-600">
+            Search the Secretary of State under a different name — e.g. the DBA or
+            an owner’s name for a sole proprietor. Leave state blank to use the
+            carrier’s domicile state.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex-1">
+              <span className="mb-0.5 block text-xs font-medium text-gray-600">
+                Name to search
+              </span>
+              <input
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                placeholder="e.g. GM Transport or Jose Guzman"
+                className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+              />
+            </label>
+            <label className="w-20">
+              <span className="mb-0.5 block text-xs font-medium text-gray-600">
+                State
+              </span>
+              <input
+                value={searchState}
+                onChange={(e) => setSearchState(e.target.value.toUpperCase().slice(0, 2))}
+                placeholder="NV"
+                maxLength={2}
+                className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm uppercase"
+              />
+            </label>
+            <Button
+              size="sm"
+              onClick={() =>
+                run(true, {
+                  name: searchName.trim() || undefined,
+                  state: searchState.trim() || undefined,
+                })
+              }
+              disabled={running || !searchName.trim()}
+            >
+              {running ? 'Searching…' : 'Search'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {configured === false && (
         <p className="text-sm text-gray-500">

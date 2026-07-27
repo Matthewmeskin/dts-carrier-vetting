@@ -43,6 +43,10 @@ export async function POST(
     const result = await runCarrierSos(params.dot, {
       fresh: Boolean(body?.fresh),
       refreshFactor: Boolean(body?.refreshFactor),
+      // Optional overrides: search SOS under a different name (DBA / owner name)
+      // and/or a different state.
+      name: typeof body?.name === 'string' ? body.name : undefined,
+      state: typeof body?.state === 'string' ? body.state : undefined,
     })
     return NextResponse.json(result)
   } catch (err: any) {

@@ -121,14 +121,14 @@ export function businessTypeRisk(args: {
       ? args.hasEin
       : taxIdDigits(args.w9TaxId).length >= 9
 
-  // An EIN means the carrier registered as a business/employer — so an entity
-  // that has an EIN is NOT flagged as an individual, even when the W-9 marks the
-  // combined individual/sole-prop box. Only a true individual operating under an
-  // SSN (no EIN on file) is flagged.
+  // A sole proprietor is still an individual even with an EIN — an EIN does not
+  // make them an LLC/corporation. So we keep the Individual / Sole Proprietor
+  // label either way, and only surface the entity note for a sole prop with NO
+  // EIN on file (i.e. filing under a bare SSN), which is the case worth a look.
   let preferBusiness: string | null = null
   if (refined.category === 'individual' && einKnown && !hasEin) {
     preferBusiness =
-      'W-9 entity type is Individual / Sole Proprietor with no EIN on file (typically filed under an SSN). Confirm the entity type before paying.'
+      'W-9 entity type is Individual / Sole Proprietor with no EIN on file (files under an SSN). Confirm the entity type before paying.'
   }
 
   // For a single-member LLC we lean on the EIN to confirm the entity. Only flag

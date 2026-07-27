@@ -190,6 +190,7 @@ export async function PUT(
           carrier_id: (carrier as any)?.id ?? null,
           dot_number: dot,
           sos_state: state,
+          sos_entity_name: entityName,
           sos_entity_id: str(body?.entity_id),
           sos_status: statusRaw,
           sos_status_normalized: statusRaw ? normalizeStatus(statusRaw) : 'unknown',

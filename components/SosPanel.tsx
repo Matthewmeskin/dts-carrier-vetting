@@ -497,6 +497,14 @@ export function SosPanel({
         <>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <Field
+              label="Entity Name (SOS)"
+              value={
+                (sos as any).sos_entity_name ||
+                (sos as any).sos_search_name ||
+                '—'
+              }
+            />
+            <Field
               label="Entity Status"
               value={
                 <Badge tone={statusTone(sos.sos_status_normalized)}>

@@ -227,6 +227,7 @@ export interface SosRecord {
   id: string
   dot_number: string
   sos_state: string | null
+  sos_entity_name: string | null
   sos_entity_id: string | null
   sos_status: string | null
   sos_status_normalized: string | null

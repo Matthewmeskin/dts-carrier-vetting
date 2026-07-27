@@ -86,6 +86,7 @@ export function sosPipelineConfigured(): { ok: boolean; missing: string[] } {
 function matchToCarrierRow(match: SosMatch, state: string | null, raw?: any) {
   return {
     sos_state: state,
+    sos_entity_name: match.entity_name,
     sos_entity_id: match.entity_id,
     sos_status: match.status,
     sos_status_normalized: match.status_normalized,

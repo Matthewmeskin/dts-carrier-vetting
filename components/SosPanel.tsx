@@ -321,8 +321,11 @@ export function SosPanel({
                 </Badge>
               )}
             </div>
-            <Link href="/factors" className="text-xs text-dts-blue hover:underline">
-              Manage factors →
+            <Link
+              href={factor.id ? `/factors/${factor.id}` : '/factors'}
+              className="text-xs text-dts-blue hover:underline"
+            >
+              View factor →
             </Link>
           </div>
           {factor.sos_summary && (

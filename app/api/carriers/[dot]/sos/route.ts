@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server'
 import { runCarrierSos, sosPipelineConfigured } from '@/lib/sos'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getSessionUser } from '@/lib/authServer'
+import { ROLE_LABEL } from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+
+// Rough status normalization for a manually-entered SOS status string.
+function normalizeStatus(s: string): 'active' | 'inactive' | 'unknown' {
+  const t = s.toLowerCase()
+  if (/active|good standing|current|in existence/.test(t)) return 'active'
+  if (/dissolved|revoked|inactive|forfeit|cancel|terminat|expired|suspend/.test(t))
+    return 'inactive'
+  return 'unknown'
+}
 // Live SOS scrapes for some states (CA, IL) can take well over a minute on the
 // first, uncached pull. Give the function room so it doesn't die mid-scrape.
 export const maxDuration = 300
@@ -49,6 +60,87 @@ export async function POST(
       state: typeof body?.state === 'string' ? body.state : undefined,
     })
     return NextResponse.json(result)
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message ?? 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT — manually record the CORRECT Secretary-of-State entity when the automated
+// search can't find it or matches a same-named but unrelated business. The
+// reviewer looks it up on the state site and enters the confirmed details here.
+// Stored as a manual, human-confirmed match (match_confidence = 'manual').
+export async function PUT(
+  request: Request,
+  { params }: { params: { dot: string } }
+) {
+  try {
+    const dot = params.dot
+    const body = await request.json().catch(() => ({}))
+    const str = (v: any) => {
+      const s = v == null ? '' : String(v).trim()
+      return s || null
+    }
+    const entityName = str(body?.entity_name)
+    const state = str(body?.state)?.toUpperCase() ?? null
+    if (!entityName || !state) {
+      return NextResponse.json(
+        { error: 'Entity name and state are required.' },
+        { status: 400 }
+      )
+    }
+
+    const { data: carrier } = await supabaseAdmin
+      .from('carriers')
+      .select('id')
+      .eq('dot_number', dot)
+      .maybeSingle()
+
+    const user = await getSessionUser()
+    const actor = user
+      ? `${user.fullName || user.email}${user.role ? ` (${ROLE_LABEL[user.role]})` : ''}`
+      : 'DTS staff'
+
+    const statusRaw = str(body?.status)
+    const sourceUrl = str(body?.source_url)
+    const summary =
+      `Manually entered by ${actor}` +
+      (str(body?.notes) ? ` — ${str(body?.notes)}` : '')
+
+    const row: Record<string, any> = {
+      carrier_id: (carrier as any)?.id ?? null,
+      dot_number: dot,
+      sos_state: state,
+      sos_entity_id: str(body?.entity_id),
+      sos_status: statusRaw,
+      sos_status_normalized: statusRaw ? normalizeStatus(statusRaw) : 'unknown',
+      sos_entity_type: str(body?.entity_type),
+      sos_formation_date: str(body?.formation_date),
+      sos_registered_agent: str(body?.registered_agent),
+      sos_principal_address: str(body?.principal_address),
+      sos_officers: [],
+      name_match: true, // a human confirmed this is the right entity
+      address_match: null,
+      match_confidence: 'manual',
+      mismatches: [],
+      risk_flags: [],
+      sos_summary: summary,
+      sos_search_name: entityName,
+      // The RPC derives sos_source_url from sos_raw.source_url for the panel link.
+      sos_raw: { manual: true, entered_by: actor, source_url: sourceUrl },
+      checked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    const { data: saved, error } = await (supabaseAdmin as any)
+      .from('carrier_sos')
+      .upsert(row, { onConflict: 'dot_number' })
+      .select('*')
+      .single()
+    if (error) throw error
+    return NextResponse.json({ ok: true, sos: saved })
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message ?? 'Unknown error' },

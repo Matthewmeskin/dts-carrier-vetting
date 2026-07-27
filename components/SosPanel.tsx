@@ -42,6 +42,32 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
+function FieldInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  className?: string
+}) {
+  return (
+    <label className={className}>
+      <span className="mb-0.5 block text-xs font-medium text-gray-600">{label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+      />
+    </label>
+  )
+}
+
 export function SosPanel({
   dot,
   sos,
@@ -63,6 +89,24 @@ export function SosPanel({
   const [showNameSearch, setShowNameSearch] = useState(false)
   const [searchName, setSearchName] = useState('')
   const [searchState, setSearchState] = useState('')
+  // "Enter manually" — record the correct entity when a reviewer found it on the
+  // state site but the automated search couldn't (or matched the wrong company).
+  const [showManual, setShowManual] = useState(false)
+  const [savingManual, setSavingManual] = useState(false)
+  const [manual, setManual] = useState({
+    entity_name: '',
+    state: '',
+    entity_id: '',
+    status: '',
+    entity_type: '',
+    formation_date: '',
+    registered_agent: '',
+    principal_address: '',
+    source_url: '',
+    notes: '',
+  })
+  const setM = (k: keyof typeof manual, v: string) =>
+    setManual((m) => ({ ...m, [k]: v }))
 
   // Reset the optimistic "removed" flag whenever a different SOS record arrives
   // (e.g. after re-running the check). Once cleared, the parent reload returns a
@@ -116,6 +160,30 @@ export function SosPanel({
       setError(e instanceof Error ? e.message : 'SOS lookup failed')
     } finally {
       setRunning(false)
+    }
+  }
+
+  async function saveManual() {
+    if (!manual.entity_name.trim() || !manual.state.trim()) {
+      setError('Enter at least the entity name and state.')
+      return
+    }
+    setSavingManual(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/carriers/${dot}/sos`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(manual),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`)
+      setShowManual(false)
+      await onRefreshed?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSavingManual(false)
     }
   }
 
@@ -176,6 +244,22 @@ export function SosPanel({
               disabled={running}
             >
               Search a different name
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                // Prefill the manual form's name/state from any name-search inputs.
+                setManual((m) => ({
+                  ...m,
+                  entity_name: m.entity_name || searchName,
+                  state: m.state || searchState,
+                }))
+                setShowManual((v) => !v)
+              }}
+              disabled={running}
+            >
+              Enter manually
             </Button>
             {activeSos && (
               <Button size="sm" variant="ghost" onClick={() => run(true)} disabled={running}>
@@ -239,6 +323,36 @@ export function SosPanel({
               disabled={running || !searchName.trim()}
             >
               {running ? 'Searching…' : 'Search'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {configured && showManual && (
+        <div className="mb-3 rounded-md border border-dts-blue/30 bg-dts-blue/5 px-3 py-2.5">
+          <p className="mb-2 text-xs text-gray-600">
+            Found the right entity on the state site but the automated search
+            couldn’t? Enter the confirmed details here. It’s saved as a manual,
+            human-verified match. Only the name and state are required.
+          </p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <FieldInput label="Entity name (as registered) *" value={manual.entity_name} onChange={(v) => setM('entity_name', v)} placeholder="e.g. GM TRANSPORT LLC" />
+            <FieldInput label="State *" value={manual.state} onChange={(v) => setM('state', v.toUpperCase().slice(0, 2))} placeholder="NV" />
+            <FieldInput label="State entity ID" value={manual.entity_id} onChange={(v) => setM('entity_id', v)} />
+            <FieldInput label="Status" value={manual.status} onChange={(v) => setM('status', v)} placeholder="Active / Good Standing" />
+            <FieldInput label="Entity type" value={manual.entity_type} onChange={(v) => setM('entity_type', v)} placeholder="Domestic LLC" />
+            <FieldInput label="Formation date" value={manual.formation_date} onChange={(v) => setM('formation_date', v)} placeholder="YYYY-MM-DD" />
+            <FieldInput label="Registered agent" value={manual.registered_agent} onChange={(v) => setM('registered_agent', v)} />
+            <FieldInput label="Principal address" value={manual.principal_address} onChange={(v) => setM('principal_address', v)} />
+            <FieldInput label="Source URL (state record link)" value={manual.source_url} onChange={(v) => setM('source_url', v)} className="sm:col-span-2" placeholder="https://…" />
+            <FieldInput label="Notes" value={manual.notes} onChange={(v) => setM('notes', v)} className="sm:col-span-2" />
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <Button size="sm" onClick={saveManual} disabled={savingManual || !manual.entity_name.trim() || !manual.state.trim()}>
+              {savingManual ? 'Saving…' : 'Save manual entry'}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowManual(false)} disabled={savingManual}>
+              Cancel
             </Button>
           </div>
         </div>

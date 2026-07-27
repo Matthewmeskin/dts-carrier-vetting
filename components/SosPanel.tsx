@@ -531,7 +531,23 @@ export function SosPanel({
             <Field label="Registered Agent" value={sos.sos_registered_agent} />
             <Field
               label="Principal Address"
-              value={sos.sos_principal_address}
+              value={
+                sos.sos_principal_address ? (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                      sos.sos_principal_address
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-dts-blue hover:underline"
+                    title="Open in Google Maps"
+                  >
+                    {sos.sos_principal_address}
+                  </a>
+                ) : (
+                  '—'
+                )
+              }
             />
             <Field
               label="Address Match"

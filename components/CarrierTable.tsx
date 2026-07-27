@@ -34,6 +34,7 @@ import {
   refineBusinessType,
   BIZ_KEY_SINGLE_MEMBER_LLC,
   BIZ_KEY_INDIVIDUAL,
+  BIZ_KEY_INCORPORATED,
 } from '@/lib/businessType'
 
 const UNKNOWN_BIZ = 'Unknown'
@@ -52,6 +53,7 @@ function businessTypeKey(c: CarrierSummary): string {
 function businessTypeLabel(key: string): string {
   if (key === BIZ_KEY_SINGLE_MEMBER_LLC) return 'Single-member LLC (inferred)'
   if (key === BIZ_KEY_INDIVIDUAL) return 'Individual / Sole Proprietor'
+  if (key === BIZ_KEY_INCORPORATED) return 'Incorporated (per name)'
   return key
 }
 

@@ -24,8 +24,8 @@ export interface CarrierContext {
   /** Approved payment baseline (set when a vetting run is marked OK to pay) —
    *  what everyday-bill quick checks compare the invoice against. */
   payment_baseline: any
-  /** Refined W-9 entity type + liability flags (individual vs single-member LLC,
-   *  missing-EIN double-check) so the report can weigh paying an individual. */
+  /** Refined W-9 entity type + entity notes (individual vs single-member LLC,
+   *  missing-EIN) so the report can show the entity type at pay time. */
   entity_liability: {
     w9_type_label: string | null
     category: 'single_member_llc' | 'individual' | 'other'

@@ -51,9 +51,8 @@ export function buildCarrierProfileHtml(
     Array.isArray(ins.hard_stops) && ins.hard_stops.length
       ? ins.hard_stops.join('; ')
       : 'none'
-  // Liability flags: DTS prefers incorporated carriers that carry their own
-  // liability coverage over paying an individual, and wants a double-check when
-  // there's no EIN to confirm the entity is a business.
+  // Entity-type notes: flag an individual / sole proprietor and a missing EIN so
+  // staff can confirm the entity type before paying (neutral, factual).
   const bizRisk = businessTypeRisk({
     companyType: id.w9_company_type,
     legalName: c.legal_name,
@@ -166,7 +165,7 @@ export function buildCarrierProfileHtml(
     '</table></div></div>' +
     (bizWarnings.length
       ? '<div style="margin-top:6px;padding:8px 10px;border:1px solid #f0d98c;border-left:3px solid #B8860B;border-radius:4px;background:#fff8e6;font-size:11px;color:#7a5c00">' +
-        '<b>Entity / liability check</b><ul style="margin:3px 0 0 16px;padding:0">' +
+        '<b>Entity check</b><ul style="margin:3px 0 0 16px;padding:0">' +
         bizWarnings.map((w) => '<li>' + esc(w as string) + '</li>').join('') +
         '</ul></div>'
       : '') +

@@ -1,10 +1,9 @@
 // W-9 business-type refinement.
 //
 // The IRS W-9 form lumps individuals, sole proprietors, and single-member LLCs
-// onto ONE checkbox, so RMIS reports them as a single combined value. For DTS's
-// liability purposes we care about the split — we prefer working with an
-// incorporated business that carries its own liability coverage over paying an
-// individual. We can't get the split from the W-9 itself, so we INFER it: if the
+// onto ONE checkbox, so RMIS reports them as a single combined value. We care
+// about the split so AP can confirm the entity type before paying. We can't get
+// the split from the W-9 itself, so we INFER it: if the
 // carrier's legal name carries an "LLC" suffix we treat it as a single-member
 // LLC, otherwise as an individual / sole proprietor. This is a heuristic, always
 // labeled as inferred, and never overwrites the stored W-9 value.
@@ -21,12 +20,22 @@ export type BusinessCategory =
 // Facet keys used by the carrier-list filter (stable strings).
 export const BIZ_KEY_SINGLE_MEMBER_LLC = 'single_member_llc'
 export const BIZ_KEY_INDIVIDUAL = 'individual_sole_prop'
+export const BIZ_KEY_INCORPORATED = 'incorporated_per_name'
 
 /** Does the legal/business name carry an LLC suffix (L.L.C., LLC, etc.)? */
 export function hasLlcInName(name: string | null | undefined): boolean {
   const n = String(name ?? '').toLowerCase()
   // Match "llc" or "l.l.c." as a whole token, not inside another word.
   return /\bl\.?\s?l\.?\s?c\.?\b/.test(n)
+}
+
+/** Does the name carry an incorporation marker (INC, CORP, LTD, LLP, LP, PC)?
+ *  These are businesses, not individuals — regardless of a mis-checked W-9 box. */
+export function hasCorpMarkerInName(name: string | null | undefined): boolean {
+  const n = String(name ?? '').toLowerCase()
+  return /\b(inc|incorporated|corp|corporation|ltd|limited|llp|lp|pc|pllc)\b/.test(
+    n
+  )
 }
 
 /** Digits-only tax id (EIN/SSN); '' when none on file. */
@@ -64,6 +73,16 @@ export function refineBusinessType(
         inferred: true,
       }
     }
+    // A name that carries INC/CORP/LTD is an incorporated business, even if the
+    // W-9 individual box was (mis-)checked — don't call it an individual.
+    if (hasCorpMarkerInName(legalName)) {
+      return {
+        key: BIZ_KEY_INCORPORATED,
+        label: 'Incorporated (per name)',
+        category: 'other',
+        inferred: true,
+      }
+    }
     return {
       key: BIZ_KEY_INDIVIDUAL,
       label: 'Individual / Sole Proprietor',
@@ -75,16 +94,16 @@ export function refineBusinessType(
 }
 
 export interface BusinessTypeRisk {
-  /** Prefer-a-business warning (set for individuals / sole proprietors). */
+  /** Entity-type note (set for individuals / sole proprietors). */
   preferBusiness: string | null
-  /** Missing-EIN warning (set when we can't confirm a business entity). */
+  /** Missing-EIN note (set when we can't confirm the legal entity). */
   missingEin: string | null
 }
 
 /**
- * Liability flags for AP / onboarding: DTS prefers incorporated carriers that
- * carry their own liability coverage over paying an individual, and wants a
- * double-check when there's no EIN to confirm the entity is a business.
+ * Neutral entity-type notes for AP / onboarding: flags an individual / sole
+ * proprietor, and a missing EIN, so staff can confirm the entity type before
+ * paying. Purely factual — no stated preference or standard.
  */
 export function businessTypeRisk(args: {
   companyType: string | null | undefined
@@ -102,23 +121,23 @@ export function businessTypeRisk(args: {
       ? args.hasEin
       : taxIdDigits(args.w9TaxId).length >= 9
 
+  // An EIN means the carrier registered as a business/employer — so an entity
+  // that has an EIN is NOT flagged as an individual, even when the W-9 marks the
+  // combined individual/sole-prop box. Only a true individual operating under an
+  // SSN (no EIN on file) is flagged.
   let preferBusiness: string | null = null
-  if (refined.category === 'individual') {
+  if (refined.category === 'individual' && einKnown && !hasEin) {
     preferBusiness =
-      'Appears to be an individual / sole proprietor — DTS prefers incorporated carriers that carry their own liability coverage. Verify before onboarding or paying.'
+      'W-9 entity type is Individual / Sole Proprietor with no EIN on file (typically filed under an SSN). Confirm the entity type before paying.'
   }
 
-  // For an inferred entity we lean on the EIN to confirm it really is a business.
-  // Only flag "no EIN" when we actually know the tax id is absent (some list
-  // contexts don't carry the tax id and shouldn't false-flag PDF-only W-9s).
+  // For a single-member LLC we lean on the EIN to confirm the entity. Only flag
+  // "no EIN" when we actually know the tax id is absent (some list contexts don't
+  // carry the tax id and shouldn't false-flag PDF-only W-9s).
   let missingEin: string | null = null
-  const einKnownAbsent = einKnown && !hasEin
-  if (
-    einKnownAbsent &&
-    (refined.category === 'individual' || refined.category === 'single_member_llc')
-  ) {
+  if (refined.category === 'single_member_llc' && einKnown && !hasEin) {
     missingEin =
-      'No EIN on file to confirm a business entity — double-check the carrier is a business (not an individual) and carries liability coverage.'
+      'No EIN on file to confirm the legal entity. Confirm the carrier’s entity type before paying.'
   }
 
   return { preferBusiness, missingEin }

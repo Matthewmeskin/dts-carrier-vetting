@@ -163,9 +163,8 @@ export function AuthorityPanel({
   const rmisDba = insurance.rmis_dba_name
   const showNames = tmsName || rmisLegal || rmisDba
 
-  // Liability flags: DTS prefers incorporated carriers that carry their own
-  // liability coverage over paying an individual, and wants a double-check when
-  // there's no EIN to confirm the entity is a business.
+  // Entity-type notes: flag an individual / sole proprietor and a missing EIN so
+  // staff can confirm the entity type before paying (neutral, factual).
   const bizRisk = businessTypeRisk({
     companyType: insurance.w9_company_type,
     legalName: tmsName ?? rmisLegal,
@@ -345,7 +344,7 @@ export function AuthorityPanel({
         {bizWarnings.length > 0 && (
           <div className="mt-4 rounded-md border border-amber-200 border-l-4 border-l-amber-500 bg-amber-50 px-3 py-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-              Entity / liability check
+              Entity check
             </p>
             <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-amber-900">
               {bizWarnings.map((w, i) => (

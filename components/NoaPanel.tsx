@@ -231,8 +231,7 @@ export function NoaPanel({ dot }: { dot: string }) {
 
             {checkedAt && (
               <p className="mt-2 text-xs text-gray-400">
-                Read by AI · {formatDateTime(checkedAt)} · verify against the source
-                document before relying on it.
+                Read by AI · {formatDateTime(checkedAt)}
               </p>
             )}
           </>

@@ -83,9 +83,13 @@ export async function PUT(
       const s = v == null ? '' : String(v).trim()
       return s || null
     }
+    // "Unable to find" — the reviewer searched the state site and no SOS record
+    // exists (or none could be located). Recorded so it's clearly distinct from
+    // "never checked".
+    const notFound = body?.not_found === true
     const entityName = str(body?.entity_name)
     const state = str(body?.state)?.toUpperCase() ?? null
-    if (!entityName || !state) {
+    if (!notFound && (!entityName || !state)) {
       return NextResponse.json(
         { error: 'Entity name and state are required.' },
         { status: 400 }
@@ -105,34 +109,60 @@ export async function PUT(
 
     const statusRaw = str(body?.status)
     const sourceUrl = str(body?.source_url)
-    const summary =
-      `Manually entered by ${actor}` +
-      (str(body?.notes) ? ` — ${str(body?.notes)}` : '')
 
-    const row: Record<string, any> = {
-      carrier_id: (carrier as any)?.id ?? null,
-      dot_number: dot,
-      sos_state: state,
-      sos_entity_id: str(body?.entity_id),
-      sos_status: statusRaw,
-      sos_status_normalized: statusRaw ? normalizeStatus(statusRaw) : 'unknown',
-      sos_entity_type: str(body?.entity_type),
-      sos_formation_date: str(body?.formation_date),
-      sos_registered_agent: str(body?.registered_agent),
-      sos_principal_address: str(body?.principal_address),
-      sos_officers: [],
-      name_match: true, // a human confirmed this is the right entity
-      address_match: null,
-      match_confidence: 'manual',
-      mismatches: [],
-      risk_flags: [],
-      sos_summary: summary,
-      sos_search_name: entityName,
-      // The RPC derives sos_source_url from sos_raw.source_url for the panel link.
-      sos_raw: { manual: true, entered_by: actor, source_url: sourceUrl },
-      checked_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
+    const row: Record<string, any> = notFound
+      ? {
+          carrier_id: (carrier as any)?.id ?? null,
+          dot_number: dot,
+          sos_state: state,
+          sos_entity_id: null,
+          sos_status: 'Not found',
+          sos_status_normalized: 'not_found',
+          sos_entity_type: null,
+          sos_formation_date: null,
+          sos_registered_agent: null,
+          sos_principal_address: null,
+          sos_officers: [],
+          name_match: null,
+          address_match: null,
+          match_confidence: 'not_found',
+          mismatches: [],
+          risk_flags: [],
+          sos_summary:
+            `No SOS record found — searched by ${actor}` +
+            (entityName ? ` (searched "${entityName}"${state ? `, ${state}` : ''})` : '') +
+            (str(body?.notes) ? ` — ${str(body?.notes)}` : ''),
+          sos_search_name: entityName,
+          sos_raw: { manual: true, not_found: true, entered_by: actor },
+          checked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+      : {
+          carrier_id: (carrier as any)?.id ?? null,
+          dot_number: dot,
+          sos_state: state,
+          sos_entity_id: str(body?.entity_id),
+          sos_status: statusRaw,
+          sos_status_normalized: statusRaw ? normalizeStatus(statusRaw) : 'unknown',
+          sos_entity_type: str(body?.entity_type),
+          sos_formation_date: str(body?.formation_date),
+          sos_registered_agent: str(body?.registered_agent),
+          sos_principal_address: str(body?.principal_address),
+          sos_officers: [],
+          name_match: true, // a human confirmed this is the right entity
+          address_match: null,
+          match_confidence: 'manual',
+          mismatches: [],
+          risk_flags: [],
+          sos_summary:
+            `Manually entered by ${actor}` +
+            (str(body?.notes) ? ` — ${str(body?.notes)}` : ''),
+          sos_search_name: entityName,
+          // The RPC derives sos_source_url from sos_raw.source_url for the link.
+          sos_raw: { manual: true, entered_by: actor, source_url: sourceUrl },
+          checked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
 
     const { data: saved, error } = await (supabaseAdmin as any)
       .from('carrier_sos')

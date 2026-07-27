@@ -187,6 +187,37 @@ export function SosPanel({
     }
   }
 
+  async function markNotFound() {
+    if (
+      !window.confirm(
+        'Mark this carrier as “unable to find SOS data”? Record that you searched the state site and no registration could be located.'
+      )
+    )
+      return
+    setSavingManual(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/carriers/${dot}/sos`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          not_found: true,
+          entity_name: manual.entity_name.trim() || searchName.trim() || undefined,
+          state: manual.state.trim() || searchState.trim() || undefined,
+          notes: manual.notes.trim() || undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`)
+      setShowManual(false)
+      await onRefreshed?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSavingManual(false)
+    }
+  }
+
   async function remove() {
     if (
       !window.confirm(
@@ -213,6 +244,8 @@ export function SosPanel({
   // `removed` optimistically hides the block the moment Remove succeeds, before
   // the parent reload returns the now-null record.
   const activeSos = removed ? null : sos
+  // A human-recorded "searched, nothing found" state (distinct from never-checked).
+  const isNotFound = (activeSos as any)?.match_confidence === 'not_found'
 
   return (
     <div className="mt-5 border-t border-gray-100 pt-4">
@@ -260,6 +293,15 @@ export function SosPanel({
               disabled={running}
             >
               Enter manually
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={markNotFound}
+              disabled={running || savingManual}
+              className="text-amber-700 hover:bg-amber-50"
+            >
+              Unable to find
             </Button>
             {activeSos && (
               <Button size="sm" variant="ghost" onClick={() => run(true)} disabled={running}>
@@ -379,7 +421,21 @@ export function SosPanel({
         </p>
       )}
 
-      {sos && !removed && (
+      {activeSos && isNotFound && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <div>
+            <Badge tone="amber">Unable to find SOS record</Badge>
+            <p className="mt-1 text-xs text-amber-800">
+              {(activeSos as any).sos_summary || 'Searched — no SOS record found.'}
+            </p>
+          </div>
+          <Button size="sm" variant="ghost" onClick={remove} disabled={removing} className="text-gray-600">
+            {removing ? 'Clearing…' : 'Clear'}
+          </Button>
+        </div>
+      )}
+
+      {sos && !removed && !isNotFound && (
         <>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <Field

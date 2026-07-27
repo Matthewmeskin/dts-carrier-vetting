@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase'
 import { stateFromZip } from '@/lib/sosNormalize'
+import { refineBusinessType, businessTypeRisk } from '@/lib/businessType'
 import {
   createDefaultChecklist,
   attachAutoEvidence,
@@ -23,6 +24,13 @@ export interface CarrierContext {
   /** Approved payment baseline (set when a vetting run is marked OK to pay) —
    *  what everyday-bill quick checks compare the invoice against. */
   payment_baseline: any
+  /** Refined W-9 entity type + liability flags (individual vs single-member LLC,
+   *  missing-EIN double-check) so the report can weigh paying an individual. */
+  entity_liability: {
+    w9_type_label: string | null
+    category: 'single_member_llc' | 'individual' | 'other'
+    warnings: string[]
+  }
   /** Auto-evaluated vetting checklist (safety assessment, verification, etc.). */
   checklist: Array<{
     category: string
@@ -202,6 +210,21 @@ export async function getCarrierContext(
     },
     factor,
     payment_baseline,
+    entity_liability: (() => {
+      const refined = refineBusinessType(i.w9_company_type, c.legal_name)
+      const risk = businessTypeRisk({
+        companyType: i.w9_company_type,
+        legalName: c.legal_name,
+        w9TaxId: i.w9_tax_id,
+      })
+      return {
+        w9_type_label: refined.label || null,
+        category: refined.category,
+        warnings: [risk.preferBusiness, risk.missingEin].filter(
+          Boolean
+        ) as string[],
+      }
+    })(),
     sos: sos
       ? {
           status: s.sos_status_normalized ?? s.sos_status ?? null,

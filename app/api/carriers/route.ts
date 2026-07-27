@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { computeRevetStatus, isBrokerwareDisabled } from '@/lib/revet'
+import { stateFromZip } from '@/lib/sosNormalize'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -113,7 +114,7 @@ export async function GET(request: NextRequest) {
       (supabaseAdmin as any)
         .from('latest_carrier_insurance')
         .select(
-          'dot_number, auto_status, cargo_status, auto_expiration_date, cargo_expiration_date, rmis_overall_pass, rmis_is_certified, hard_stops, w9_company_type, rmis_eld_enrolled, w9_on_file, broker_carrier_agreement_on_file, is_factoring, fetched_at, updated_at'
+          'dot_number, auto_status, cargo_status, auto_expiration_date, cargo_expiration_date, rmis_overall_pass, rmis_is_certified, hard_stops, w9_company_type, rmis_eld_enrolled, w9_on_file, broker_carrier_agreement_on_file, is_factoring, rmis_carrier_city, rmis_carrier_state, rmis_carrier_zip, fetched_at, updated_at'
         )
         .limit(100000),
       supabaseAdmin
@@ -175,8 +176,14 @@ export async function GET(request: NextRequest) {
         mc_number: c.mc_number ?? null,
         legal_name: c.legal_name ?? null,
         dba_name: c.dba_name ?? null,
-        city: c.city ?? null,
-        state: c.state ?? null,
+        // Prefer the carrier's PHYSICAL location (RMIS/DOT) over the Brokerware/
+        // TMS city/state, which for factored carriers is often the factor's
+        // remit-to address in another state. Derive state from the RMIS zip when
+        // RMIS omits it; fall back to the Brokerware value only when RMIS has none.
+        city: ins?.rmis_carrier_city ?? c.city ?? null,
+        state: ins?.rmis_carrier_city
+          ? ins?.rmis_carrier_state ?? stateFromZip(ins?.rmis_carrier_zip) ?? null
+          : c.state ?? null,
         power_units: c.power_units ?? null,
         safety_rating: c.safety_rating ?? null,
         carrier_status: c.carrier_status ?? null,

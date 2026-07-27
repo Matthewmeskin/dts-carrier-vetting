@@ -294,15 +294,17 @@ export function SosPanel({
             >
               Enter manually
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={markNotFound}
-              disabled={running || savingManual}
-              className="text-amber-700 hover:bg-amber-50"
-            >
-              Unable to find
-            </Button>
+            {!isNotFound && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={markNotFound}
+                disabled={running || savingManual}
+                className="text-amber-700 hover:bg-amber-50"
+              >
+                Unable to find
+              </Button>
+            )}
             {activeSos && (
               <Button size="sm" variant="ghost" onClick={() => run(true)} disabled={running}>
                 Force fresh

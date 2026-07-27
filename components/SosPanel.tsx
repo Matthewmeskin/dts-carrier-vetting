@@ -107,6 +107,10 @@ export function SosPanel({
   })
   const setM = (k: keyof typeof manual, v: string) =>
     setManual((m) => ({ ...m, [k]: v }))
+  // Paste-and-parse: paste the record copied off the state site and let AI fill
+  // the fields, which the reviewer then confirms before saving.
+  const [pasteText, setPasteText] = useState('')
+  const [parsing, setParsing] = useState(false)
 
   // Reset the optimistic "removed" flag whenever a different SOS record arrives
   // (e.g. after re-running the check). Once cleared, the parent reload returns a
@@ -160,6 +164,39 @@ export function SosPanel({
       setError(e instanceof Error ? e.message : 'SOS lookup failed')
     } finally {
       setRunning(false)
+    }
+  }
+
+  async function parsePaste() {
+    if (!pasteText.trim()) return
+    setParsing(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/carriers/${dot}/sos/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: pasteText }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `Parse failed (${res.status})`)
+      const p = data.parsed || {}
+      // Fill only the fields the parser found; keep anything already typed.
+      setManual((m) => ({
+        entity_name: p.entity_name || m.entity_name,
+        state: (p.state || m.state || '').toUpperCase().slice(0, 2),
+        entity_id: p.entity_id || m.entity_id,
+        status: p.status || m.status,
+        entity_type: p.entity_type || m.entity_type,
+        formation_date: p.formation_date || m.formation_date,
+        registered_agent: p.registered_agent || m.registered_agent,
+        principal_address: p.principal_address || m.principal_address,
+        source_url: p.source_url || m.source_url,
+        notes: m.notes,
+      }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Parse failed')
+    } finally {
+      setParsing(false)
     }
   }
 
@@ -376,9 +413,28 @@ export function SosPanel({
         <div className="mb-3 rounded-md border border-dts-blue/30 bg-dts-blue/5 px-3 py-2.5">
           <p className="mb-2 text-xs text-gray-600">
             Found the right entity on the state site but the automated search
-            couldn’t? Enter the confirmed details here. It’s saved as a manual,
-            human-verified match. Only the name and state are required.
+            couldn’t? Paste the record below and click <b>Parse</b> to auto-fill
+            the fields, or type them in. Saved as a manual, human-verified match.
+            Only the name and state are required.
           </p>
+          <div className="mb-2 rounded-md border border-gray-200 bg-white px-2.5 py-2">
+            <span className="mb-0.5 block text-xs font-medium text-gray-600">
+              Paste from the state site
+            </span>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              rows={3}
+              placeholder="Copy the entity record (name, status, entity ID, agent, address…) and paste it here"
+              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            />
+            <div className="mt-1.5 flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={parsePaste} disabled={parsing || !pasteText.trim()}>
+                {parsing ? 'Parsing…' : 'Parse & fill fields'}
+              </Button>
+              <span className="text-xs text-gray-400">Review the fields below before saving.</span>
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <FieldInput label="Entity name (as registered) *" value={manual.entity_name} onChange={(v) => setM('entity_name', v)} placeholder="e.g. GM TRANSPORT LLC" />
             <FieldInput label="State *" value={manual.state} onChange={(v) => setM('state', v.toUpperCase().slice(0, 2))} placeholder="NV" />

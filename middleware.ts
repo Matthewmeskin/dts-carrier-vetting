@@ -6,6 +6,7 @@ import {
   SESSION_START_COOKIE,
   sessionMaxMs,
 } from '@/lib/sessionConfig'
+import { MFA_COOKIE, mfaEnabled, verifyMfaCookie } from '@/lib/mfa'
 
 // Require a signed-in user for the whole portal. Refreshes the Supabase session
 // cookie on every request and redirects unauthenticated users to /login.
@@ -85,6 +86,7 @@ export async function middleware(request: NextRequest) {
       }
       res.cookies.set(IDLE_COOKIE, '', { path: '/', maxAge: 0 })
       res.cookies.set(SESSION_START_COOKIE, '', { path: '/', maxAge: 0 })
+      res.cookies.set(MFA_COOKIE, '', { path: '/', maxAge: 0 })
       return res
     }
 
@@ -113,6 +115,24 @@ export async function middleware(request: NextRequest) {
       if (Number.isFinite(start) && now - start > sessionMaxMs()) {
         return expire('expired')
       }
+    }
+  }
+
+  // Email 2FA: a password-only session must clear the emailed code before it can
+  // reach any data. The /mfa page and its API routes are exempt (that's where the
+  // code is entered). Page navigations redirect to /mfa; API calls get a 401.
+  const isMfaFlow = path === '/mfa' || path.startsWith('/api/auth/mfa')
+  if (mfaEnabled() && user && !isLogin && !isAuthFlow && !isMfaFlow) {
+    const ok = await verifyMfaCookie(request.cookies.get(MFA_COOKIE)?.value, user.id)
+    if (!ok) {
+      if (isApi) {
+        return NextResponse.json({ error: 'MFA required' }, { status: 401 })
+      }
+      const redirect = request.nextUrl.clone()
+      redirect.pathname = '/mfa'
+      redirect.search = ''
+      redirect.searchParams.set('next', path)
+      return NextResponse.redirect(redirect)
     }
   }
 

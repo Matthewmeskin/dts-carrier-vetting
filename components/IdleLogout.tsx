@@ -60,6 +60,8 @@ export function IdleLogout() {
       /* ignore — still redirect */
     }
     writeActivityCookie(0)
+    document.cookie = 'dts_session_start=; path=/; max-age=0'
+    document.cookie = 'dts_mfa=; path=/; max-age=0'
     window.location.href = '/login?timeout=1'
   }, [])
 

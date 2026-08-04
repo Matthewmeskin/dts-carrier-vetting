@@ -41,7 +41,7 @@ export function SiteHeader() {
   }, [pathname])
 
   // The login page renders its own standalone screen.
-  if (pathname === '/login') return null
+  if (pathname === '/login' || pathname === '/mfa') return null
 
   async function signOut() {
     const supabase = createSupabaseBrowserClient()
@@ -49,6 +49,7 @@ export function SiteHeader() {
     // Also clear our session-tracking cookies so a fresh login starts clean.
     document.cookie = 'dts_active=; path=/; max-age=0'
     document.cookie = 'dts_session_start=; path=/; max-age=0'
+    document.cookie = 'dts_mfa=; path=/; max-age=0'
     window.location.assign('/login')
   }
 

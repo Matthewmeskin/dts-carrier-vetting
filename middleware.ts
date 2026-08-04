@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { IDLE_COOKIE, idleTimeoutMs } from '@/lib/sessionConfig'
 
 // Require a signed-in user for the whole portal. Refreshes the Supabase session
 // cookie on every request and redirects unauthenticated users to /login.
@@ -53,6 +54,36 @@ export async function middleware(request: NextRequest) {
     home.pathname = '/carriers'
     home.search = ''
     return NextResponse.redirect(home)
+  }
+
+  // Idle backstop: the client refreshes the `dts_active` cookie on activity. If
+  // it's older than the idle window, reject a page navigation and clear the
+  // Supabase session cookies so a stale session can't be replayed after idle —
+  // even if the client-side timer never ran. Only enforced on page navigations;
+  // API calls (fetches) are left to return normally so they aren't redirected to
+  // an HTML login page mid-request (the client signs out at the same threshold).
+  const isApi = path.startsWith('/api')
+  if (user && !isLogin && !isAuthFlow && !isApi) {
+    const active = request.cookies.get(IDLE_COOKIE)?.value
+    if (active) {
+      const last = Number(active)
+      if (Number.isFinite(last) && Date.now() - last > idleTimeoutMs()) {
+        const redirect = request.nextUrl.clone()
+        redirect.pathname = '/login'
+        redirect.search = ''
+        redirect.searchParams.set('timeout', '1')
+        redirect.searchParams.set('next', path)
+        const res = NextResponse.redirect(redirect)
+        // Expire the Supabase auth cookies + the activity cookie.
+        for (const c of request.cookies.getAll()) {
+          if (c.name.startsWith('sb-')) {
+            res.cookies.set(c.name, '', { path: '/', maxAge: 0 })
+          }
+        }
+        res.cookies.set(IDLE_COOKIE, '', { path: '/', maxAge: 0 })
+        return res
+      }
+    }
   }
 
   return response

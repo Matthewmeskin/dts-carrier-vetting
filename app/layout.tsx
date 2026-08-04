@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { SiteHeader } from '@/components/SiteHeader'
+import { IdleLogout } from '@/components/IdleLogout'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <IdleLogout />
         <div className="min-h-screen flex flex-col">
           <SiteHeader />
           <main className="flex-1 mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6">

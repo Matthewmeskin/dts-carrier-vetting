@@ -1,6 +1,11 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { IDLE_COOKIE, idleTimeoutMs } from '@/lib/sessionConfig'
+import {
+  IDLE_COOKIE,
+  idleTimeoutMs,
+  SESSION_START_COOKIE,
+  sessionMaxMs,
+} from '@/lib/sessionConfig'
 
 // Require a signed-in user for the whole portal. Refreshes the Supabase session
 // cookie on every request and redirects unauthenticated users to /login.
@@ -64,24 +69,49 @@ export async function middleware(request: NextRequest) {
   // an HTML login page mid-request (the client signs out at the same threshold).
   const isApi = path.startsWith('/api')
   if (user && !isLogin && !isAuthFlow && !isApi) {
+    const now = Date.now()
+    const secure = request.nextUrl.protocol === 'https:'
+    // Build a redirect to the login page that expires every session cookie, used
+    // for both idle and absolute-lifetime expiry.
+    const expire = (reason: 'timeout' | 'expired') => {
+      const redirect = request.nextUrl.clone()
+      redirect.pathname = '/login'
+      redirect.search = ''
+      redirect.searchParams.set(reason, '1')
+      redirect.searchParams.set('next', path)
+      const res = NextResponse.redirect(redirect)
+      for (const c of request.cookies.getAll()) {
+        if (c.name.startsWith('sb-')) res.cookies.set(c.name, '', { path: '/', maxAge: 0 })
+      }
+      res.cookies.set(IDLE_COOKIE, '', { path: '/', maxAge: 0 })
+      res.cookies.set(SESSION_START_COOKIE, '', { path: '/', maxAge: 0 })
+      return res
+    }
+
+    // Idle timeout: the client refreshes dts_active on activity.
     const active = request.cookies.get(IDLE_COOKIE)?.value
     if (active) {
       const last = Number(active)
-      if (Number.isFinite(last) && Date.now() - last > idleTimeoutMs()) {
-        const redirect = request.nextUrl.clone()
-        redirect.pathname = '/login'
-        redirect.search = ''
-        redirect.searchParams.set('timeout', '1')
-        redirect.searchParams.set('next', path)
-        const res = NextResponse.redirect(redirect)
-        // Expire the Supabase auth cookies + the activity cookie.
-        for (const c of request.cookies.getAll()) {
-          if (c.name.startsWith('sb-')) {
-            res.cookies.set(c.name, '', { path: '/', maxAge: 0 })
-          }
-        }
-        res.cookies.set(IDLE_COOKIE, '', { path: '/', maxAge: 0 })
-        return res
+      if (Number.isFinite(last) && now - last > idleTimeoutMs()) {
+        return expire('timeout')
+      }
+    }
+
+    // Absolute session lifetime: stamp dts_session_start on the first
+    // authenticated navigation, then force re-login once it's older than the cap.
+    const started = request.cookies.get(SESSION_START_COOKIE)?.value
+    if (!started) {
+      response.cookies.set(SESSION_START_COOKIE, String(now), {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure,
+        path: '/',
+        maxAge: Math.ceil(sessionMaxMs() / 1000),
+      })
+    } else {
+      const start = Number(started)
+      if (Number.isFinite(start) && now - start > sessionMaxMs()) {
+        return expire('expired')
       }
     }
   }

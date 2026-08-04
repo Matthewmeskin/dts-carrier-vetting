@@ -9,6 +9,22 @@
 /** Cookie the client refreshes on activity; middleware reads it to detect idle. */
 export const IDLE_COOKIE = 'dts_active'
 
+/** Cookie stamped once at login (server-side) marking when the session began,
+ *  used to enforce an absolute maximum session lifetime. */
+export const SESSION_START_COOKIE = 'dts_session_start'
+
+/** Absolute max session length in hours regardless of activity (env-overridable,
+ *  default 12). After this, the user must sign in again. */
+export function sessionMaxHours(): number {
+  const raw = Number(process.env.NEXT_PUBLIC_SESSION_MAX_HOURS)
+  return Number.isFinite(raw) && raw > 0 ? raw : 12
+}
+
+/** Absolute max session length in milliseconds. */
+export function sessionMaxMs(): number {
+  return sessionMaxHours() * 60 * 60 * 1000
+}
+
 /** Minutes of inactivity before auto-logout (env-overridable, default 30). */
 export function idleTimeoutMinutes(): number {
   const raw = Number(process.env.NEXT_PUBLIC_SESSION_IDLE_MINUTES)

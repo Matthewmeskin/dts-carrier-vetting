@@ -14,6 +14,7 @@ function MfaForm() {
   const next = params.get('next') || '/carriers'
 
   const [code, setCode] = useState('')
+  const [remember, setRemember] = useState(true)
   const [sending, setSending] = useState(true)
   const [verifying, setVerifying] = useState(false)
   const [sentTo, setSentTo] = useState<string | null>(null)
@@ -50,7 +51,7 @@ function MfaForm() {
       const res = await fetch('/api/auth/mfa/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, remember }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Verification failed.')
@@ -99,6 +100,15 @@ function MfaForm() {
           {error && (
             <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
           )}
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Remember this device (skip the code here for 30 days)
+          </label>
           <Button
             type="submit"
             disabled={verifying || code.length !== 6}

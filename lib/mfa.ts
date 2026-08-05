@@ -9,6 +9,19 @@
 /** Cookie marking a session as MFA-verified (signed, httpOnly). */
 export const MFA_COOKIE = 'dts_mfa'
 
+/** Longer-lived "remember this device" cookie — lets a browser skip the code on
+ *  future logins for a while (signed + user-bound, like MFA_COOKIE). */
+export const MFA_TRUST_COOKIE = 'dts_mfa_trust'
+
+/** How long a trusted device stays trusted, in days (env-overridable). */
+export function mfaTrustDays(): number {
+  const raw = Number(process.env.NEXT_PUBLIC_MFA_TRUST_DAYS)
+  return Number.isFinite(raw) && raw > 0 ? raw : 30
+}
+export function mfaTrustMs(): number {
+  return mfaTrustDays() * 24 * 60 * 60 * 1000
+}
+
 /** Enforcement is opt-in via env so enabling it is a deliberate, reversible
  *  switch (set MFA_ENABLED=true once email delivery is confirmed). */
 export function mfaEnabled(): boolean {
@@ -68,17 +81,20 @@ export async function signMfaCookie(userId: string): Promise<string> {
   return `v1.${issued}.${mac}`
 }
 
-/** Constant-time-ish verify of the MFA cookie for a given user. */
+/** Constant-time-ish verify of a signed MFA/trust cookie for a given user.
+ *  maxAgeMs defaults to the per-session window; pass the trust window for the
+ *  "remember this device" cookie. */
 export async function verifyMfaCookie(
   value: string | undefined | null,
-  userId: string
+  userId: string,
+  maxAgeMs: number = MFA_COOKIE_TTL_MS
 ): Promise<boolean> {
   if (!value) return false
   const parts = value.split('.')
   if (parts.length !== 3 || parts[0] !== 'v1') return false
   const issued = Number(parts[1])
   if (!Number.isFinite(issued)) return false
-  if (Date.now() - issued > MFA_COOKIE_TTL_MS) return false
+  if (Date.now() - issued > maxAgeMs) return false
   const expected = await hmacHex(secret(), `${userId}.${issued}`)
   const got = parts[2]
   if (expected.length !== got.length) return false

@@ -6,7 +6,13 @@ import {
   SESSION_START_COOKIE,
   sessionMaxMs,
 } from '@/lib/sessionConfig'
-import { MFA_COOKIE, mfaEnabled, verifyMfaCookie } from '@/lib/mfa'
+import {
+  MFA_COOKIE,
+  MFA_TRUST_COOKIE,
+  mfaEnabled,
+  mfaTrustMs,
+  verifyMfaCookie,
+} from '@/lib/mfa'
 
 // Require a signed-in user for the whole portal. Refreshes the Supabase session
 // cookie on every request and redirects unauthenticated users to /login.
@@ -123,7 +129,14 @@ export async function middleware(request: NextRequest) {
   // code is entered). Page navigations redirect to /mfa; API calls get a 401.
   const isMfaFlow = path === '/mfa' || path.startsWith('/api/auth/mfa')
   if (mfaEnabled() && user && !isLogin && !isAuthFlow && !isMfaFlow) {
-    const ok = await verifyMfaCookie(request.cookies.get(MFA_COOKIE)?.value, user.id)
+    // Pass if the per-session MFA cookie is valid OR this is a remembered device.
+    const ok =
+      (await verifyMfaCookie(request.cookies.get(MFA_COOKIE)?.value, user.id)) ||
+      (await verifyMfaCookie(
+        request.cookies.get(MFA_TRUST_COOKIE)?.value,
+        user.id,
+        mfaTrustMs()
+      ))
     if (!ok) {
       if (isApi) {
         return NextResponse.json({ error: 'MFA required' }, { status: 401 })

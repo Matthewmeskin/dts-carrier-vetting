@@ -7,6 +7,8 @@ import {
   MFA_COOKIE,
   MFA_COOKIE_TTL_MS,
   MFA_MAX_ATTEMPTS,
+  MFA_TRUST_COOKIE,
+  mfaTrustMs,
 } from '@/lib/mfa'
 
 export const dynamic = 'force-dynamic'
@@ -77,14 +79,28 @@ export async function POST(request: Request) {
       .update({ consumed_at: new Date().toISOString() })
       .eq('id', row.id)
 
+    const secure = new URL(request.url).protocol === 'https:'
     const res = NextResponse.json({ ok: true })
     res.cookies.set(MFA_COOKIE, await signMfaCookie(user.id), {
       httpOnly: true,
       sameSite: 'lax',
-      secure: new URL(request.url).protocol === 'https:',
+      secure,
       path: '/',
       maxAge: Math.ceil(MFA_COOKIE_TTL_MS / 1000),
     })
+    // "Remember this device": issue a longer-lived trust cookie so future logins
+    // on this browser skip the code. Unchecking clears any prior trust.
+    if (body?.remember === true) {
+      res.cookies.set(MFA_TRUST_COOKIE, await signMfaCookie(user.id), {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure,
+        path: '/',
+        maxAge: Math.ceil(mfaTrustMs() / 1000),
+      })
+    } else {
+      res.cookies.set(MFA_TRUST_COOKIE, '', { path: '/', maxAge: 0 })
+    }
     return res
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Verify failed' }, { status: 500 })

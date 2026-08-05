@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { TablesInsert } from '@/lib/database.types'
 import { parseCarrierAndFactor } from '@/lib/carrierName'
 import { normalizeEntityName } from '@/lib/sosNormalize'
+import { isBrokerwareDisabled } from '@/lib/revet'
+import { logCarrierEvents } from '@/lib/auditLog'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -168,6 +170,80 @@ export async function POST(request: Request) {
     }
 
     const rows = Array.from(byDot.values())
+
+    // Detect Brokerware disable/enable transitions so we can (a) stamp
+    // `brokerware_disabled_at` with the date a carrier actually went disabled
+    // (not the last sync), and (b) log an audit event. Load the prior status +
+    // disabled-at for the DOTs in this batch, then set each row's disabled_at:
+    //   • newly disabled  → stamp now + log a "Disabled in Brokerware" event
+    //   • still disabled   → preserve the original disabled_at (don't reset it)
+    //   • active/re-enabled → clear disabled_at (+ log a re-enable event)
+    const transitionEvents: Parameters<typeof logCarrierEvents>[0] = []
+    {
+      const allDots = rows.map((r) => r.dot_number).filter(Boolean) as string[]
+      const prevByDot = new Map<
+        string,
+        { brokerware_status: string | null; brokerware_disabled_at: string | null }
+      >()
+      for (let i = 0; i < allDots.length; i += CHUNK) {
+        const { data } = await supabaseAdmin
+          .from('carriers')
+          .select('dot_number, brokerware_status, brokerware_disabled_at')
+          .in('dot_number', allDots.slice(i, i + CHUNK))
+        for (const c of data ?? []) {
+          prevByDot.set(String((c as any).dot_number), {
+            brokerware_status: (c as any).brokerware_status ?? null,
+            brokerware_disabled_at: (c as any).brokerware_disabled_at ?? null,
+          })
+        }
+      }
+      for (const row of rows) {
+        const dot = row.dot_number as string
+        const nowDisabled = isBrokerwareDisabled(row.brokerware_status)
+        const prev = prevByDot.get(dot)
+        const wasDisabled = prev ? isBrokerwareDisabled(prev.brokerware_status) : false
+        if (nowDisabled) {
+          if (wasDisabled && prev?.brokerware_disabled_at) {
+            // Already disabled — keep the original transition date.
+            ;(row as any).brokerware_disabled_at = prev.brokerware_disabled_at
+          } else {
+            ;(row as any).brokerware_disabled_at = now
+            // Only log a transition for a carrier we already knew as active;
+            // brand-new carriers imported already-disabled aren't a state change.
+            if (prev && !wasDisabled) {
+              transitionEvents.push({
+                dot,
+                type: 'status_change',
+                summary: `Disabled in Brokerware (status: ${row.brokerware_status})`,
+                detail: {
+                  brokerware_status: row.brokerware_status,
+                  previous_status: prev.brokerware_status,
+                  disabled: true,
+                },
+                actor: 'brokerware-sync',
+              })
+            }
+          }
+        } else {
+          // Active now — clear any prior disabled stamp and note a re-enable.
+          ;(row as any).brokerware_disabled_at = null
+          if (wasDisabled) {
+            transitionEvents.push({
+              dot,
+              type: 'status_change',
+              summary: `Re-enabled in Brokerware (status: ${row.brokerware_status})`,
+              detail: {
+                brokerware_status: row.brokerware_status,
+                previous_status: prev?.brokerware_status ?? null,
+                disabled: false,
+              },
+              actor: 'brokerware-sync',
+            })
+          }
+        }
+      }
+    }
+
     let upserted = 0
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK)
@@ -176,6 +252,11 @@ export async function POST(request: Request) {
         .upsert(chunk, { onConflict: 'dot_number' })
       if (error) throw error
       upserted += chunk.length
+    }
+
+    // Record disable/enable transitions in the audit log (best-effort).
+    if (transitionEvents.length > 0) {
+      await logCarrierEvents(transitionEvents)
     }
 
     // Replace the no-DOT list with this sync's results so it always reflects

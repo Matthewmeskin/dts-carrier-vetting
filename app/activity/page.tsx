@@ -54,6 +54,28 @@ function meta(type: string) {
   return TYPE_META[type] ?? { label: type, tone: 'gray' as BadgeTone }
 }
 
+/** Date (YYYY-MM-DD) N days before Pacific today. */
+function pacificDaysAgo(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return d.toLocaleDateString('en-CA', { timeZone: PT })
+}
+
+interface DisabledRow {
+  dot_number: string | null
+  carrier_name: string | null
+  disabled_at: string | null
+  source: 'brokerware' | 'manual'
+  status: string | null
+  reason: string | null
+}
+
+const DISABLED_PRESETS: { key: string; label: string; days: number }[] = [
+  { key: 'd7', label: 'Last 7 days', days: 7 },
+  { key: 'd30', label: 'Last 30 days', days: 30 },
+  { key: 'd90', label: 'Last 90 days', days: 90 },
+]
+
 // A human actor is stamped "Name (Staff|Manager|Director)"; automated actors are
 // things like "ELD monitor", "system (RMIS delta)", "Bluewire upload".
 function isPerson(actor: string | null): boolean {
@@ -61,12 +83,20 @@ function isPerson(actor: string | null): boolean {
 }
 
 export default function ActivityLogPage() {
+  const [view, setView] = useState<'activity' | 'disabled'>('activity')
   const [date, setDate] = useState(pacificToday)
   const [actor, setActor] = useState('')
   const [peopleOnly, setPeopleOnly] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
   const [actors, setActors] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Disabled-carriers panel state.
+  const [dPreset, setDPreset] = useState('d30')
+  const [dFrom, setDFrom] = useState(() => pacificDaysAgo(30))
+  const [dTo, setDTo] = useState(pacificToday)
+  const [dRows, setDRows] = useState<DisabledRow[]>([])
+  const [dLoading, setDLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -87,6 +117,32 @@ export default function ActivityLogPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  const loadDisabled = useCallback(async () => {
+    setDLoading(true)
+    try {
+      const qs = new URLSearchParams()
+      if (dFrom) qs.set('from', dFrom)
+      if (dTo) qs.set('to', dTo)
+      const res = await fetch(`/api/activity/disabled?${qs.toString()}`, {
+        cache: 'no-store',
+      })
+      const data = await res.json()
+      if (res.ok) setDRows(data.carriers ?? [])
+    } finally {
+      setDLoading(false)
+    }
+  }, [dFrom, dTo])
+
+  useEffect(() => {
+    if (view === 'disabled') loadDisabled()
+  }, [view, loadDisabled])
+
+  function applyDisabledPreset(key: string, days: number) {
+    setDPreset(key)
+    setDFrom(pacificDaysAgo(days))
+    setDTo(pacificToday())
+  }
 
   const visibleRows = useMemo(
     () => (peopleOnly ? rows.filter((r) => isPerson(r.actor)) : rows),
@@ -112,6 +168,130 @@ export default function ActivityLogPage() {
         </Link>
       </div>
 
+      <div className="mb-4 flex rounded-md border border-gray-200 p-0.5 text-sm w-fit">
+        <button
+          type="button"
+          onClick={() => setView('activity')}
+          className={`rounded px-3 py-1.5 font-medium ${view === 'activity' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+        >
+          Daily activity
+        </button>
+        <button
+          type="button"
+          onClick={() => setView('disabled')}
+          className={`rounded px-3 py-1.5 font-medium ${view === 'disabled' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+        >
+          Disabled carriers
+        </button>
+      </div>
+
+      {view === 'disabled' ? (
+        <Card>
+          <CardHeader
+            title="Disabled carriers"
+            subtitle="Carriers disabled in Brokerware or manually marked do-not-use, by when they were disabled. Times are Pacific (PT)."
+            action={
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex rounded-md border border-gray-200 p-0.5 text-xs">
+                  {DISABLED_PRESETS.map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => applyDisabledPreset(p.key, p.days)}
+                      className={`rounded px-2.5 py-1 font-medium ${dPreset === p.key ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="w-36">
+                  <Input
+                    label="From"
+                    type="date"
+                    value={dFrom}
+                    onChange={(e) => {
+                      setDFrom(e.target.value)
+                      setDPreset('')
+                    }}
+                  />
+                </div>
+                <div className="w-36">
+                  <Input
+                    label="To"
+                    type="date"
+                    value={dTo}
+                    onChange={(e) => {
+                      setDTo(e.target.value)
+                      setDPreset('')
+                    }}
+                  />
+                </div>
+              </div>
+            }
+          />
+          <CardBody>
+            {dLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Spinner size={16} /> Loading…
+              </div>
+            ) : dRows.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No carriers were disabled in this range.
+              </p>
+            ) : (
+              <>
+                <p className="mb-3 text-xs text-gray-500">
+                  {dRows.length} carrier{dRows.length === 1 ? '' : 's'} disabled in this range.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-xs uppercase text-gray-500">
+                        <th className="py-2 pr-3 font-medium">Disabled</th>
+                        <th className="py-2 pr-3 font-medium">Carrier</th>
+                        <th className="py-2 pr-3 font-medium">Source</th>
+                        <th className="py-2 font-medium">Status / reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dRows.map((r) => (
+                        <tr
+                          key={`${r.source}-${r.dot_number}`}
+                          className="border-b border-gray-100 align-top"
+                        >
+                          <td className="whitespace-nowrap py-2 pr-3 text-xs text-gray-500">
+                            {r.disabled_at ? fmtPacific(r.disabled_at) : '—'}
+                          </td>
+                          <td className="whitespace-nowrap py-2 pr-3">
+                            {r.dot_number ? (
+                              <Link
+                                href={`/carriers/${r.dot_number}`}
+                                className="text-dts-blue hover:underline"
+                              >
+                                {r.carrier_name || `DOT ${r.dot_number}`}
+                              </Link>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Badge tone={r.source === 'manual' ? 'red' : 'amber'}>
+                              {r.source === 'manual' ? 'Do-not-use' : 'Brokerware'}
+                            </Badge>
+                          </td>
+                          <td className="py-2 text-gray-700">
+                            {r.status || r.reason || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardBody>
+        </Card>
+      ) : (
       <Card>
         <CardHeader
           title="Actions by day"
@@ -231,6 +411,7 @@ export default function ActivityLogPage() {
           )}
         </CardBody>
       </Card>
+      )}
     </div>
   )
 }

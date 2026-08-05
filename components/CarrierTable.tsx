@@ -288,6 +288,52 @@ function gapTone(gap: number | null): { tone: string; label: string } {
   return { tone: 'text-red-600', label: formatScore(gap) }
 }
 
+// Last-hauled filter buckets.
+const HAUL_PRESETS: { key: string; label: string; maxDays?: number; minDays?: number; never?: boolean }[] = [
+  { key: 'le30', label: 'Hauled in last 30 days', maxDays: 30 },
+  { key: 'le90', label: 'Hauled in last 90 days', maxDays: 90 },
+  { key: 'le180', label: 'Hauled in last 6 months', maxDays: 180 },
+  { key: 'le365', label: 'Hauled in last year', maxDays: 365 },
+  { key: 'gt365', label: 'Last hauled over a year ago', minDays: 366 },
+  { key: 'never', label: 'Never hauled (no DTS load)', never: true },
+]
+
+/** Does a carrier's last-hauled date satisfy the preset + custom from/to range? */
+function passesHaul(
+  lastHauledAt: string | null | undefined,
+  preset: string,
+  from: string,
+  to: string
+): boolean {
+  const has = !!lastHauledAt
+  const ts = has ? new Date(lastHauledAt as string).getTime() : null
+  const days =
+    ts != null ? Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1000)) : null
+
+  if (preset) {
+    const p = HAUL_PRESETS.find((x) => x.key === preset)
+    if (p) {
+      if (p.never) {
+        if (has) return false
+      } else if (days == null) {
+        return false // a date-based preset excludes never-hauled carriers
+      } else {
+        if (p.maxDays != null && days > p.maxDays) return false
+        if (p.minDays != null && days < p.minDays) return false
+      }
+    }
+  }
+  // Custom range constrains further; a never-hauled carrier fails any from/to.
+  if (from) {
+    if (ts == null || ts < new Date(from).getTime()) return false
+  }
+  if (to) {
+    // include the whole 'to' day
+    if (ts == null || ts > new Date(to).getTime() + 24 * 60 * 60 * 1000 - 1) return false
+  }
+  return true
+}
+
 // Shared column widths so the (fixed) header row and the virtualized body rows
 // line up. Fixed widths sum to ~1000px; the carrier column flexes.
 const COL = {
@@ -315,6 +361,9 @@ interface PersistedView {
   problems: string[]
   businessTypes: string[]
   missingDocs: string[]
+  haulPreset: string
+  haulFrom: string
+  haulTo: string
   scrollTop: number
 }
 
@@ -352,6 +401,10 @@ export function CarrierTable({
   const [problems, setProblems] = useState<string[]>([])
   const [businessTypes, setBusinessTypes] = useState<string[]>([])
   const [missingDocs, setMissingDocs] = useState<string[]>([])
+  // Last-hauled filter: a preset bucket plus an optional custom from/to range.
+  const [haulPreset, setHaulPreset] = useState<string>('')
+  const [haulFrom, setHaulFrom] = useState<string>('')
+  const [haulTo, setHaulTo] = useState<string>('')
   const [sortKey, setSortKey] = useState<SortKey>('gap')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
@@ -371,6 +424,9 @@ export function CarrierTable({
       setBusinessTypes(v.businessTypes.filter((x) => typeof x === 'string'))
     if (Array.isArray(v.missingDocs))
       setMissingDocs(v.missingDocs.filter((x) => typeof x === 'string'))
+    if (typeof v.haulPreset === 'string') setHaulPreset(v.haulPreset)
+    if (typeof v.haulFrom === 'string') setHaulFrom(v.haulFrom)
+    if (typeof v.haulTo === 'string') setHaulTo(v.haulTo)
     if (v.sortKey && v.sortKey in SORT_COLS) setSortKey(v.sortKey)
     if (v.sortDir === 'asc' || v.sortDir === 'desc') setSortDir(v.sortDir)
   }, [saved])
@@ -519,6 +575,11 @@ export function CarrierTable({
         return missingDocs.some((k) => missing.includes(k))
       })
     }
+    if (haulPreset || haulFrom || haulTo) {
+      rows = rows.filter((c) =>
+        passesHaul(c.last_hauled_at, haulPreset, haulFrom, haulTo)
+      )
+    }
 
     const def = SORT_COLS[sortKey]
     const dir = sortDir === 'asc' ? 1 : -1
@@ -538,7 +599,7 @@ export function CarrierTable({
     })
 
     return rows
-  }, [base, problems, businessTypes, missingDocs, sortKey, sortDir])
+  }, [base, problems, businessTypes, missingDocs, haulPreset, haulFrom, haulTo, sortKey, sortDir])
 
   // Virtualize the rows so only what's on screen is rendered — smooth scrolling
   // even with the full 700+ carrier roster.
@@ -576,6 +637,9 @@ export function CarrierTable({
           problems,
           businessTypes,
           missingDocs,
+          haulPreset,
+          haulFrom,
+          haulTo,
           scrollTop: scrollRef.current?.scrollTop ?? 0,
         })
       )
@@ -591,6 +655,9 @@ export function CarrierTable({
     problems,
     businessTypes,
     missingDocs,
+    haulPreset,
+    haulFrom,
+    haulTo,
   ])
 
   // Persist whenever a filter changes (covers navigating away via any link).
@@ -626,7 +693,10 @@ export function CarrierTable({
     revettingOnly ||
     problems.length > 0 ||
     businessTypes.length > 0 ||
-    missingDocs.length > 0
+    missingDocs.length > 0 ||
+    haulPreset !== '' ||
+    haulFrom !== '' ||
+    haulTo !== ''
 
   // Reset every filter back to the default view (sort is left untouched).
   const clearFilters = useCallback(() => {
@@ -636,6 +706,9 @@ export function CarrierTable({
     setProblems([])
     setBusinessTypes([])
     setMissingDocs([])
+    setHaulPreset('')
+    setHaulFrom('')
+    setHaulTo('')
   }, [])
 
   // Download the currently-visible rows as a CSV (opens in Excel).
@@ -742,6 +815,42 @@ export function CarrierTable({
             selected={missingDocs}
             onChange={setMissingDocs}
           />
+        </div>
+        <div className="w-48">
+          <Select
+            label="Last hauled"
+            value={haulPreset}
+            onChange={(e) => setHaulPreset(e.target.value)}
+          >
+            <option value="">Any last-hauled</option>
+            {HAUL_PRESETS.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="pb-[1px]">
+          <label className="mb-1 block text-xs font-medium text-gray-600">
+            Last hauled range
+          </label>
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              value={haulFrom}
+              onChange={(e) => setHaulFrom(e.target.value)}
+              aria-label="Last hauled from"
+              className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            />
+            <span className="text-xs text-gray-400">–</span>
+            <input
+              type="date"
+              value={haulTo}
+              onChange={(e) => setHaulTo(e.target.value)}
+              aria-label="Last hauled to"
+              className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
         </div>
         <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">
           <input

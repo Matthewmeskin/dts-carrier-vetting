@@ -73,7 +73,7 @@ export async function POST() {
     if (insErr) throw insErr
 
     const resend = new Resend(apiKey)
-    await resend.emails.send({
+    const { error: sendErr } = await resend.emails.send({
       from,
       to: email,
       subject: `Your DTS sign-in code: ${code}`,
@@ -82,6 +82,24 @@ export async function POST() {
         `<p style="font-size:22px;font-weight:bold;letter-spacing:3px">${code}</p>` +
         `<p>It expires in ${MFA_CODE_TTL_MIN} minutes. If you didn't try to sign in, ignore this email.</p>`,
     })
+
+    // Resend reports delivery problems (unverified domain, quota, bad address)
+    // in the response rather than by throwing — surface them instead of falsely
+    // telling the user a code is on the way. Drop the just-stored code so the
+    // failed attempt doesn't burn a slot against the resend rate limit.
+    if (sendErr) {
+      await db
+        .from('login_mfa_codes')
+        .update({ consumed_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .is('consumed_at', null)
+      const detail =
+        (sendErr as any)?.message || (sendErr as any)?.name || 'unknown error'
+      return NextResponse.json(
+        { error: `Email provider rejected the code (${detail}).` },
+        { status: 502 }
+      )
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {

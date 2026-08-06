@@ -13,10 +13,12 @@ export const MFA_COOKIE = 'dts_mfa'
  *  future logins for a while (signed + user-bound, like MFA_COOKIE). */
 export const MFA_TRUST_COOKIE = 'dts_mfa_trust'
 
-/** How long a trusted device stays trusted, in days (env-overridable). */
+/** How long a trusted device stays trusted, in days (env-overridable, default
+ *  90). A remembered device skips the emailed code for this long, so 2FA is
+ *  asked for roughly once a quarter per browser rather than on every re-login. */
 export function mfaTrustDays(): number {
   const raw = Number(process.env.NEXT_PUBLIC_MFA_TRUST_DAYS)
-  return Number.isFinite(raw) && raw > 0 ? raw : 30
+  return Number.isFinite(raw) && raw > 0 ? raw : 90
 }
 export function mfaTrustMs(): number {
   return mfaTrustDays() * 24 * 60 * 60 * 1000

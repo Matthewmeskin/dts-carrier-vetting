@@ -14,10 +14,12 @@ export const IDLE_COOKIE = 'dts_active'
 export const SESSION_START_COOKIE = 'dts_session_start'
 
 /** Absolute max session length in hours regardless of activity (env-overridable,
- *  default 12). After this, the user must sign in again. */
+ *  default 168 = 7 days). After this, the user must sign in again. Combined with
+ *  the idle timeout and remember-device 2FA, a week-long cap keeps day-to-day use
+ *  from constantly re-authenticating while still bounding a session's lifetime. */
 export function sessionMaxHours(): number {
   const raw = Number(process.env.NEXT_PUBLIC_SESSION_MAX_HOURS)
-  return Number.isFinite(raw) && raw > 0 ? raw : 12
+  return Number.isFinite(raw) && raw > 0 ? raw : 168
 }
 
 /** Absolute max session length in milliseconds. */
@@ -25,10 +27,13 @@ export function sessionMaxMs(): number {
   return sessionMaxHours() * 60 * 60 * 1000
 }
 
-/** Minutes of inactivity before auto-logout (env-overridable, default 30). */
+/** Minutes of inactivity before auto-logout (env-overridable, default 480 = 8h).
+ *  Long enough to survive a normal workday's gaps (lunch, meetings) so people
+ *  aren't logged out mid-day, while still auto-logging-out an unattended session
+ *  overnight. Lower it via NEXT_PUBLIC_SESSION_IDLE_MINUTES for stricter kiosks. */
 export function idleTimeoutMinutes(): number {
   const raw = Number(process.env.NEXT_PUBLIC_SESSION_IDLE_MINUTES)
-  return Number.isFinite(raw) && raw > 0 ? raw : 30
+  return Number.isFinite(raw) && raw > 0 ? raw : 480
 }
 
 /** Idle timeout in milliseconds. */

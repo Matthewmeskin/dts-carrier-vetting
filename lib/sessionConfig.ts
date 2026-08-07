@@ -27,13 +27,13 @@ export function sessionMaxMs(): number {
   return sessionMaxHours() * 60 * 60 * 1000
 }
 
-/** Minutes of inactivity before auto-logout (env-overridable, default 480 = 8h).
- *  Long enough to survive a normal workday's gaps (lunch, meetings) so people
- *  aren't logged out mid-day, while still auto-logging-out an unattended session
- *  overnight. Lower it via NEXT_PUBLIC_SESSION_IDLE_MINUTES for stricter kiosks. */
+/** Minutes of inactivity before auto-logout (env-overridable, default 30). With
+ *  2FA off, this inactivity sign-out is the primary control, so it's kept tight:
+ *  a signed-in user who walks away is logged out after 30 minutes idle. Raise it
+ *  via NEXT_PUBLIC_SESSION_IDLE_MINUTES if that's too aggressive for your team. */
 export function idleTimeoutMinutes(): number {
   const raw = Number(process.env.NEXT_PUBLIC_SESSION_IDLE_MINUTES)
-  return Number.isFinite(raw) && raw > 0 ? raw : 480
+  return Number.isFinite(raw) && raw > 0 ? raw : 30
 }
 
 /** Idle timeout in milliseconds. */

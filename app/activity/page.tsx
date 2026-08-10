@@ -82,8 +82,16 @@ function isPerson(actor: string | null): boolean {
   return !!actor && /\((Staff|Manager|Director)\)\s*$/.test(actor)
 }
 
+interface HeldRow {
+  dot_number: string
+  carrier_name: string | null
+  held_at: string
+  note: string | null
+  actor: string | null
+}
+
 export default function ActivityLogPage() {
-  const [view, setView] = useState<'activity' | 'disabled'>('activity')
+  const [view, setView] = useState<'activity' | 'disabled' | 'onhold'>('activity')
   const [date, setDate] = useState(pacificToday)
   const [actor, setActor] = useState('')
   const [peopleOnly, setPeopleOnly] = useState(false)
@@ -97,6 +105,13 @@ export default function ActivityLogPage() {
   const [dTo, setDTo] = useState(pacificToday)
   const [dRows, setDRows] = useState<DisabledRow[]>([])
   const [dLoading, setDLoading] = useState(false)
+
+  // On-hold-carriers panel state.
+  const [hPreset, setHPreset] = useState('d30')
+  const [hFrom, setHFrom] = useState(() => pacificDaysAgo(30))
+  const [hTo, setHTo] = useState(pacificToday)
+  const [hRows, setHRows] = useState<HeldRow[]>([])
+  const [hLoading, setHLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -144,6 +159,32 @@ export default function ActivityLogPage() {
     setDTo(pacificToday())
   }
 
+  const loadHeld = useCallback(async () => {
+    setHLoading(true)
+    try {
+      const qs = new URLSearchParams()
+      if (hFrom) qs.set('from', hFrom)
+      if (hTo) qs.set('to', hTo)
+      const res = await fetch(`/api/activity/on-hold?${qs.toString()}`, {
+        cache: 'no-store',
+      })
+      const data = await res.json()
+      if (res.ok) setHRows(data.carriers ?? [])
+    } finally {
+      setHLoading(false)
+    }
+  }, [hFrom, hTo])
+
+  useEffect(() => {
+    if (view === 'onhold') loadHeld()
+  }, [view, loadHeld])
+
+  function applyHeldPreset(key: string, days: number) {
+    setHPreset(key)
+    setHFrom(pacificDaysAgo(days))
+    setHTo(pacificToday())
+  }
+
   const visibleRows = useMemo(
     () => (peopleOnly ? rows.filter((r) => isPerson(r.actor)) : rows),
     [rows, peopleOnly]
@@ -182,6 +223,13 @@ export default function ActivityLogPage() {
           className={`rounded px-3 py-1.5 font-medium ${view === 'disabled' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
         >
           Disabled carriers
+        </button>
+        <button
+          type="button"
+          onClick={() => setView('onhold')}
+          className={`rounded px-3 py-1.5 font-medium ${view === 'onhold' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+        >
+          On hold
         </button>
       </div>
 
@@ -282,6 +330,104 @@ export default function ActivityLogPage() {
                           <td className="py-2 text-gray-700">
                             {r.status || r.reason || '—'}
                           </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardBody>
+        </Card>
+      ) : view === 'onhold' ? (
+        <Card>
+          <CardHeader
+            title="Carriers put on hold"
+            subtitle="Carriers placed On Hold in the portal, by when they were held. Times are Pacific (PT)."
+            action={
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex rounded-md border border-gray-200 p-0.5 text-xs">
+                  {DISABLED_PRESETS.map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => applyHeldPreset(p.key, p.days)}
+                      className={`rounded px-2.5 py-1 font-medium ${hPreset === p.key ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="w-36">
+                  <Input
+                    label="From"
+                    type="date"
+                    value={hFrom}
+                    onChange={(e) => {
+                      setHFrom(e.target.value)
+                      setHPreset('')
+                    }}
+                  />
+                </div>
+                <div className="w-36">
+                  <Input
+                    label="To"
+                    type="date"
+                    value={hTo}
+                    onChange={(e) => {
+                      setHTo(e.target.value)
+                      setHPreset('')
+                    }}
+                  />
+                </div>
+              </div>
+            }
+          />
+          <CardBody>
+            {hLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Spinner size={16} /> Loading…
+              </div>
+            ) : hRows.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No carriers were put on hold in this range.
+              </p>
+            ) : (
+              <>
+                <p className="mb-3 text-xs text-gray-500">
+                  {hRows.length} carrier{hRows.length === 1 ? '' : 's'} put on hold in this range.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-xs uppercase text-gray-500">
+                        <th className="py-2 pr-3 font-medium">Held</th>
+                        <th className="py-2 pr-3 font-medium">Carrier</th>
+                        <th className="py-2 pr-3 font-medium">By</th>
+                        <th className="py-2 font-medium">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {hRows.map((r) => (
+                        <tr
+                          key={r.dot_number}
+                          className="border-b border-gray-100 align-top"
+                        >
+                          <td className="whitespace-nowrap py-2 pr-3 text-xs text-gray-500">
+                            {fmtPacific(r.held_at)}
+                          </td>
+                          <td className="whitespace-nowrap py-2 pr-3">
+                            <Link
+                              href={`/carriers/${r.dot_number}`}
+                              className="text-dts-blue hover:underline"
+                            >
+                              {r.carrier_name || `DOT ${r.dot_number}`}
+                            </Link>
+                          </td>
+                          <td className="whitespace-nowrap py-2 pr-3 text-gray-600">
+                            {r.actor || 'system'}
+                          </td>
+                          <td className="py-2 text-gray-700">{r.note || '—'}</td>
                         </tr>
                       ))}
                     </tbody>

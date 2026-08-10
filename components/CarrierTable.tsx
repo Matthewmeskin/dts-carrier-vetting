@@ -36,6 +36,7 @@ import {
   BIZ_KEY_INDIVIDUAL,
   BIZ_KEY_INCORPORATED,
 } from '@/lib/businessType'
+import { INACTIVE_CARRIER_HOLD_NOTE } from '@/lib/statusNotes'
 
 const UNKNOWN_BIZ = 'Unknown'
 
@@ -357,8 +358,7 @@ const VIEW_KEY = 'dts.carrierTable.view.v1'
 // The last-used "put on hold" note is remembered so the canned text is one edit
 // away next time. Seeded with a neutral default the first time.
 const HOLD_NOTE_KEY = 'dts.carrierTable.holdNote.v1'
-const DEFAULT_HOLD_NOTE =
-  'Carrier inactive — placed on hold. Not actively used at this time; may be reactivated in the future. No adverse determination.'
+const DEFAULT_HOLD_NOTE = INACTIVE_CARRIER_HOLD_NOTE
 const DECLINE_NOTE_KEY = 'dts.carrierTable.declineNote.v1'
 const DEFAULT_DECLINE_NOTE = ''
 
@@ -1431,9 +1431,20 @@ export function CarrierTable({
               }
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-dts-blue focus:outline-none focus:ring-1 focus:ring-dts-blue"
             />
-            <p className="mt-1 text-[11px] text-gray-400">
-              Applies to this portal (CRM) only — the TMS is not changed.
-            </p>
+            <div className="mt-1 flex items-center justify-between">
+              <p className="text-[11px] text-gray-400">
+                Applies to this portal (CRM) only — the TMS is not changed.
+              </p>
+              {bulkMode === 'hold' && (
+                <button
+                  type="button"
+                  onClick={() => setBulkNote(INACTIVE_CARRIER_HOLD_NOTE)}
+                  className="text-[11px] font-medium text-dts-blue hover:underline"
+                >
+                  Use inactive-carrier template
+                </button>
+              )}
+            </div>
             {bulkError && (
               <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
                 {bulkError}

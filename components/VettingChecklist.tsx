@@ -21,6 +21,7 @@ import { Spinner } from './ui/Spinner'
 import { ExceptionNoteComposer } from './ExceptionNoteComposer'
 import { cn, formatDateTime } from '@/lib/utils'
 import { uploadCarrierDocument } from '@/lib/uploadDocument'
+import { INACTIVE_CARRIER_HOLD_NOTE } from '@/lib/statusNotes'
 import { REVET_INTERVAL_OPTIONS, type RevetStatus, type RevetState } from '@/lib/revet'
 import {
   APPROVING_STATUSES,
@@ -626,12 +627,25 @@ export function VettingChecklist({
                     </p>
                   )}
                   {pendingStatus === 'On Hold' && (
-                    <p className="mt-1 text-xs text-gray-600">
-                      Neutral hold — pauses re-vetting and won’t read as a
-                      decline. Put the reason in{' '}
-                      <span className="font-semibold">Internal notes</span> below,
-                      then Save. (Saving On Hold does not create a vetting record.)
-                    </p>
+                    <div className="mt-1 text-xs text-gray-600">
+                      <p>
+                        Neutral hold — pauses re-vetting and won’t read as a
+                        decline. Put the reason in{' '}
+                        <span className="font-semibold">Internal notes</span> below,
+                        then Save. (Saving On Hold does not create a vetting
+                        record.)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInternalNotes(INACTIVE_CARRIER_HOLD_NOTE)
+                          setDirty(true)
+                        }}
+                        className="mt-1 font-medium text-dts-blue hover:underline"
+                      >
+                        Use inactive-carrier template
+                      </button>
+                    </div>
                   )}
                   {blockedApproval && (
                     <p className="mt-1 text-xs text-amber-700">

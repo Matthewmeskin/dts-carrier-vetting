@@ -359,6 +359,8 @@ const VIEW_KEY = 'dts.carrierTable.view.v1'
 const HOLD_NOTE_KEY = 'dts.carrierTable.holdNote.v1'
 const DEFAULT_HOLD_NOTE =
   'Carrier inactive — placed on hold. Not actively used at this time; may be reactivated in the future. No adverse determination.'
+const DECLINE_NOTE_KEY = 'dts.carrierTable.declineNote.v1'
+const DEFAULT_DECLINE_NOTE = ''
 
 interface PersistedView {
   search: string
@@ -419,7 +421,7 @@ export function CarrierTable({
   // Bulk selection (by DOT) for mass status changes (e.g. put inactive carriers
   // On Hold). Kept separate from filters — it's an action layer, not a view.
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkMode, setBulkMode] = useState<'hold' | 'decline' | null>(null)
   const [bulkNote, setBulkNote] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkError, setBulkError] = useState<string | null>(null)
@@ -781,30 +783,37 @@ export function CarrierTable({
 
   const clearSelection = useCallback(() => setSelected(new Set()), [])
 
-  const openBulkHold = useCallback(() => {
-    let note = DEFAULT_HOLD_NOTE
+  // Open the hold or decline confirmation, seeding the note editor with the
+  // last-used text for that action (hold has a canned default; decline starts
+  // blank so a real reason is written).
+  const openBulk = useCallback((mode: 'hold' | 'decline') => {
+    const key = mode === 'hold' ? HOLD_NOTE_KEY : DECLINE_NOTE_KEY
+    let note = mode === 'hold' ? DEFAULT_HOLD_NOTE : DEFAULT_DECLINE_NOTE
     try {
-      const saved = localStorage.getItem(HOLD_NOTE_KEY)
+      const saved = localStorage.getItem(key)
       if (saved && saved.trim()) note = saved
     } catch {
       /* ignore */
     }
     setBulkNote(note)
     setBulkError(null)
-    setBulkOpen(true)
+    setBulkMode(mode)
   }, [])
 
-  // POST the selected DOTs to the bulk endpoint. `action` is 'hold' or 'unhold'.
+  // POST the selected DOTs to the bulk endpoint.
   const applyBulk = useCallback(
-    async (action: 'hold' | 'unhold') => {
+    async (action: 'hold' | 'unhold' | 'decline') => {
       const dots = Array.from(selected)
       if (dots.length === 0) return
       setBulkBusy(true)
       setBulkError(null)
       try {
-        if (action === 'hold') {
+        if (action === 'hold' || action === 'decline') {
           try {
-            localStorage.setItem(HOLD_NOTE_KEY, bulkNote)
+            localStorage.setItem(
+              action === 'hold' ? HOLD_NOTE_KEY : DECLINE_NOTE_KEY,
+              bulkNote
+            )
           } catch {
             /* ignore */
           }
@@ -815,12 +824,12 @@ export function CarrierTable({
           body: JSON.stringify({
             dots,
             action,
-            note: action === 'hold' ? bulkNote : undefined,
+            note: action === 'unhold' ? undefined : bulkNote,
           }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Bulk update failed.')
-        setBulkOpen(false)
+        setBulkMode(null)
         setSelected(new Set())
         router.refresh() // reload server data so statuses reflect the change
       } catch (e) {
@@ -1001,8 +1010,11 @@ export function CarrierTable({
           <span className="text-sm font-medium text-gray-800">
             {selectedCount} selected
           </span>
-          <Button size="sm" variant="primary" onClick={openBulkHold}>
+          <Button size="sm" variant="primary" onClick={() => openBulk('hold')}>
             Put on hold…
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => openBulk('decline')}>
+            Decline…
           </Button>
           <Button
             size="sm"
@@ -1383,25 +1395,40 @@ export function CarrierTable({
         )}
       </div>
 
-      {/* Bulk "Put on hold" confirmation + note editor. */}
-      {bulkOpen && (
+      {/* Bulk hold / decline confirmation + note editor. */}
+      {bulkMode && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
             <h3 className="text-base font-semibold text-gray-900">
-              Put {selectedCount} carrier{selectedCount === 1 ? '' : 's'} on hold
+              {bulkMode === 'hold' ? 'Put' : 'Decline'} {selectedCount} carrier
+              {selectedCount === 1 ? '' : 's'}
+              {bulkMode === 'hold' ? ' on hold' : ''}
             </h3>
             <p className="mt-1 text-sm text-gray-600">
-              Sets status to <span className="font-medium">On Hold</span> and
-              pauses re-vet reminders. The note below is saved on each carrier and
-              to the audit log.
+              {bulkMode === 'hold' ? (
+                <>
+                  Sets status to <span className="font-medium">On Hold</span> and
+                  pauses re-vet reminders. The note below is saved on each carrier
+                  and to the audit log.
+                </>
+              ) : (
+                <>
+                  Sets status to <span className="font-medium">Declined</span> — an
+                  adverse determination. The note below is saved on each carrier
+                  and to the audit log.
+                </>
+              )}
             </p>
             <label className="mt-3 block text-xs font-medium text-gray-600">
-              Note
+              {bulkMode === 'hold' ? 'Note' : 'Reason'}
             </label>
             <textarea
               value={bulkNote}
               onChange={(e) => setBulkNote(e.target.value)}
               rows={4}
+              placeholder={
+                bulkMode === 'decline' ? 'Why these carriers are being declined…' : ''
+              }
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-dts-blue focus:outline-none focus:ring-1 focus:ring-dts-blue"
             />
             <p className="mt-1 text-[11px] text-gray-400">
@@ -1416,18 +1443,22 @@ export function CarrierTable({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setBulkOpen(false)}
+                onClick={() => setBulkMode(null)}
                 disabled={bulkBusy}
               >
                 Cancel
               </Button>
               <Button
                 size="sm"
-                variant="primary"
-                onClick={() => applyBulk('hold')}
+                variant={bulkMode === 'hold' ? 'primary' : 'danger'}
+                onClick={() => applyBulk(bulkMode)}
                 disabled={bulkBusy}
               >
-                {bulkBusy ? 'Applying…' : `Put on hold`}
+                {bulkBusy
+                  ? 'Applying…'
+                  : bulkMode === 'hold'
+                    ? 'Put on hold'
+                    : 'Decline'}
               </Button>
             </div>
           </div>

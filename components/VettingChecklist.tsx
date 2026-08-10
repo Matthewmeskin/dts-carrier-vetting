@@ -627,25 +627,14 @@ export function VettingChecklist({
                     </p>
                   )}
                   {pendingStatus === 'On Hold' && (
-                    <div className="mt-1 text-xs text-gray-600">
-                      <p>
-                        Neutral hold — pauses re-vetting and won’t read as a
-                        decline. Put the reason in{' '}
-                        <span className="font-semibold">Internal notes</span> below,
-                        then Save. (Saving On Hold does not create a vetting
-                        record.)
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInternalNotes(INACTIVE_CARRIER_HOLD_NOTE)
-                          setDirty(true)
-                        }}
-                        className="mt-1 font-medium text-dts-blue hover:underline"
-                      >
-                        Use inactive-carrier template
-                      </button>
-                    </div>
+                    <p className="mt-1 text-xs text-gray-600">
+                      Neutral hold — pauses re-vetting and won’t read as a decline.
+                      Put the reason in{' '}
+                      <span className="font-semibold">Internal notes</span> below
+                      (there’s an <span className="font-semibold">Inactive-carrier
+                      template</span> button), then Save. Saving On Hold does not
+                      create a vetting record.
+                    </p>
                   )}
                   {blockedApproval && (
                     <p className="mt-1 text-xs text-amber-700">
@@ -786,16 +775,36 @@ export function VettingChecklist({
               />
             )}
 
-            <Textarea
-              label="Internal notes"
-              value={internalNotes}
-              onChange={(e) => {
-                setDirty(true)
-                setInternalNotes(e.target.value)
-              }}
-              rows={3}
-              placeholder="Internal notes about this vetting…"
-            />
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="block text-xs font-medium text-gray-600">
+                  Internal notes
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInternalNotes((prev) =>
+                      prev.trim()
+                        ? `${prev.trim()}\n${INACTIVE_CARRIER_HOLD_NOTE}`
+                        : INACTIVE_CARRIER_HOLD_NOTE
+                    )
+                    setDirty(true)
+                  }}
+                  className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  Inactive-carrier template
+                </button>
+              </div>
+              <Textarea
+                value={internalNotes}
+                onChange={(e) => {
+                  setDirty(true)
+                  setInternalNotes(e.target.value)
+                }}
+                rows={3}
+                placeholder="Internal notes about this vetting…"
+              />
+            </div>
 
             <div>
               <div className="mb-1 flex items-center justify-between text-xs text-gray-600">

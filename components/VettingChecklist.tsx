@@ -50,6 +50,10 @@ const CARRIER_STATUSES = [
   'Approved',
   'Exception Approved',
   'Declined',
+  // Neutral, reversible parking state for inactive carriers we may use again —
+  // not a vetting decision. Saving it writes the status directly (see save()),
+  // it does not create a vetting record.
+  'On Hold',
 ]
 
 // "Approved" is only offered when the carrier clears every baseline
@@ -426,6 +430,33 @@ export function VettingChecklist({
   async function save() {
     setSaving(true)
     setMessage(null)
+
+    // "On Hold" is a neutral status change, not a vetting decision — write it
+    // straight to the status route (note comes from Internal notes) and skip the
+    // whole vetting-record flow (no reviewer/approver/checklist required).
+    if (pendingStatus === 'On Hold') {
+      try {
+        const res = await fetch(`/api/carriers/${dot}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            carrier_status: 'On Hold',
+            status_note: internalNotes.trim() || null,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Could not put the carrier on hold.')
+        setDirty(false)
+        setMessage('Carrier placed on hold.')
+        await onSaved?.()
+      } catch (e) {
+        setMessage(e instanceof Error ? e.message : 'Could not put the carrier on hold.')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
     try {
       const res = await fetch('/api/vetting', {
         method: 'POST',
@@ -592,6 +623,14 @@ export function VettingChecklist({
                       Use <span className="font-semibold">Exception Approved</span>{' '}
                       (with a documented, scoped exception) or{' '}
                       <span className="font-semibold">Declined</span>.
+                    </p>
+                  )}
+                  {pendingStatus === 'On Hold' && (
+                    <p className="mt-1 text-xs text-gray-600">
+                      Neutral hold — pauses re-vetting and won’t read as a
+                      decline. Put the reason in{' '}
+                      <span className="font-semibold">Internal notes</span> below,
+                      then Save. (Saving On Hold does not create a vetting record.)
                     </p>
                   )}
                   {blockedApproval && (
@@ -906,9 +945,11 @@ export function VettingChecklist({
                 {saving ? <Spinner size={14} className="text-white" /> : null}
                 {saving
                   ? 'Saving…'
-                  : dirty
-                    ? 'Save changes'
-                    : 'Save vetting record'}
+                  : pendingStatus === 'On Hold'
+                    ? 'Put on hold'
+                    : dirty
+                      ? 'Save changes'
+                      : 'Save vetting record'}
               </Button>
               {dirty && !saving && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
@@ -949,11 +990,17 @@ export function VettingChecklist({
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2 text-sm font-medium text-amber-800">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-            You have unsaved changes to this vetting record.
+            {pendingStatus === 'On Hold'
+              ? 'Unsaved: this carrier will be put on hold.'
+              : 'You have unsaved changes to this vetting record.'}
           </span>
           <Button onClick={save} disabled={saving}>
             {saving ? <Spinner size={14} className="text-white" /> : null}
-            {saving ? 'Saving…' : 'Save vetting record'}
+            {saving
+              ? 'Saving…'
+              : pendingStatus === 'On Hold'
+                ? 'Put on hold'
+                : 'Save vetting record'}
           </Button>
         </div>
       </div>

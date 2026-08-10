@@ -1391,10 +1391,9 @@ export function CarrierTable({
               Put {selectedCount} carrier{selectedCount === 1 ? '' : 's'} on hold
             </h3>
             <p className="mt-1 text-sm text-gray-600">
-              Sets status to <span className="font-medium">On Hold</span> (a
-              neutral, reversible state — not a decline) and pauses re-vet
-              reminders. The note below is saved on each carrier and to the audit
-              log.
+              Sets status to <span className="font-medium">On Hold</span> and
+              pauses re-vet reminders. The note below is saved on each carrier and
+              to the audit log.
             </p>
             <label className="mt-3 block text-xs font-medium text-gray-600">
               Note

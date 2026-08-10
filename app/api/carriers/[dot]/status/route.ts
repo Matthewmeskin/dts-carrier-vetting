@@ -21,6 +21,7 @@ const ALLOWED_STATUSES = [
   'Exception Approved',
   'Declined',
   'Pending Review',
+  'On Hold',
 ]
 
 export async function PATCH(
@@ -34,6 +35,7 @@ export async function PATCH(
       carrier_status,
       do_not_use,
       do_not_use_reason,
+      status_note,
       revet_interval_days,
       is_intrastate,
       revet_due_override,
@@ -121,6 +123,7 @@ export async function PATCH(
     if (carrier_status !== undefined) updates.carrier_status = carrier_status
     if (do_not_use !== undefined) updates.do_not_use = do_not_use
     if (do_not_use_reason !== undefined) updates.do_not_use_reason = do_not_use_reason
+    if (status_note !== undefined) (updates as any).status_note = status_note || null
     if (revet_interval_days !== undefined)
       updates.revet_interval_days = revet_interval_days
     if (is_intrastate !== undefined) (updates as any).is_intrastate = !!is_intrastate

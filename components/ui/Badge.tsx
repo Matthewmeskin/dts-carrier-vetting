@@ -49,6 +49,10 @@ export function carrierStatusTone(status?: string | null): BadgeTone {
       return 'blue'
     case 'Pending Review':
       return 'amber'
+    case 'On Hold':
+      // Neutral/inactive — deliberately NOT red. A held carrier isn't declined,
+      // it's parked and may be reactivated.
+      return 'gray'
     case 'Declined':
     case 'Suspended':
     case 'Do Not Use':

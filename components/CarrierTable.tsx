@@ -189,13 +189,14 @@ type StatusFilter =
   | 'HardStop'
   | 'NotInRmis'
   | 'DoNotUse'
+  | 'OnHold'
   | 'Disabled'
 
 // Valid status values, used to validate a persisted view before applying it so
 // a stale/corrupt saved value can never put the filter into a bad state.
 const STATUS_VALUES = new Set<StatusFilter>([
   'BrokerwareActive', 'All', 'Active', 'Approved', 'NeedsReview',
-  'DueForRevet', 'HardStop', 'NotInRmis', 'DoNotUse', 'Disabled',
+  'DueForRevet', 'HardStop', 'NotInRmis', 'DoNotUse', 'OnHold', 'Disabled',
 ])
 
 function isBrokerwareActive(status: string | null | undefined): boolean {
@@ -337,6 +338,7 @@ function passesHaul(
 // Shared column widths so the (fixed) header row and the virtualized body rows
 // line up. Fixed widths sum to ~1000px; the carrier column flexes.
 const COL = {
+  select: 'w-8 shrink-0 pr-1',
   carrier: 'min-w-[180px] flex-1 pr-3',
   dot: 'w-24 shrink-0 pr-2',
   gap: 'w-16 shrink-0 pr-2 text-right',
@@ -351,6 +353,12 @@ const COL = {
 // Persisted list view (filters + scroll) so returning from a carrier detail
 // page lands the user back exactly where they were instead of resetting.
 const VIEW_KEY = 'dts.carrierTable.view.v1'
+
+// The last-used "put on hold" note is remembered so the canned text is one edit
+// away next time. Seeded with a neutral default the first time.
+const HOLD_NOTE_KEY = 'dts.carrierTable.holdNote.v1'
+const DEFAULT_HOLD_NOTE =
+  'Carrier inactive — placed on hold. Not actively used at this time; may be reactivated in the future. No adverse determination.'
 
 interface PersistedView {
   search: string
@@ -407,6 +415,14 @@ export function CarrierTable({
   const [haulTo, setHaulTo] = useState<string>('')
   const [sortKey, setSortKey] = useState<SortKey>('gap')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  // Bulk selection (by DOT) for mass status changes (e.g. put inactive carriers
+  // On Hold). Kept separate from filters — it's an action layer, not a view.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkNote, setBulkNote] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkError, setBulkError] = useState<string | null>(null)
 
   // Apply the persisted view once, right after mount (before paint), so filters
   // and sort are restored without a visible flash — but crucially not during the
@@ -471,6 +487,7 @@ export function CarrierTable({
       if (
         status !== 'All' &&
         status !== 'Disabled' &&
+        status !== 'OnHold' &&
         hasBrokerwareData &&
         !isBrokerwareActive(c.brokerware_status)
       ) {
@@ -521,6 +538,8 @@ export function CarrierTable({
             c.carrier_status === 'Do Not Use' ||
             c.carrier_status === 'Suspended'
           )
+        case 'OnHold':
+          return c.carrier_status === 'On Hold'
         default:
           return true
       }
@@ -727,6 +746,92 @@ export function CarrierTable({
     URL.revokeObjectURL(url)
   }, [filtered])
 
+  // ── Bulk selection ────────────────────────────────────────────────────────
+  const selectedCount = selected.size
+  // Are all currently-filtered rows selected? (drives the header checkbox)
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((c) => selected.has(c.dot_number))
+  const someFilteredSelected =
+    !allFilteredSelected && filtered.some((c) => selected.has(c.dot_number))
+
+  const toggleOne = useCallback((dot: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(dot)) next.delete(dot)
+      else next.add(dot)
+      return next
+    })
+  }, [])
+
+  // Select-all toggles every row in the *current filtered view* (not the whole
+  // roster) — the intended workflow is "filter to the inactive ones, select all".
+  const toggleAllFiltered = useCallback(() => {
+    setSelected((prev) => {
+      const everySelected =
+        filtered.length > 0 && filtered.every((c) => prev.has(c.dot_number))
+      const next = new Set(prev)
+      if (everySelected) {
+        for (const c of filtered) next.delete(c.dot_number)
+      } else {
+        for (const c of filtered) next.add(c.dot_number)
+      }
+      return next
+    })
+  }, [filtered])
+
+  const clearSelection = useCallback(() => setSelected(new Set()), [])
+
+  const openBulkHold = useCallback(() => {
+    let note = DEFAULT_HOLD_NOTE
+    try {
+      const saved = localStorage.getItem(HOLD_NOTE_KEY)
+      if (saved && saved.trim()) note = saved
+    } catch {
+      /* ignore */
+    }
+    setBulkNote(note)
+    setBulkError(null)
+    setBulkOpen(true)
+  }, [])
+
+  // POST the selected DOTs to the bulk endpoint. `action` is 'hold' or 'unhold'.
+  const applyBulk = useCallback(
+    async (action: 'hold' | 'unhold') => {
+      const dots = Array.from(selected)
+      if (dots.length === 0) return
+      setBulkBusy(true)
+      setBulkError(null)
+      try {
+        if (action === 'hold') {
+          try {
+            localStorage.setItem(HOLD_NOTE_KEY, bulkNote)
+          } catch {
+            /* ignore */
+          }
+        }
+        const res = await fetch('/api/carriers/bulk-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dots,
+            action,
+            note: action === 'hold' ? bulkNote : undefined,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Bulk update failed.')
+        setBulkOpen(false)
+        setSelected(new Set())
+        router.refresh() // reload server data so statuses reflect the change
+      } catch (e) {
+        setBulkError(e instanceof Error ? e.message : 'Bulk update failed.')
+      } finally {
+        setBulkBusy(false)
+      }
+    },
+    [selected, bulkNote, router]
+  )
+
   const th = (
     col: SortKey,
     label: string,
@@ -786,6 +891,7 @@ export function CarrierTable({
             <option value="HardStop">Hard Stop</option>
             <option value="NotInRmis">Not in RMIS</option>
             <option value="DoNotUse">Declined / Do Not Use</option>
+            <option value="OnHold">On Hold</option>
             <option value="Disabled">Inactive / Disabled (Brokerware)</option>
           </Select>
         </div>
@@ -889,11 +995,65 @@ export function CarrierTable({
         </div>
       </div>
 
+      {/* Bulk action bar — appears once one or more carriers are selected. */}
+      {selectedCount > 0 && (
+        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-dts-blue/20 bg-dts-blue/5 px-5 py-2.5">
+          <span className="text-sm font-medium text-gray-800">
+            {selectedCount} selected
+          </span>
+          <Button size="sm" variant="primary" onClick={openBulkHold}>
+            Put on hold…
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Take ${selectedCount} carrier(s) off hold? They'll move to Pending Review.`
+                )
+              )
+                void applyBulk('unhold')
+            }}
+            disabled={bulkBusy}
+          >
+            Take off hold
+          </Button>
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="text-sm text-gray-500 hover:underline"
+          >
+            Clear selection
+          </button>
+          <span className="ml-auto text-xs text-gray-500">
+            Updates this portal (CRM) only — not the TMS.
+          </span>
+        </div>
+      )}
+
       {/* Desktop / tablet: full wide table (horizontal scroll if needed) */}
       <div className="hidden overflow-x-auto md:block">
         <div className="min-w-[1180px]">
           {/* Header row */}
           <div className="flex items-center border-b border-gray-100 px-5 py-2 text-xs font-semibold text-gray-500">
+            <div className={COL.select}>
+              <input
+                type="checkbox"
+                aria-label="Select all filtered carriers"
+                title={
+                  allFilteredSelected
+                    ? 'Clear selection'
+                    : `Select all ${filtered.length} shown`
+                }
+                checked={allFilteredSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someFilteredSelected
+                }}
+                onChange={toggleAllFiltered}
+                className="h-4 w-4 rounded border-gray-300 text-dts-blue focus:ring-dts-blue"
+              />
+            </div>
             {th('carrier', 'Carrier', COL.carrier)}
             {th('dot', 'DOT', COL.dot)}
             {th('gap', 'GAP', COL.gap, true)}
@@ -933,9 +1093,21 @@ export function CarrierTable({
                       data-index={vi.index}
                       ref={rowVirtualizer.measureElement}
                       onClick={() => openCarrier(c.dot_number)}
-                      className="absolute left-0 top-0 flex w-full cursor-pointer items-start border-b border-gray-100 px-5 py-3 text-sm hover:bg-gray-50"
+                      className={cn(
+                        'absolute left-0 top-0 flex w-full cursor-pointer items-start border-b border-gray-100 px-5 py-3 text-sm hover:bg-gray-50',
+                        selected.has(c.dot_number) && 'bg-dts-blue/5'
+                      )}
                       style={{ transform: `translateY(${vi.start}px)` }}
                     >
+                      <div className={cn(COL.select, 'pt-0.5')} onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${c.legal_name ?? c.dot_number}`}
+                          checked={selected.has(c.dot_number)}
+                          onChange={() => toggleOne(c.dot_number)}
+                          className="h-4 w-4 rounded border-gray-300 text-dts-blue focus:ring-dts-blue"
+                        />
+                      </div>
                       <div className={COL.carrier}>
                         <Link
                           href={`/carriers/${c.dot_number}`}
@@ -1101,10 +1273,25 @@ export function CarrierTable({
                     role="button"
                     tabIndex={0}
                     onClick={() => openCarrier(c.dot_number)}
-                    className="block w-full cursor-pointer border-b border-gray-100 px-4 py-3 text-left active:bg-gray-50"
+                    className={cn(
+                      'block w-full cursor-pointer border-b border-gray-100 px-4 py-3 text-left active:bg-gray-50',
+                      selected.has(c.dot_number) && 'bg-dts-blue/5'
+                    )}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <div
+                        className="shrink-0 pt-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${c.legal_name ?? c.dot_number}`}
+                          checked={selected.has(c.dot_number)}
+                          onChange={() => toggleOne(c.dot_number)}
+                          className="h-4 w-4 rounded border-gray-300 text-dts-blue focus:ring-dts-blue"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
                         <div className="truncate font-medium text-gray-900">
                           {c.legal_name ?? `DOT ${c.dot_number}`}
                         </div>
@@ -1195,6 +1382,58 @@ export function CarrierTable({
           </div>
         )}
       </div>
+
+      {/* Bulk "Put on hold" confirmation + note editor. */}
+      {bulkOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+            <h3 className="text-base font-semibold text-gray-900">
+              Put {selectedCount} carrier{selectedCount === 1 ? '' : 's'} on hold
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Sets status to <span className="font-medium">On Hold</span> (a
+              neutral, reversible state — not a decline) and pauses re-vet
+              reminders. The note below is saved on each carrier and to the audit
+              log.
+            </p>
+            <label className="mt-3 block text-xs font-medium text-gray-600">
+              Note
+            </label>
+            <textarea
+              value={bulkNote}
+              onChange={(e) => setBulkNote(e.target.value)}
+              rows={4}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-dts-blue focus:outline-none focus:ring-1 focus:ring-dts-blue"
+            />
+            <p className="mt-1 text-[11px] text-gray-400">
+              Applies to this portal (CRM) only — the TMS is not changed.
+            </p>
+            {bulkError && (
+              <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {bulkError}
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setBulkOpen(false)}
+                disabled={bulkBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => applyBulk('hold')}
+                disabled={bulkBusy}
+              >
+                {bulkBusy ? 'Applying…' : `Put on hold`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }

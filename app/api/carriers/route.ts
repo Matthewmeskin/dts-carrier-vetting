@@ -194,7 +194,8 @@ export async function GET(request: NextRequest) {
         // stored score flag is stale. (Grants clear the flag; this makes the
         // list robust regardless.) The scheduled re-vet clock still applies.
         requires_revetting:
-          c.carrier_status === 'Exception Approved'
+          c.carrier_status === 'Exception Approved' ||
+          c.carrier_status === 'On Hold'
             ? false
             : s?.requires_revetting ?? null,
         flagged_scores: s?.flagged_scores ?? null,

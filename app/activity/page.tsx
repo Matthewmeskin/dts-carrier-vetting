@@ -90,8 +90,18 @@ interface HeldRow {
   actor: string | null
 }
 
+interface DeclinedRow {
+  dot_number: string
+  carrier_name: string | null
+  declined_at: string
+  note: string | null
+  actor: string | null
+}
+
 export default function ActivityLogPage() {
-  const [view, setView] = useState<'activity' | 'disabled' | 'onhold'>('activity')
+  const [view, setView] = useState<
+    'activity' | 'disabled' | 'onhold' | 'declined'
+  >('activity')
   const [date, setDate] = useState(pacificToday)
   const [actor, setActor] = useState('')
   const [peopleOnly, setPeopleOnly] = useState(false)
@@ -112,6 +122,13 @@ export default function ActivityLogPage() {
   const [hTo, setHTo] = useState(pacificToday)
   const [hRows, setHRows] = useState<HeldRow[]>([])
   const [hLoading, setHLoading] = useState(false)
+
+  // Declined-carriers panel state.
+  const [xPreset, setXPreset] = useState('d30')
+  const [xFrom, setXFrom] = useState(() => pacificDaysAgo(30))
+  const [xTo, setXTo] = useState(pacificToday)
+  const [xRows, setXRows] = useState<DeclinedRow[]>([])
+  const [xLoading, setXLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -185,6 +202,32 @@ export default function ActivityLogPage() {
     setHTo(pacificToday())
   }
 
+  const loadDeclined = useCallback(async () => {
+    setXLoading(true)
+    try {
+      const qs = new URLSearchParams()
+      if (xFrom) qs.set('from', xFrom)
+      if (xTo) qs.set('to', xTo)
+      const res = await fetch(`/api/activity/declined?${qs.toString()}`, {
+        cache: 'no-store',
+      })
+      const data = await res.json()
+      if (res.ok) setXRows(data.carriers ?? [])
+    } finally {
+      setXLoading(false)
+    }
+  }, [xFrom, xTo])
+
+  useEffect(() => {
+    if (view === 'declined') loadDeclined()
+  }, [view, loadDeclined])
+
+  function applyDeclinedPreset(key: string, days: number) {
+    setXPreset(key)
+    setXFrom(pacificDaysAgo(days))
+    setXTo(pacificToday())
+  }
+
   const visibleRows = useMemo(
     () => (peopleOnly ? rows.filter((r) => isPerson(r.actor)) : rows),
     [rows, peopleOnly]
@@ -230,6 +273,13 @@ export default function ActivityLogPage() {
           className={`rounded px-3 py-1.5 font-medium ${view === 'onhold' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
         >
           On hold
+        </button>
+        <button
+          type="button"
+          onClick={() => setView('declined')}
+          className={`rounded px-3 py-1.5 font-medium ${view === 'declined' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+        >
+          Declined
         </button>
       </div>
 
@@ -415,6 +465,104 @@ export default function ActivityLogPage() {
                         >
                           <td className="whitespace-nowrap py-2 pr-3 text-xs text-gray-500">
                             {fmtPacific(r.held_at)}
+                          </td>
+                          <td className="whitespace-nowrap py-2 pr-3">
+                            <Link
+                              href={`/carriers/${r.dot_number}`}
+                              className="text-dts-blue hover:underline"
+                            >
+                              {r.carrier_name || `DOT ${r.dot_number}`}
+                            </Link>
+                          </td>
+                          <td className="whitespace-nowrap py-2 pr-3 text-gray-600">
+                            {r.actor || 'system'}
+                          </td>
+                          <td className="py-2 text-gray-700">{r.note || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardBody>
+        </Card>
+      ) : view === 'declined' ? (
+        <Card>
+          <CardHeader
+            title="Declined carriers"
+            subtitle="Carriers marked Declined in the portal, by when they were declined. Times are Pacific (PT)."
+            action={
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex rounded-md border border-gray-200 p-0.5 text-xs">
+                  {DISABLED_PRESETS.map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => applyDeclinedPreset(p.key, p.days)}
+                      className={`rounded px-2.5 py-1 font-medium ${xPreset === p.key ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="w-36">
+                  <Input
+                    label="From"
+                    type="date"
+                    value={xFrom}
+                    onChange={(e) => {
+                      setXFrom(e.target.value)
+                      setXPreset('')
+                    }}
+                  />
+                </div>
+                <div className="w-36">
+                  <Input
+                    label="To"
+                    type="date"
+                    value={xTo}
+                    onChange={(e) => {
+                      setXTo(e.target.value)
+                      setXPreset('')
+                    }}
+                  />
+                </div>
+              </div>
+            }
+          />
+          <CardBody>
+            {xLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Spinner size={16} /> Loading…
+              </div>
+            ) : xRows.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No carriers were declined in this range.
+              </p>
+            ) : (
+              <>
+                <p className="mb-3 text-xs text-gray-500">
+                  {xRows.length} carrier{xRows.length === 1 ? '' : 's'} declined in this range.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-xs uppercase text-gray-500">
+                        <th className="py-2 pr-3 font-medium">Declined</th>
+                        <th className="py-2 pr-3 font-medium">Carrier</th>
+                        <th className="py-2 pr-3 font-medium">By</th>
+                        <th className="py-2 font-medium">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {xRows.map((r) => (
+                        <tr
+                          key={r.dot_number}
+                          className="border-b border-gray-100 align-top"
+                        >
+                          <td className="whitespace-nowrap py-2 pr-3 text-xs text-gray-500">
+                            {fmtPacific(r.declined_at)}
                           </td>
                           <td className="whitespace-nowrap py-2 pr-3">
                             <Link

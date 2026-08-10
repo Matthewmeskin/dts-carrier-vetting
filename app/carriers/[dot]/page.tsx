@@ -212,6 +212,19 @@ export default function CarrierDetailPage({
                 )}
                 {carrier.do_not_use && <Badge tone="red">Do Not Use</Badge>}
               </div>
+              {(carrier as any).status_note &&
+                (carrier.carrier_status === 'On Hold' ||
+                  carrier.carrier_status === 'Declined') && (
+                  <p className="mt-1.5 max-w-2xl text-sm text-gray-600">
+                    <span className="font-medium text-gray-700">
+                      {carrier.carrier_status === 'On Hold'
+                        ? 'On hold'
+                        : 'Declined'}
+                      :
+                    </span>{' '}
+                    {(carrier as any).status_note}
+                  </p>
+                )}
               {carrier.dba_name &&
                 carrier.dba_name !== carrier.legal_name && (
                   <p className="text-sm text-gray-500">dba {carrier.dba_name}</p>

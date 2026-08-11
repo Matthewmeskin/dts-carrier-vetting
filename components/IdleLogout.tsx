@@ -65,10 +65,14 @@ export function IdleLogout() {
     window.location.href = '/login?timeout=1'
   }, [])
 
+  // IMPORTANT: bump must be STABLE (empty deps). If it depended on `warnLeft`,
+  // every countdown tick would recreate it, which would re-run the timer effect
+  // below and re-seed lastActivity — resetting the idle clock so it never reaches
+  // the timeout. Use a functional setWarnLeft so we don't need warnLeft here.
   const bump = useCallback(() => {
     const now = Date.now()
     lastActivity.current = now
-    if (warnLeft !== null) setWarnLeft(null)
+    setWarnLeft((w) => (w === null ? w : null))
     // Throttle cross-tab + cookie writes to at most once every 5s.
     if (now - cookieWrittenAt.current > 5000) {
       cookieWrittenAt.current = now
@@ -79,7 +83,7 @@ export function IdleLogout() {
         /* ignore */
       }
     }
-  }, [warnLeft])
+  }, [])
 
   useEffect(() => {
     if (!enabled) return
@@ -118,8 +122,11 @@ export function IdleLogout() {
         void doLogout()
       } else if (idle >= idleMs - warnMs) {
         setWarnLeft(Math.max(0, Math.ceil((idleMs - idle) / 1000)))
-      } else if (warnLeft !== null) {
-        setWarnLeft(null)
+      } else {
+        // Below the warning window — clear any lingering countdown. Functional
+        // update so this effect doesn't need `warnLeft` (which would make it
+        // re-run every tick and reset the idle clock).
+        setWarnLeft((w) => (w === null ? w : null))
       }
     }, 1000)
 

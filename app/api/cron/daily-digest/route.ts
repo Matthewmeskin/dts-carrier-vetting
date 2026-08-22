@@ -59,6 +59,9 @@ export async function POST(request: Request) {
     // Per-carrier accumulator.
     type Bucket = { hardStops: Set<string>; reviews: Set<string> }
     const byDot = new Map<string, Bucket>()
+    // Carriers whose hard stop(s) fully cleared (insurance restored) — the cleared
+    // items, keyed by DOT.
+    const resolvedByDot = new Map<string, Set<string>>()
     const replies: { dot: string; note: string }[] = []
     // Monthly Bluewire uploads flag a large batch for re-vet — that's the re-vet
     // queue, not per-carrier alerts. Summarize as a count instead of listing each.
@@ -92,6 +95,7 @@ export async function POST(request: Request) {
       .gt('created_at', since)
       .in('event_type', [
         'hard_stop',
+        'hard_stop_resolved',
         'eld_flag',
         'score_flag',
         'insurance_change',
@@ -105,6 +109,15 @@ export async function POST(request: Request) {
           e.summary,
         ]
         stops.forEach((s) => bucket(dot).hardStops.add(s))
+      } else if (e.event_type === 'hard_stop_resolved') {
+        const cleared: string[] =
+          (e.detail?.resolved as string[])?.filter(Boolean) ?? [e.summary]
+        let set = resolvedByDot.get(dot)
+        if (!set) {
+          set = new Set()
+          resolvedByDot.set(dot, set)
+        }
+        cleared.forEach((s) => set!.add(s))
       } else if (e.event_type === 'insurance_refresh_response') {
         // Only surface replies that still need us to chase the COI.
         if (e.detail?.classification === 'coi_not_received') {
@@ -123,6 +136,7 @@ export async function POST(request: Request) {
     const allDots = Array.from(
       new Set([
         ...Array.from(byDot.keys()),
+        ...Array.from(resolvedByDot.keys()),
         ...replies.map((r) => r.dot),
         ...Array.from(scoreFlaggedDots),
       ])
@@ -154,6 +168,20 @@ export async function POST(request: Request) {
         reviews.push({ ...base, hardStops: [], reviews: Array.from(b.reviews) })
       }
     }
+    // Resolved carriers already passed the active-carrier + all-cleared filter at
+    // detection; still drop any now disabled, for consistency.
+    const resolved: DigestCarrier[] = []
+    for (const [dot, cleared] of Array.from(resolvedByDot.entries())) {
+      if (disabled(dot) || cleared.size === 0) continue
+      resolved.push({
+        dotNumber: dot,
+        legalName: nameOf(dot),
+        mcNumber: mcOf(dot),
+        hardStops: Array.from(cleared),
+        reviews: [],
+      })
+    }
+
     const replyList: DigestReply[] = replies
       .filter((r) => !disabled(r.dot))
       .map((r) => ({
@@ -166,8 +194,20 @@ export async function POST(request: Request) {
       (dot) => !disabled(dot)
     ).length
     const itemCount =
-      hardStops.length + reviews.length + replyList.length + (scoreFlagged > 0 ? 1 : 0)
-    const payload = { since, until, hardStops, reviews, replies: replyList, scoreFlagged }
+      hardStops.length +
+      resolved.length +
+      reviews.length +
+      replyList.length +
+      (scoreFlagged > 0 ? 1 : 0)
+    const payload = {
+      since,
+      until,
+      hardStops,
+      resolved,
+      reviews,
+      replies: replyList,
+      scoreFlagged,
+    }
 
     if (dryRun) {
       return NextResponse.json({
@@ -177,6 +217,7 @@ export async function POST(request: Request) {
         itemCount,
         scoreFlagged,
         hardStops,
+        resolved,
         reviews,
         replies: replyList,
       })
@@ -208,6 +249,7 @@ export async function POST(request: Request) {
       until,
       sent: true,
       hardStops: hardStops.length,
+      resolved: resolved.length,
       reviews: reviews.length,
       replies: replyList.length,
       scoreFlagged,

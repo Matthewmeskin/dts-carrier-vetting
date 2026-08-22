@@ -206,96 +206,6 @@ export async function sendComplianceAlert(carriers: FlaggedCarrier[], batchLabel
   await resend.emails.send({ from: FROM, to: TO, subject, html })
 }
 
-// ── Hard-stop resolved ───────────────────────────────────────────────────────
-// The good-news counterpart to sendComplianceAlert: a carrier that previously
-// had a hard stop (typically expired/missing insurance) now clears it after a
-// fresh RMIS pull (e.g. the updated COI came in). Notifies the compliance inbox
-// so the carrier can be put back into rotation.
-
-export interface ResolvedHardStopCarrier {
-  dotNumber: string
-  legalName: string
-  mcNumber?: string | null
-  /** The hard stop(s) that cleared since the previous pull. */
-  resolved: string[]
-  nowCertified?: boolean | null
-  autoStatus?: string | null
-  cargoStatus?: string | null
-}
-
-export async function sendHardStopResolved(
-  carriers: ResolvedHardStopCarrier[]
-): Promise<{ sent: boolean; error?: string }> {
-  try {
-    if (carriers.length === 0) return { sent: true }
-    const apiKey = process.env.RESEND_API_KEY
-    const from = process.env.ALERT_EMAIL_FROM
-    const to = (process.env.ALERT_EMAIL_TO ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    if (!apiKey || !from || to.length === 0) {
-      return { sent: false, error: 'Email not configured (RESEND_API_KEY / ALERT_EMAIL_FROM / ALERT_EMAIL_TO)' }
-    }
-    const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ''
-    const resend = new Resend(apiKey)
-    const esc = (s: string) =>
-      String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const link = (dot: string) =>
-      APP_URL ? `<a href="${APP_URL}/carriers/${esc(dot)}" style="color:#0063A0;">View</a>` : ''
-
-    const rows = carriers
-      .map((c) => {
-        const mc = c.mcNumber ? String(c.mcNumber).replace(/\D/g, '') : ''
-        const cov = [
-          c.autoStatus ? `Auto: ${esc(c.autoStatus)}` : '',
-          c.cargoStatus ? `Cargo: ${esc(c.cargoStatus)}` : '',
-        ]
-          .filter(Boolean)
-          .join(' · ')
-        return `
-      <tr>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
-          <div style="font-weight:600;">${esc(c.legalName)}</div>
-          <div style="color:#6b7280;font-size:12px;">DOT ${esc(c.dotNumber)}${mc ? ` · MC ${esc(mc)}` : ''}</div>
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:#047857;">
-          Cleared: ${c.resolved.map((i) => esc(i)).join('<br/>')}
-          ${c.nowCertified ? '<br/><span style="font-weight:600;">Now RMIS certified</span>' : ''}
-          ${cov ? `<br/><span style="color:#6b7280;">${cov}</span>` : ''}
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(c.dotNumber)}</td>
-      </tr>`
-      })
-      .join('')
-
-    const n = carriers.length
-    const subject = `✅ DTS — ${n} carrier hard stop${n === 1 ? '' : 's'} resolved (insurance restored)`
-    const html = `
-    <div style="font-family:sans-serif;max-width:900px;margin:0 auto;">
-      <div style="background:#047857;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
-        <h1 style="margin:0;font-size:20px;">Hard Stop Resolved</h1>
-        <p style="margin:4px 0 0;opacity:0.9;font-size:14px;">${n} carrier${n === 1 ? '' : 's'} cleared a prior hard stop after a fresh RMIS pull.</p>
-      </div>
-      <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
-        <table style="width:100%;border-collapse:collapse;margin-top:12px;">
-          <thead><tr style="background:#f9fafb;">
-            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
-            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Resolved</th>
-            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>`
-
-    await resend.emails.send({ from, to, subject, html })
-    return { sent: true }
-  } catch (e) {
-    return { sent: false, error: e instanceof Error ? e.message : 'send failed' }
-  }
-}
-
 // ── Expired-insurance report ─────────────────────────────────────────────────
 // A proactive full list of active carriers whose auto/cargo insurance is
 // CURRENTLY expired (not just newly-detected). Complements the delta-based daily
@@ -395,6 +305,9 @@ export interface DailyDigestPayload {
   since: string
   until: string
   hardStops: DigestCarrier[]
+  /** Active carriers whose hard stop(s) fully cleared (insurance restored). The
+   *  cleared items are carried in each entry's `hardStops` field. */
+  resolved?: DigestCarrier[]
   reviews: DigestCarrier[]
   replies: DigestReply[]
   /** Count of carriers flagged for re-vet by a score upload (summarized, not listed). */
@@ -434,6 +347,7 @@ export async function sendDailyDigest(
     const rv = payload.reviews.length
     const rp = payload.replies.length
     const sf = payload.scoreFlagged ?? 0
+    const rs = payload.resolved?.length ?? 0
     const dateLabel = new Date(payload.until).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -514,6 +428,7 @@ export async function sendDailyDigest(
       </div>
       <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
         ${section(`Hard Stops — Do Not Use Until Resolved (${hs})`, '#dc2626', carrierRows(payload.hardStops, '#dc2626', (c) => c.hardStops))}
+        ${section(`Hard Stops Resolved — Insurance Restored (${rs})`, '#047857', carrierRows(payload.resolved ?? [], '#047857', (c) => c.hardStops))}
         ${section(`Requires Review (${rv})`, '#d97706', carrierRows(payload.reviews, '#b45309', (c) => c.reviews))}
         ${scoreFlagSummary}
         ${replyRows ? `
@@ -526,7 +441,7 @@ export async function sendDailyDigest(
             </tr></thead>
             <tbody>${replyRows}</tbody>
           </table>` : ''}
-        ${hs + rv + rp + sf === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
+        ${hs + rv + rp + sf + rs === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
         <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;">
           <a href="${APP_URL}/carriers"
              style="background:#0063A0;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;font-size:14px;">

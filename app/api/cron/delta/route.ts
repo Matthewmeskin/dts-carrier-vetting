@@ -9,11 +9,8 @@ import {
 } from '@/lib/rmisClient'
 import { parseRMISXML } from '@/lib/rmisParser'
 import { evaluateRMIS, isExpiringCoverageStatus } from '@/lib/rmisEvaluator'
-import {
-  sendInsuranceRefreshRequest,
-  sendHardStopResolved,
-  type ResolvedHardStopCarrier,
-} from '@/lib/emailAlerts'
+import { sendInsuranceRefreshRequest } from '@/lib/emailAlerts'
+import { isBrokerwareActive } from '@/lib/revet'
 import { logCarrierEvent } from '@/lib/auditLog'
 import { buildInsuranceRow } from '@/app/api/carriers/[dot]/insurance/route'
 import { archiveCarrierDocuments } from '@/lib/rmisArchive'
@@ -97,10 +94,6 @@ export async function POST(request: Request) {
     let cleared = 0
     let failed = 0
     const hardStopCarriers: HardStopCarrier[] = []
-    // Carriers whose prior hard stop(s) cleared on this run (e.g. the updated
-    // insurance cert came in) — notified at the end so it's the good-news
-    // counterpart to the hard-stop alert.
-    const resolvedCarriers: ResolvedHardStopCarrier[] = []
 
     for (const insdID of insdIDs) {
       // Timestamp used to clear this InsdID from the delta queue. Prefer the
@@ -174,25 +167,23 @@ export async function POST(request: Request) {
 
           // Resolution: hard stop(s) present on the previous pull that are gone
           // now (the fresh RMIS record cleared them — typically the updated COI
-          // arrived). Notify + log the transition once.
+          // arrived). Only surface it when it clears EVERY hard stop AND the
+          // carrier is active in Brokerware — a partial fix, or a fix on a
+          // carrier we aren't using, isn't actionable. Recorded as an event; the
+          // daily digest batches it into the same email as new hard stops.
           const newHardKeys = new Set(evaluation.hardStops.map(flagKey))
           const resolvedHardStops: string[] = Array.isArray(prev?.hard_stops)
             ? prev.hard_stops.filter((h: string) => !newHardKeys.has(flagKey(h)))
             : []
-          if (resolvedHardStops.length > 0) {
-            resolvedCarriers.push({
-              dotNumber: parsed.dotNumber,
-              legalName: (carrier as any).legal_name ?? parsed.legalName,
-              mcNumber: (carrier as any).mc_number ?? null,
-              resolved: resolvedHardStops,
-              nowCertified: parsed.rmisIsCertified ?? null,
-              autoStatus: parsed.autoStatus ?? null,
-              cargoStatus: parsed.cargoStatus ?? null,
-            })
+          if (
+            resolvedHardStops.length > 0 &&
+            evaluation.hardStops.length === 0 &&
+            isBrokerwareActive((carrier as any).brokerware_status)
+          ) {
             await logCarrierEvent({
               dot: parsed.dotNumber,
               carrierId: (carrier as any).id ?? null,
-              type: 'insurance_change',
+              type: 'hard_stop_resolved',
               summary: `Hard stop resolved: ${resolvedHardStops.join('; ')}${parsed.rmisIsCertified ? ' (RMIS certified)' : ''}`.slice(0, 300),
               detail: { resolved: resolvedHardStops, certified: parsed.rmisIsCertified, source: 'delta' },
               actor: 'system (RMIS delta)',
@@ -336,22 +327,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Notify when prior hard stops cleared this run (updated insurance in).
-    if (resolvedCarriers.length > 0) {
-      try {
-        await sendHardStopResolved(resolvedCarriers)
-      } catch (resolveErr) {
-        console.error('Hard-stop-resolved email failed:', resolveErr)
-      }
-    }
-
     return NextResponse.json({
       queueTotal,
       fetched: insdIDs.length,
       cleared,
       failed,
       hardStopsDetected: hardStopCarriers.length,
-      hardStopsResolved: resolvedCarriers.length,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

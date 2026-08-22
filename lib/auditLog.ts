@@ -13,6 +13,7 @@ export type CarrierEventType =
   | 'sos_check'
   | 'noa_check'
   | 'insurance_change'
+  | 'hard_stop_resolved'
   | 'insurance_refresh_request'
   | 'insurance_refresh_response'
   | 'hard_stop'

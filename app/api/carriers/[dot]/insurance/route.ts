@@ -4,7 +4,7 @@ import { fetchExpandedCarrierXML, fetchNonMonitoredCarrier } from '@/lib/rmisCli
 import { parseRMISXML, ParsedRMISData } from '@/lib/rmisParser'
 import { evaluateRMIS, RMISEvaluation } from '@/lib/rmisEvaluator'
 import { logCarrierEvent } from '@/lib/auditLog'
-import { sendHardStopResolved } from '@/lib/emailAlerts'
+import { isBrokerwareActive } from '@/lib/revet'
 import { archiveCarrierDocuments } from '@/lib/rmisArchive'
 import { fetchFmcsaCarrier, fmcsaConfigured } from '@/lib/fmcsaClient'
 import { TablesInsert, TablesUpdate } from '@/lib/database.types'
@@ -379,7 +379,9 @@ export async function GET(
     }
 
     // Resolution: hard stop(s) present before this refresh that are gone now
-    // (the updated insurance cert came in) — notify + log the transition.
+    // (the updated insurance cert came in). Only record it when it clears EVERY
+    // hard stop AND the carrier is active in Brokerware — the daily digest
+    // batches these into the same email as new hard stops.
     if (prevHadHardStops) {
       const norm = (s: string) =>
         s.toLowerCase().replace(/[0-9]+/g, '#').replace(/[^a-z#]+/g, ' ').replace(/\s+/g, ' ').trim()
@@ -387,30 +389,19 @@ export async function GET(
       const resolvedHardStops: string[] = (prev?.hard_stops ?? []).filter(
         (h: string) => !nowKeys.has(norm(h))
       )
-      if (resolvedHardStops.length > 0) {
+      if (
+        resolvedHardStops.length > 0 &&
+        evaluation.hardStops.length === 0 &&
+        isBrokerwareActive((carrier as any).brokerware_status)
+      ) {
         await logCarrierEvent({
           dot,
           carrierId: (carrier as any).id ?? null,
-          type: 'insurance_change',
+          type: 'hard_stop_resolved',
           summary: `Hard stop resolved on manual RMIS refresh: ${resolvedHardStops.join('; ')}${parsed.rmisIsCertified ? ' (RMIS certified)' : ''}`.slice(0, 300),
           detail: { resolved: resolvedHardStops, certified: parsed.rmisIsCertified, source: 'manual_refresh' },
           actor: 'system (manual RMIS refresh)',
         })
-        try {
-          await sendHardStopResolved([
-            {
-              dotNumber: dot,
-              legalName: (carrier as any).legal_name ?? parsed.legalName ?? dot,
-              mcNumber: (carrier as any).mc_number ?? null,
-              resolved: resolvedHardStops,
-              nowCertified: parsed.rmisIsCertified ?? null,
-              autoStatus: parsed.autoStatus ?? null,
-              cargoStatus: parsed.cargoStatus ?? null,
-            },
-          ])
-        } catch {
-          /* notification is best-effort */
-        }
       }
     }
 

@@ -168,16 +168,40 @@ export async function POST(request: Request) {
         reviews.push({ ...base, hardStops: [], reviews: Array.from(b.reviews) })
       }
     }
-    // Resolved carriers already passed the active-carrier + all-cleared filter at
-    // detection; still drop any now disabled, for consistency.
+    // Resolved carriers passed the active + all-cleared filter WHEN THE EVENT
+    // FIRED — but coverage can flap (No-Current-Info ↔ Valid) between pulls, so a
+    // carrier that cleared earlier in the window may be hard-stopped again now.
+    // Only show a resolution if the carrier is STILL clear: no current hard stops
+    // AND not in this digest's hard-stop list. Otherwise it's not resolved.
+    const resolvedDots = Array.from(resolvedByDot.keys())
+    const currentHardCount = new Map<string, number>()
+    if (resolvedDots.length > 0) {
+      const { data: insRows } = await (supabaseAdmin as any)
+        .from('carrier_insurance')
+        .select('dot_number, hard_stops, updated_at')
+        .in('dot_number', resolvedDots)
+        .order('updated_at', { ascending: false })
+      for (const r of insRows ?? []) {
+        const d = String(r.dot_number)
+        // First row per dot is its latest (ordered desc).
+        if (!currentHardCount.has(d)) {
+          currentHardCount.set(d, (r.hard_stops ?? []).filter(Boolean).length)
+        }
+      }
+    }
+    const hardStopDots = new Set(hardStops.map((c) => c.dotNumber))
     const resolved: DigestCarrier[] = []
     for (const [dot, cleared] of Array.from(resolvedByDot.entries())) {
       if (disabled(dot) || cleared.size === 0) continue
+      // Still hard-stopped now (flapped back) → not a resolution.
+      if ((currentHardCount.get(dot) ?? 0) > 0 || hardStopDots.has(dot)) continue
       resolved.push({
         dotNumber: dot,
         legalName: nameOf(dot),
         mcNumber: mcOf(dot),
-        hardStops: Array.from(cleared),
+        // Frame each item as cleared so a green "must be Valid" line doesn't read
+        // like an open problem.
+        hardStops: Array.from(cleared).map((s) => `Cleared: ${s}`),
         reviews: [],
       })
     }

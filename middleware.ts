@@ -52,8 +52,9 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   const isLogin = path === '/login'
-  // The OAuth callback must run without a session (it's what creates one).
-  const isAuthFlow = path.startsWith('/auth')
+  // The OAuth callback must run without a session (it's what creates one), and
+  // the SSO exchange from the AP payables portal likewise runs pre-session.
+  const isAuthFlow = path.startsWith('/auth') || path === '/api/auth/sso'
 
   if (!user && !isLogin && !isAuthFlow) {
     const redirect = request.nextUrl.clone()

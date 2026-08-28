@@ -55,6 +55,9 @@ export async function middleware(request: NextRequest) {
   // The OAuth callback must run without a session (it's what creates one), and
   // the SSO exchange from the AP payables portal likewise runs pre-session.
   const isAuthFlow = path.startsWith('/auth') || path === '/api/auth/sso'
+  // Where an account without this portal lands. Exempt from the gates below,
+  // or a denied user would bounce between here, /mfa and /login forever.
+  const isNoAccess = path === '/no-access'
 
   if (!user && !isLogin && !isAuthFlow) {
     const redirect = request.nextUrl.clone()
@@ -67,6 +70,36 @@ export async function middleware(request: NextRequest) {
     home.pathname = '/carriers'
     home.search = ''
     return NextResponse.redirect(home)
+  }
+
+  // Per-app access. One login spans the DTS portals, so an account can exist
+  // for payables or Exemplis without this one; access is granted per app on
+  // the Operations Users page and stored as profiles.role, where 'none' means
+  // this portal is closed. Deliberately fail-open: only an explicit 'none'
+  // denies, so a read error or a missing row behaves exactly as before.
+  if (user && !isLogin && !isAuthFlow) {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+    const denied = prof?.role === 'none'
+    if (denied && path.startsWith('/api')) {
+      return NextResponse.json({ error: 'No access to this portal' }, { status: 403 })
+    }
+    if (denied && !isNoAccess) {
+      const redirect = request.nextUrl.clone()
+      redirect.pathname = '/no-access'
+      redirect.search = ''
+      return NextResponse.redirect(redirect)
+    }
+    if (denied && isNoAccess) return response
+    if (!denied && isNoAccess) {
+      const home = request.nextUrl.clone()
+      home.pathname = '/carriers'
+      home.search = ''
+      return NextResponse.redirect(home)
+    }
   }
 
   // Idle backstop: the client refreshes the `dts_active` cookie on activity. If

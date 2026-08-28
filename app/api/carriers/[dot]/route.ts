@@ -114,10 +114,26 @@ export async function GET(
       new Set((allDocs ?? []).map((d: any) => d.document_type).filter(Boolean))
     )
 
+    // Never send the full W-9 tax id (EIN/SSN) to the browser — nothing in the
+    // UI displays it; only a "has EIN" signal and the last 4 are needed. Strip
+    // the raw value and expose just those, so the PII isn't shipped over the wire.
+    const insuranceOut = insurance
+      ? (() => {
+          const { w9_tax_id, ...rest } = insurance as any
+          const digits = String(w9_tax_id ?? '').replace(/\D/g, '')
+          return {
+            ...rest,
+            w9_tax_id: null,
+            w9_has_ein: digits.length >= 9,
+            w9_tax_id_last4: digits ? digits.slice(-4) : null,
+          }
+        })()
+      : null
+
     return NextResponse.json({
       carrier,
       scores,
-      insurance,
+      insurance: insuranceOut,
       vettingRecords: recordsWithDocs,
       deltaLog,
       sos,

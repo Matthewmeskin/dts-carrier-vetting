@@ -120,7 +120,11 @@ export interface InsuranceRecord {
   broker_carrier_agreement_date: string | null
   broker_carrier_agreement_title: string | null
   w9_on_file: boolean | null
+  // Full tax id is never sent to the client (redacted server-side); these carry
+  // only what the UI needs.
   w9_tax_id: string | null
+  w9_has_ein?: boolean | null
+  w9_tax_id_last4?: string | null
   w9_business_name: string | null
   w9_company_type: string | null
   is_factoring: boolean | null

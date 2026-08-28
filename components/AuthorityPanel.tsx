@@ -168,7 +168,8 @@ export function AuthorityPanel({
   const bizRisk = businessTypeRisk({
     companyType: insurance.w9_company_type,
     legalName: tmsName ?? rmisLegal,
-    w9TaxId: insurance.w9_tax_id,
+    // Full tax id is no longer sent to the client; use the server-derived flag.
+    hasEin: insurance.w9_has_ein ?? undefined,
   })
   const bizWarnings = [bizRisk.preferBusiness, bizRisk.missingEin].filter(
     Boolean

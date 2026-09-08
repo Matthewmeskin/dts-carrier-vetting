@@ -78,7 +78,11 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
   const W = 760
   const H = 320
   const padL = 34
-  const padR = 12
+  // Right gutter must clear BOTH the newest point's value label (drawn at
+  // cx + 5, up to "100.25" at font-size 8) and the right half of its month
+  // label ("Sep 2026", centered on the point). Too small and the latest
+  // upload's numbers get clipped by the viewBox.
+  const padR = 46
   const padT = 10
   const padB = 26
   const innerW = W - padL - padR

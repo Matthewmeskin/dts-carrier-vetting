@@ -51,6 +51,9 @@ function InteractiveStreetView({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [failed, setFailed] = useState(false)
+  // The static image 403s when the key isn't enabled for the Street View Static
+  // API — a broken <img> would just show its alt text, so surface a real message.
+  const [imgBroken, setImgBroken] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -88,6 +91,28 @@ function InteractiveStreetView({
     }
   }, [address])
 
+  if (failed && imgBroken) {
+    return (
+      <div className="flex h-64 w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-gray-300 bg-gray-50 px-4 text-center">
+        <p className="text-sm font-medium text-gray-700">Street View isn’t available inline yet</p>
+        <p className="max-w-sm text-xs text-gray-500">
+          The satellite map is working, but Street View needs the{' '}
+          <span className="font-medium">Maps JavaScript</span>,{' '}
+          <span className="font-medium">Geocoding</span> and{' '}
+          <span className="font-medium">Street View Static</span> APIs enabled for this Maps
+          key in Google Cloud. Until then, open it in Maps:
+        </p>
+        <a
+          href={mapsLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 rounded-md bg-dts-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-[#00547f]"
+        >
+          Open Street View ↗
+        </a>
+      </div>
+    )
+  }
   if (failed) {
     return (
       <a href={mapsLink} target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
@@ -97,6 +122,7 @@ function InteractiveStreetView({
           alt="Street View of the FMCSA address"
           className="h-64 w-full rounded-md border border-gray-200 object-cover"
           loading="lazy"
+          onError={() => setImgBroken(true)}
         />
       </a>
     )

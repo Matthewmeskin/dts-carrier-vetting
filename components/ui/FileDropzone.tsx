@@ -28,6 +28,9 @@ export interface FileDropzoneProps {
   disabled?: boolean
   /** Short note on what's allowed, e.g. "PDF, JPG or PNG". */
   hint?: string
+  /** Single-line variant sized to sit beside inputs in a form row. Shows the
+   *  chosen file inline instead of a list below. */
+  compact?: boolean
   className?: string
 }
 
@@ -52,7 +55,7 @@ function fmtSize(bytes: number): string {
 
 export const FileDropzone = forwardRef<HTMLInputElement, FileDropzoneProps>(
   function FileDropzone(
-    { files, onChange, multiple = false, accept, disabled = false, hint, className },
+    { files, onChange, multiple = false, accept, disabled = false, hint, compact = false, className },
     ref
   ) {
     const id = useId()
@@ -103,6 +106,94 @@ export const FileDropzone = forwardRef<HTMLInputElement, FileDropzoneProps>(
     }
 
     const remove = (i: number) => onChange(files.filter((_, idx) => idx !== i))
+
+    if (compact) {
+      const has = files.length > 0
+      const summary =
+        files.length === 1 ? files[0].name : `${files.length} files selected`
+      return (
+        <div className={className}>
+          <label
+            htmlFor={id}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onDragEnter={onDragOver}
+            onDragLeave={onDragLeave}
+            title={has ? summary : 'Drag & drop, or click to browse'}
+            className={cn(
+              // Matches the height of <Input> (px-3 py-2 text-sm + border).
+              'flex min-h-[38px] w-full cursor-pointer items-center gap-2 rounded-md border-2 border-dashed px-3 py-1 text-sm transition-colors',
+              over
+                ? 'border-dts-blue bg-blue-50'
+                : has
+                  ? 'border-gray-300 bg-white'
+                  : 'border-gray-300 bg-gray-50 hover:border-dts-blue/60 hover:bg-blue-50/40',
+              disabled && 'cursor-not-allowed opacity-60'
+            )}
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.75}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={cn('h-4 w-4 shrink-0', over ? 'text-dts-blue' : 'text-gray-400')}
+            >
+              <path d="M12 16V4" />
+              <path d="m7 9 5-5 5 5" />
+              <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
+            </svg>
+            {has ? (
+              <>
+                <span className="min-w-0 flex-1 truncate text-gray-800">{summary}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    onChange([])
+                  }}
+                  disabled={disabled}
+                  aria-label="Remove file"
+                  title="Remove"
+                  className="shrink-0 rounded px-1 text-base leading-none text-gray-400 hover:bg-gray-100 hover:text-red-600"
+                >
+                  ×
+                </button>
+              </>
+            ) : (
+              <span className="min-w-0 truncate text-gray-600">
+                {over ? (
+                  'Drop to attach'
+                ) : (
+                  <>
+                    Drag &amp; drop or{' '}
+                    <span className="font-medium text-dts-blue underline">browse</span>
+                    {hint ? <span className="text-gray-400"> · {hint}</span> : null}
+                  </>
+                )}
+              </span>
+            )}
+            <input
+              id={id}
+              ref={setRefs}
+              type="file"
+              multiple={multiple}
+              accept={accept}
+              disabled={disabled}
+              onChange={onInput}
+              className="sr-only"
+            />
+          </label>
+          {skipped > 0 && (
+            <p className="mt-1 text-xs text-amber-700">
+              {skipped} file{skipped === 1 ? '' : 's'} skipped — unsupported type.
+            </p>
+          )}
+        </div>
+      )
+    }
 
     return (
       <div className={className}>

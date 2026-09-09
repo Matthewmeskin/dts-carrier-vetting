@@ -111,6 +111,7 @@ export function DocumentUploader({
                 ref={fileRef}
                 files={file ? [file] : []}
                 onChange={(fs) => setFile(fs[0] ?? null)}
+                compact
                 hint="PDF or image"
               />
             </div>

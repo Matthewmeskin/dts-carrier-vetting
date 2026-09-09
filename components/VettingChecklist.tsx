@@ -756,6 +756,7 @@ export function VettingChecklist({
                   </label>
                   <FileDropzone
                     ref={fileRef}
+                    compact
                     files={attachFile ? [attachFile] : []}
                     onChange={(fs) => setAttachFile(fs[0] ?? null)}
                     hint="PDF or image"

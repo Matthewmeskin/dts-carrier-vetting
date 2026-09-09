@@ -1,5 +1,7 @@
 'use client'
 
+import { FileDropzone } from '@/components/ui/FileDropzone'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Button } from './ui/Button'
@@ -291,24 +293,14 @@ export function PaymentVetting({ dot }: { dot: string }) {
               Invoice, BOL, rate con, POD, NOA — attach as many as you have
             </span>
           </label>
-          <input
+          <FileDropzone
             ref={fileInput}
-            type="file"
+            files={files}
+            onChange={setFiles}
             multiple
             accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff"
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-            className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-dts-blue file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
+            hint="PDF, JPG, PNG or TIFF"
           />
-          {files.length > 0 && (
-            <ul className="mt-2 space-y-1 text-xs text-gray-600">
-              {files.map((f, i) => (
-                <li key={i} className="flex items-center gap-1.5">
-                  <span className="text-gray-400">•</span>
-                  <span className="truncate">{f.name}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-4">

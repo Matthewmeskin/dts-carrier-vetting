@@ -1,5 +1,7 @@
 'use client'
 
+import { FileDropzone } from '@/components/ui/FileDropzone'
+
 import { useRef, useState } from 'react'
 import { VettingDocumentRecord } from '@/lib/types'
 import { Card, CardHeader, CardBody } from './ui/Card'
@@ -101,15 +103,15 @@ export function DocumentUploader({
                 placeholder="Your name"
               />
             </div>
-            <div className="w-64">
+            <div className="w-80">
               <label className="mb-1 block text-xs font-medium text-gray-600">
                 File
               </label>
-              <input
+              <FileDropzone
                 ref={fileRef}
-                type="file"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-dts-blue file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
+                files={file ? [file] : []}
+                onChange={(fs) => setFile(fs[0] ?? null)}
+                hint="PDF or image"
               />
             </div>
             <Button onClick={upload} disabled={!file || uploading}>

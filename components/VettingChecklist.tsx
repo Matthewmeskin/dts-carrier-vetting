@@ -1,5 +1,7 @@
 'use client'
 
+import { FileDropzone } from '@/components/ui/FileDropzone'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { InsuranceRecord, ScoreRecord, SosRecord, VettingRecord } from '@/lib/types'
 import {
@@ -752,11 +754,11 @@ export function VettingChecklist({
                   <label className="mb-1 block text-xs font-medium text-gray-600">
                     File
                   </label>
-                  <input
+                  <FileDropzone
                     ref={fileRef}
-                    type="file"
-                    onChange={(e) => setAttachFile(e.target.files?.[0] ?? null)}
-                    className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-dts-blue file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
+                    files={attachFile ? [attachFile] : []}
+                    onChange={(fs) => setAttachFile(fs[0] ?? null)}
+                    hint="PDF or image"
                   />
                 </div>
               </div>

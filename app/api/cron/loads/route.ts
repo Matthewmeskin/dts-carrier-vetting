@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { parseCarrierAndFactor } from '@/lib/carrierName'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -97,6 +98,18 @@ function normalizeMc(mc: string | null | undefined): string {
   return (mc ?? '').replace(/\D/g, '')
 }
 
+/** Carrier name reduced to a comparable key: Brokerware suffixes like "(*)",
+ *  "(#)" or "(*A) CA Only" and the "/Factor" tail are dropped, then case and
+ *  punctuation are ignored, so "EDI Express, Inc." matches "EDI EXPRESS INC". */
+function nameKey(name: string | null | undefined): string {
+  if (!name) return ''
+  const base = parseCarrierAndFactor(name).carrierName.replace(/\([^)]*\)/g, ' ')
+  return base
+    .toLowerCase()
+    .replace(/\b(inc|llc|ltd|corp|corporation|co|company)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, '')
+}
+
 /** Best available "hauled on" date for a load — delivery preferred (completed),
  *  then pickup, then created. */
 function loadDate(load: LoadObj): string | null {
@@ -127,85 +140,108 @@ export async function POST(request: Request) {
       )
     }
 
-    // 1. Aggregate the latest pickup date per MC number from this batch.
+    // 1. Aggregate the latest haul date per MC number from this batch, and
+    //    separately per carrier NAME for loads whose primary carrier has no MC
+    //    in Brokerware (some LTL / rail / warehouse carriers are set up without
+    //    one). Those used to be skipped entirely, so their "last hauled" never
+    //    moved no matter how many loads they ran.
     const latestByMc = new Map<string, string>()
+    const latestByName = new Map<string, string>()
     let loadsWithoutMc = 0
     for (const load of loads) {
       const carriers = load.carriers ?? []
       const primary =
         carriers.find((c) => c.isPrimary === true) ?? carriers[0] ?? null
-      const mc = normalizeMc(primary?.carrierMCNumber)
       const iso = loadDate(load)
-      if (!mc || !iso) {
-        if (!mc) loadsWithoutMc++
+      if (!iso) continue
+      const mc = normalizeMc(primary?.carrierMCNumber)
+      if (mc) {
+        const prev = latestByMc.get(mc)
+        if (!prev || iso > prev) latestByMc.set(mc, iso)
         continue
       }
-      const prev = latestByMc.get(mc)
-      if (!prev || iso > prev) latestByMc.set(mc, iso)
+      loadsWithoutMc++
+      const key = nameKey(primary?.carrierName)
+      if (!key) continue
+      const prev = latestByName.get(key)
+      if (!prev || iso > prev) latestByName.set(key, iso)
     }
 
-    if (latestByMc.size === 0) {
+    if (latestByMc.size === 0 && latestByName.size === 0) {
       return NextResponse.json({
         loadsReceived: loads.length,
         loadsWithoutMc,
         mcMatched: 0,
+        nameMatched: 0,
         carriersUpdated: 0,
       })
     }
 
-    // 2. Page through carriers that have an MC and build a digits-only index.
-    //    (mc_number formatting varies, so we normalize both sides in memory.)
-    const carrierByMc = new Map<
-      string,
-      { id: string; last: string | null }[]
-    >()
+    // 2. Page through carriers and build two indexes: digits-only MC (formatting
+    //    varies, so both sides are normalized in memory) and name key, from the
+    //    raw Brokerware name plus legal / DBA names.
+    type Entry = { id: string; last: string | null }
+    const carrierByMc = new Map<string, Entry[]>()
+    const carrierByName = new Map<string, Entry[]>()
+    const add = (map: Map<string, Entry[]>, key: string, entry: Entry) => {
+      if (!key) return
+      const list = map.get(key)
+      if (!list) map.set(key, [entry])
+      else if (!list.some((e) => e.id === entry.id)) list.push(entry)
+    }
     const PAGE = 1000
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabaseAdmin
         .from('carriers')
-        .select('id, mc_number, last_hauled_at')
-        .not('mc_number', 'is', null)
+        .select('id, mc_number, last_hauled_at, brokerware_raw_name, legal_name, dba_name')
         .range(from, from + PAGE - 1)
       if (error) throw error
       const rows = data ?? []
       for (const r of rows as any[]) {
-        const mc = normalizeMc(r.mc_number)
-        if (!mc) continue
-        const entry = { id: r.id as string, last: (r.last_hauled_at as string) ?? null }
-        const list = carrierByMc.get(mc)
-        if (list) list.push(entry)
-        else carrierByMc.set(mc, [entry])
+        const entry: Entry = { id: r.id as string, last: (r.last_hauled_at as string) ?? null }
+        add(carrierByMc, normalizeMc(r.mc_number), entry)
+        add(carrierByName, nameKey(r.brokerware_raw_name), entry)
+        add(carrierByName, nameKey(r.legal_name), entry)
+        add(carrierByName, nameKey(r.dba_name), entry)
       }
       if (rows.length < PAGE) break
     }
 
     // 3. Collect forward-only updates (only when the batch date is newer).
-    const updates: { id: string; last_hauled_at: string }[] = []
-    let mcMatched = 0
-    for (const [mc, iso] of Array.from(latestByMc.entries())) {
-      const carriers = carrierByMc.get(mc)
-      if (!carriers || carriers.length === 0) continue
-      mcMatched++
+    const updates = new Map<string, string>()
+    const consider = (carriers: Entry[] | undefined, iso: string): boolean => {
+      if (!carriers || carriers.length === 0) return false
       for (const c of carriers) {
         if (!c.last || iso > c.last) {
-          updates.push({ id: c.id, last_hauled_at: iso })
+          const prev = updates.get(c.id)
+          if (!prev || iso > prev) updates.set(c.id, iso)
         }
       }
+      return true
+    }
+    let mcMatched = 0
+    for (const [mc, iso] of Array.from(latestByMc.entries())) {
+      if (consider(carrierByMc.get(mc), iso)) mcMatched++
+    }
+    let nameMatched = 0
+    for (const [key, iso] of Array.from(latestByName.entries())) {
+      if (consider(carrierByName.get(key), iso)) nameMatched++
     }
 
     // 4. Apply updates with a small concurrency cap.
     let carriersUpdated = 0
     const CONCURRENCY = 20
-    for (let i = 0; i < updates.length; i += CONCURRENCY) {
-      const slice = updates.slice(i, i + CONCURRENCY)
+    const updateList = Array.from(updates.entries())
+    for (let i = 0; i < updateList.length; i += CONCURRENCY) {
+      const slice = updateList.slice(i, i + CONCURRENCY)
       await Promise.all(
-        slice.map(async (u) => {
+        slice.map(async ([id, last_hauled_at]) => {
           const { error } = await supabaseAdmin
             .from('carriers')
-            .update({ last_hauled_at: u.last_hauled_at } as any)
-            .eq('id', u.id)
+            .update({ last_hauled_at } as any)
+            .eq('id', id)
           if (!error) carriersUpdated++
-          else console.error(`last_hauled_at update failed for ${u.id}:`, error)
+          else console.error(`last_hauled_at update failed for ${id}:`, error)
         })
       )
     }
@@ -235,6 +271,8 @@ export async function POST(request: Request) {
       loadsWithoutMc,
       distinctMc: latestByMc.size,
       mcMatched,
+      distinctNames: latestByName.size,
+      nameMatched,
       carriersUpdated,
       loadsStored,
     })

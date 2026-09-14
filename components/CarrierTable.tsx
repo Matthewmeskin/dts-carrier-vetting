@@ -20,7 +20,7 @@ import {
   carrierStatusTone,
   coverageStatusTone,
 } from './ui/Badge'
-import { cn, formatDate, formatScore } from '@/lib/utils'
+import { cn, formatDate, formatScore, hyperionCarrierUrl } from '@/lib/utils'
 import {
   computeHaulActivity,
   computeRevetStatus,
@@ -1187,6 +1187,18 @@ export function CarrierTable({
                             MC {mcDigits(c.mc_number)}
                           </a>
                         )}
+                        {hyperionCarrierUrl(c.brokerware_carrier_id) && (
+                          <a
+                            href={hyperionCarrierUrl(c.brokerware_carrier_id)!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            title="Open carrier profile in Hyperion (Brokerware)"
+                            className="block whitespace-nowrap text-xs text-dts-blue hover:underline"
+                          >
+                            Hyperion ↗
+                          </a>
+                        )}
                       </div>
                       <div className={cn(COL.gap, 'text-base font-bold', g.tone)}>
                         {g.label}
@@ -1365,6 +1377,17 @@ export function CarrierTable({
                             className="mt-0.5 inline-block text-xs text-dts-blue hover:underline"
                           >
                             MC {mcDigits(c.mc_number)} · SAFER
+                          </a>
+                        )}
+                        {hyperionCarrierUrl(c.brokerware_carrier_id) && (
+                          <a
+                            href={hyperionCarrierUrl(c.brokerware_carrier_id)!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="ml-3 mt-0.5 inline-block text-xs text-dts-blue hover:underline"
+                          >
+                            Hyperion ↗
                           </a>
                         )}
                       </div>

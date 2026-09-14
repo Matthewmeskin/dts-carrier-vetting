@@ -31,6 +31,7 @@ export interface CarrierSummary {
   revet_interval_days: number | null
   created_at: string | null
   brokerware_status: string | null
+  brokerware_carrier_id: number | null
   business_type: string | null
   eld_enrolled: boolean | null
   w9_on_file: boolean | null

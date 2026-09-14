@@ -39,6 +39,7 @@ interface CarrierSummary {
   revet_interval_days: number | null
   created_at: string | null
   brokerware_status: string | null
+  brokerware_carrier_id: number | null
   business_type: string | null
   eld_enrolled: boolean | null
   w9_on_file: boolean | null
@@ -226,6 +227,7 @@ export async function GET(request: NextRequest) {
         revet_interval_days: c.revet_interval_days ?? null,
         created_at: c.created_at ?? null,
         brokerware_status: c.brokerware_status ?? null,
+        brokerware_carrier_id: c.brokerware_carrier_id ?? null,
         business_type: ins?.w9_company_type ?? null,
         eld_enrolled: ins?.rmis_eld_enrolled ?? null,
         // On file when RMIS has it OR a copy was uploaded to the portal. No

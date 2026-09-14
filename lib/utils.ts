@@ -78,3 +78,10 @@ export function formatPhone(value: string | null | undefined): string {
   }
   return value
 }
+
+/** Deep link to a carrier's profile in Hyperion (Brokerware), keyed by the
+ *  TMS carrier id the nightly sync stores on the carrier row. */
+export function hyperionCarrierUrl(brokerwareCarrierId: number | null | undefined): string | null {
+  if (brokerwareCarrierId == null || !Number.isFinite(Number(brokerwareCarrierId))) return null
+  return `https://hyperion.dtsone.com/pages/carriermanagement/carrierprofile/${brokerwareCarrierId}`
+}

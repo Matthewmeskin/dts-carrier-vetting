@@ -22,6 +22,7 @@ import {
 } from './ui/Badge'
 import { cn, formatDate, formatScore } from '@/lib/utils'
 import {
+  computeHaulActivity,
   computeRevetStatus,
   isBrokerwareDisabled,
   type RevetState,
@@ -101,7 +102,7 @@ function buildCarrierCsv(rows: CarrierSummary[]): string {
     'Carrier', 'DBA', 'DOT', 'MC', 'City', 'State', 'GAP', 'Flagged Scores',
     'Hard Stops', 'Auto Status', 'Auto Expiration', 'Cargo Status',
     'Cargo Expiration', 'RMIS', 'ELD Enrolled', 'Brokerware Status',
-    'Vetting Status', 'Last Reviewed', 'Re-vet',
+    'Vetting Status', 'Last Reviewed', 'Last Hauled', 'Re-vet',
   ]
   const lines = [headers.join(',')]
   for (const c of rows) {
@@ -130,6 +131,7 @@ function buildCarrierCsv(rows: CarrierSummary[]): string {
       disabled ? c.brokerware_status ?? 'Disabled' : c.brokerware_status ?? '',
       c.carrier_status ?? '',
       c.last_reviewed ? formatDate(c.last_reviewed) : '',
+      c.last_hauled_at ? formatDate(c.last_hauled_at) : '',
       disabled ? 'Not required' : rv.label,
     ].map(csvCell).join(','))
   }
@@ -213,6 +215,7 @@ type SortKey =
   | 'rmis'
   | 'status'
   | 'reviewed'
+  | 'hauled'
   | 'revet'
 type SortDir = 'asc' | 'desc'
 
@@ -268,6 +271,11 @@ const SORT_COLS: Record<SortKey, SortColDef> = {
     type: 'num',
     defaultDir: 'desc',
   },
+  hauled: {
+    getValue: (c) => (c.last_hauled_at ? Date.parse(c.last_hauled_at) : null),
+    type: 'num',
+    defaultDir: 'desc',
+  },
   revet: {
     getValue: (c) => {
       const r = computeRevetStatus(
@@ -280,6 +288,29 @@ const SORT_COLS: Record<SortKey, SortColDef> = {
     type: 'num',
     defaultDir: 'asc',
   },
+}
+
+/** Last-hauled date with a relative hint: red once past the dormancy
+ *  threshold, grey when there is no DTS load on record, and a "booked ahead"
+ *  note when the newest load hasn't picked up yet. */
+function LastHauledCell({ lastHauledAt }: { lastHauledAt: string | null | undefined }) {
+  const haul = computeHaulActivity(lastHauledAt)
+  if (!haul.lastHauledAt) {
+    return <span className="text-gray-400">No haul on record</span>
+  }
+  const days = haul.daysSinceHauled ?? 0
+  const rel =
+    days < 0 ? 'booked ahead' : days === 0 ? 'today' : days === 1 ? '1d ago' : `${days}d ago`
+  return (
+    <>
+      <div className={haul.dormant ? 'font-medium text-red-600' : 'text-gray-700'}>
+        {formatDate(haul.lastHauledAt)}
+      </div>
+      <div className={cn('text-[10px]', haul.dormant ? 'text-red-500' : 'text-gray-400')}>
+        {rel}
+      </div>
+    </>
+  )
 }
 
 function gapTone(gap: number | null): { tone: string; label: string } {
@@ -348,6 +379,7 @@ const COL = {
   rmis: 'w-28 shrink-0 pr-2',
   status: 'w-44 shrink-0 pr-2',
   reviewed: 'w-28 shrink-0 pr-2',
+  hauled: 'w-28 shrink-0 pr-2',
   revet: 'w-28 shrink-0',
 }
 
@@ -1074,6 +1106,7 @@ export function CarrierTable({
             {th('rmis', 'RMIS', COL.rmis)}
             {th('status', 'Status', COL.status)}
             {th('reviewed', 'Last Reviewed', COL.reviewed)}
+            {th('hauled', 'Last Hauled', COL.hauled)}
             {th('revet', 'Re-vet', COL.revet)}
           </div>
 
@@ -1222,6 +1255,9 @@ export function CarrierTable({
                         )}
                       >
                         {c.last_reviewed ? formatDate(c.last_reviewed) : '—'}
+                      </div>
+                      <div className={cn(COL.hauled, 'whitespace-nowrap text-xs')}>
+                        <LastHauledCell lastHauledAt={c.last_hauled_at} />
                       </div>
                       <div className={cn(COL.revet, 'whitespace-nowrap')}>
                         {disabled ? (
@@ -1386,6 +1422,10 @@ export function CarrierTable({
                           {c.flagged_scores.length} flag(s)
                         </Badge>
                       )}
+                    </div>
+                    <div className="mt-1 text-xs">
+                      <span className="text-gray-400">Last hauled: </span>
+                      <LastHauledCell lastHauledAt={c.last_hauled_at} />
                     </div>
                   </div>
                 </div>

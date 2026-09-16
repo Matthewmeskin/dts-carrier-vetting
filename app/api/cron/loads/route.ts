@@ -110,6 +110,13 @@ function nameKey(name: string | null | undefined): string {
     .replace(/[^a-z0-9]+/g, '')
 }
 
+/** Brokerware lists some non-transport accounts as carriers on a load
+ *  (cargo-insurance add-ons like Loadsure, placeholder / non-transport
+ *  entries). They never "haul", so they must not earn a haul date. */
+function isNonHaulingCarrier(name: string | null | undefined): boolean {
+  return /insurance|loadsure|non[- ]?transport|placeholder/i.test(name ?? '')
+}
+
 /** Best available "hauled on" date for a load — delivery preferred (completed),
  *  then pickup, then created. */
 function loadDate(load: LoadObj): string | null {
@@ -145,26 +152,33 @@ export async function POST(request: Request) {
     //    in Brokerware (some LTL / rail / warehouse carriers are set up without
     //    one). Those used to be skipped entirely, so their "last hauled" never
     //    moved no matter how many loads they ran.
+    //    EVERY carrier on the load is credited, not just the primary: a
+    //    multi-leg load lists e.g. a warehouse as primary and the trucking
+    //    company that actually moved the freight as a second carrier, and that
+    //    trucker's "last hauled" must move too. Insurance add-ons and
+    //    placeholder accounts that Brokerware lists as carriers are skipped.
     const latestByMc = new Map<string, string>()
     const latestByName = new Map<string, string>()
     let loadsWithoutMc = 0
     for (const load of loads) {
-      const carriers = load.carriers ?? []
-      const primary =
-        carriers.find((c) => c.isPrimary === true) ?? carriers[0] ?? null
       const iso = loadDate(load)
       if (!iso) continue
-      const mc = normalizeMc(primary?.carrierMCNumber)
-      if (mc) {
-        const prev = latestByMc.get(mc)
-        if (!prev || iso > prev) latestByMc.set(mc, iso)
-        continue
+      let anyMc = false
+      for (const c of load.carriers ?? []) {
+        if (isNonHaulingCarrier(c.carrierName)) continue
+        const mc = normalizeMc(c.carrierMCNumber)
+        if (mc) {
+          anyMc = true
+          const prev = latestByMc.get(mc)
+          if (!prev || iso > prev) latestByMc.set(mc, iso)
+          continue
+        }
+        const key = nameKey(c.carrierName)
+        if (!key) continue
+        const prev = latestByName.get(key)
+        if (!prev || iso > prev) latestByName.set(key, iso)
       }
-      loadsWithoutMc++
-      const key = nameKey(primary?.carrierName)
-      if (!key) continue
-      const prev = latestByName.get(key)
-      if (!prev || iso > prev) latestByName.set(key, iso)
+      if (!anyMc) loadsWithoutMc++
     }
 
     if (latestByMc.size === 0 && latestByName.size === 0) {

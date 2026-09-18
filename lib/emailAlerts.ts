@@ -301,10 +301,27 @@ export interface DigestReply {
   legalName: string
   note: string
 }
+/** A carrier that is ACTIVE in Brokerware and still has an unresolved hard stop
+ *  right now — regardless of when it was first detected. This is the standing
+ *  risk list, not a change notification. */
+export interface OpenHardStopCarrier {
+  dotNumber: string
+  legalName: string
+  mcNumber?: string | null
+  hardStops: string[]
+  /** Days since the hard stop was first detected, when known. */
+  daysOpen?: number | null
+  /** ISO date of the carrier's most recent DTS load, when known. */
+  lastHauledAt?: string | null
+}
 export interface DailyDigestPayload {
   since: string
   until: string
   hardStops: DigestCarrier[]
+  /** Every active carrier with an open hard stop TODAY. Repeats every day until
+   *  the stop clears, so a carrier that is still being tendered loads without
+   *  valid insurance can't quietly age out of the inbox after its first alert. */
+  openHardStops?: OpenHardStopCarrier[]
   /** Active carriers whose hard stop(s) fully cleared (insurance restored). The
    *  cleared items are carried in each entry's `hardStops` field. */
   resolved?: DigestCarrier[]
@@ -348,6 +365,14 @@ export async function sendDailyDigest(
     const rp = payload.replies.length
     const sf = payload.scoreFlagged ?? 0
     const rs = payload.resolved?.length ?? 0
+    const open = payload.openHardStops ?? []
+    const op = open.length
+    // Open stops on a carrier that hauled recently are the urgent ones.
+    const opRecent = open.filter(
+      (c) =>
+        c.lastHauledAt != null &&
+        Date.now() - Date.parse(c.lastHauledAt) <= 45 * 24 * 3600e3
+    ).length
     const dateLabel = new Date(payload.until).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -357,8 +382,10 @@ export async function sendDailyDigest(
 
     const subject =
       hs > 0
-        ? `DTS Daily Digest — ${hs} hard stop${hs === 1 ? '' : 's'}, ${rv} to review (${dateLabel})`
-        : `DTS Daily Digest — ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''} (${dateLabel})`
+        ? `DTS Daily Digest — ${hs} new hard stop${hs === 1 ? '' : 's'}, ${op} open, ${rv} to review (${dateLabel})`
+        : op > 0
+          ? `DTS Daily Digest — ${op} open hard stop${op === 1 ? '' : 's'}${opRecent ? ` (${opRecent} hauling)` : ''}, ${rv} to review (${dateLabel})`
+          : `DTS Daily Digest — ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''} (${dateLabel})`
 
     // The bulk re-vet queue from a score upload is summarized, not enumerated.
     const scoreFlagSummary =
@@ -404,6 +431,70 @@ export async function sendDailyDigest(
         </table>`
         : ''
 
+    const fmtDate = (iso: string | null | undefined) =>
+      iso
+        ? new Date(iso).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            timeZone: 'UTC',
+          })
+        : '—'
+
+    // The standing list carries an extra column: how long the stop has been open
+    // and when the carrier last hauled for DTS, so a carrier still moving
+    // freight without coverage is obvious at a glance.
+    const openRows = open
+      .map((c) => {
+        const hauledMs = c.lastHauledAt ? Date.parse(c.lastHauledAt) : NaN
+        const recent =
+          Number.isFinite(hauledMs) && Date.now() - hauledMs <= 45 * 24 * 3600e3
+        return `
+      <tr${recent ? ' style="background:#fef2f2;"' : ''}>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
+          <div style="font-weight:600;">${esc(c.legalName)}</div>
+          <div style="color:#6b7280;font-size:12px;">${idLine(c)}</div>
+        </td>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:#dc2626;">
+          ${c.hardStops.map((i) => esc(i)).join('<br/>')}
+        </td>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;font-size:13px;">
+          <div${c.daysOpen != null && c.daysOpen >= 7 ? ' style="color:#b91c1c;font-weight:600;"' : ''}>
+            Open ${c.daysOpen != null ? `${c.daysOpen} day${c.daysOpen === 1 ? '' : 's'}` : 'unknown'}
+          </div>
+          <div style="color:${recent ? '#b91c1c' : '#6b7280'};">
+            Last hauled ${fmtDate(c.lastHauledAt)}
+          </div>
+        </td>
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(c.dotNumber)}</td>
+      </tr>`
+      })
+      .join('')
+
+    const openSection = openRows
+      ? `
+        <h2 style="color:#dc2626;font-size:16px;margin:24px 0 8px;">
+          Open Hard Stops — Active Carriers, Still Unresolved (${op})
+        </h2>
+        <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">
+          Every carrier active in Brokerware whose hard stop is still open today.
+          ${opRecent > 0
+            ? `<span style="color:#b91c1c;font-weight:600;">${opRecent} hauled for DTS in the last 45 days (highlighted).</span>`
+            : ''}
+        </p>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Issue</th>
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Status</th>
+              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
+            </tr>
+          </thead>
+          <tbody>${openRows}</tbody>
+        </table>`
+      : ''
+
     const replyRows = payload.replies
       .map(
         (r) => `
@@ -423,11 +514,12 @@ export async function sendDailyDigest(
       <div style="background:#AB0534;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
         <h1 style="margin:0;font-size:20px;">DTS Carrier Daily Digest</h1>
         <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">
-          ${dateLabel} · ${hs} hard stop${hs === 1 ? '' : 's'}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}${sf ? ` · ${sf} flagged for re-vet` : ''}
+          ${dateLabel} · ${hs} new hard stop${hs === 1 ? '' : 's'}${op ? `, ${op} open` : ''}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}${sf ? ` · ${sf} flagged for re-vet` : ''}
         </p>
       </div>
       <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
-        ${section(`Hard Stops — Do Not Use Until Resolved (${hs})`, '#dc2626', carrierRows(payload.hardStops, '#dc2626', (c) => c.hardStops))}
+        ${section(`New Hard Stops — Do Not Use Until Resolved (${hs})`, '#dc2626', carrierRows(payload.hardStops, '#dc2626', (c) => c.hardStops))}
+        ${openSection}
         ${section(`Hard Stops Resolved — Insurance Restored (${rs})`, '#047857', carrierRows(payload.resolved ?? [], '#047857', (c) => c.hardStops))}
         ${section(`Requires Review (${rv})`, '#d97706', carrierRows(payload.reviews, '#b45309', (c) => c.reviews))}
         ${scoreFlagSummary}
@@ -441,7 +533,7 @@ export async function sendDailyDigest(
             </tr></thead>
             <tbody>${replyRows}</tbody>
           </table>` : ''}
-        ${hs + rv + rp + sf + rs === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
+        ${hs + op + rv + rp + sf + rs === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
         <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;">
           <a href="${APP_URL}/carriers"
              style="background:#0063A0;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;font-size:14px;">

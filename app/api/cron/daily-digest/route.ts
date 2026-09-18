@@ -4,6 +4,7 @@ import {
   sendDailyDigest,
   type DigestCarrier,
   type DigestReply,
+  type OpenHardStopCarrier,
 } from '@/lib/emailAlerts'
 import { isBrokerwareDisabled } from '@/lib/revet'
 
@@ -206,6 +207,82 @@ export async function POST(request: Request) {
       })
     }
 
+    // 3) STANDING RISK LIST — every Brokerware-active carrier whose hard stop is
+    //    still open right now, not just the ones detected in this window. The
+    //    sections above are change notifications: a carrier alerted once on the
+    //    day its insurance lapsed would never be mentioned again, even while it
+    //    kept hauling for DTS. This repeats until the stop actually clears.
+    const openHardStops: OpenHardStopCarrier[] = []
+    {
+      const { data: activeCarriers } = await (supabaseAdmin as any)
+        .from('carriers')
+        .select('dot_number, legal_name, mc_number, brokerware_status, last_hauled_at')
+        .limit(100000)
+      const activeByDot = new Map<string, any>()
+      for (const c of activeCarriers ?? []) {
+        if (isBrokerwareDisabled(c.brokerware_status)) continue
+        activeByDot.set(String(c.dot_number), c)
+      }
+      const activeDots = Array.from(activeByDot.keys())
+      // carrier_insurance keeps every RMIS pull; the view exposes the newest row
+      // per carrier so "open right now" reads only current state.
+      const { data: latestIns } = activeDots.length
+        ? await (supabaseAdmin as any)
+            .from('carrier_insurance_latest')
+            .select('dot_number, hard_stops')
+            .in('dot_number', activeDots)
+            .limit(100000)
+        : { data: [] }
+      const openByDot = new Map<string, string[]>()
+      for (const r of latestIns ?? []) {
+        const stops: string[] = (r.hard_stops ?? []).filter(Boolean)
+        if (stops.length > 0) openByDot.set(String(r.dot_number), stops)
+      }
+
+      // "Open since" = the most recent transition INTO hard stop. The delta
+      // monitor only records a stop in hard_stops_detected when it is new, so
+      // the newest such row is the start of the current episode.
+      const openDots = Array.from(openByDot.keys())
+      const onsetByDot = new Map<string, string>()
+      if (openDots.length > 0) {
+        const { data: onsets } = await (supabaseAdmin as any)
+          .from('carrier_delta_log')
+          .select('dot_number, hard_stops_detected, detected_at')
+          .in('dot_number', openDots)
+          .order('detected_at', { ascending: false })
+          .limit(100000)
+        for (const r of onsets ?? []) {
+          const d = String(r.dot_number)
+          if (onsetByDot.has(d)) continue
+          if (((r.hard_stops_detected ?? []).filter(Boolean)).length === 0) continue
+          onsetByDot.set(d, r.detected_at)
+        }
+      }
+
+      const dayMs = 24 * 3600e3
+      for (const [dot, stops] of Array.from(openByDot.entries())) {
+        const c = activeByDot.get(dot)
+        const onset = onsetByDot.get(dot)
+        const onsetMs = onset ? Date.parse(onset) : NaN
+        openHardStops.push({
+          dotNumber: dot,
+          legalName: c?.legal_name ?? `DOT ${dot}`,
+          mcNumber: c?.mc_number ?? null,
+          hardStops: stops,
+          daysOpen: Number.isFinite(onsetMs)
+            ? Math.max(0, Math.floor((now.getTime() - onsetMs) / dayMs))
+            : null,
+          lastHauledAt: c?.last_hauled_at ?? null,
+        })
+      }
+      // Most recently hauled first — those are the ones actually being used.
+      openHardStops.sort((a, b) => {
+        const av = a.lastHauledAt ? Date.parse(a.lastHauledAt) : -Infinity
+        const bv = b.lastHauledAt ? Date.parse(b.lastHauledAt) : -Infinity
+        return bv - av
+      })
+    }
+
     const replyList: DigestReply[] = replies
       .filter((r) => !disabled(r.dot))
       .map((r) => ({
@@ -217,8 +294,12 @@ export async function POST(request: Request) {
     const scoreFlagged = Array.from(scoreFlaggedDots).filter(
       (dot) => !disabled(dot)
     ).length
+    // An open hard stop counts as something to report, so the digest keeps
+    // going out daily while any active carrier is uninsured — silence only
+    // means the list is genuinely empty.
     const itemCount =
       hardStops.length +
+      openHardStops.length +
       resolved.length +
       reviews.length +
       replyList.length +
@@ -227,6 +308,7 @@ export async function POST(request: Request) {
       since,
       until,
       hardStops,
+      openHardStops,
       resolved,
       reviews,
       replies: replyList,
@@ -241,6 +323,7 @@ export async function POST(request: Request) {
         itemCount,
         scoreFlagged,
         hardStops,
+        openHardStops,
         resolved,
         reviews,
         replies: replyList,

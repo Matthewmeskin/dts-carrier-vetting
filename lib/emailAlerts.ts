@@ -340,15 +340,28 @@ export interface OpenHardStopCarrier {
   daysOpen?: number | null
   /** ISO date of the carrier's most recent DTS load, when known. */
   lastHauledAt?: string | null
+  /** When the carrier was last set to Exception Approved, when known. */
+  exceptionSince?: string | null
+  /** Whole days the exception has been open. */
+  exceptionDays?: number | null
+  /** Extra line under the status column, e.g. why an aged exception was
+   *  escalated back into the actionable list. */
+  note?: string | null
 }
 export interface DailyDigestPayload {
   since: string
   until: string
   hardStops: DigestCarrier[]
-  /** Every active carrier with an open hard stop TODAY. Repeats every day until
-   *  the stop clears, so a carrier that is still being tendered loads without
-   *  valid insurance can't quietly age out of the inbox after its first alert. */
+  /** Every active carrier with an open hard stop TODAY that nobody has signed
+   *  off on. Repeats every day until the stop clears, so a carrier that is
+   *  still being tendered loads without valid insurance can't quietly age out
+   *  of the inbox after its first alert. */
   openHardStops?: OpenHardStopCarrier[]
+  /** Open hard stops a reviewer has knowingly accepted (Exception Approved) and
+   *  documented. Still listed, because an exception approves the risk rather
+   *  than removing it and RMIS remains un-updated — but kept in its own quieter
+   *  section so it doesn't compete with the carriers nobody has looked at. */
+  acceptedExceptions?: OpenHardStopCarrier[]
   /** Active carriers whose hard stop(s) fully cleared (insurance restored). The
    *  cleared items are carried in each entry's `hardStops` field. */
   resolved?: DigestCarrier[]
@@ -400,6 +413,8 @@ export async function sendDailyDigest(
         c.lastHauledAt != null &&
         Date.now() - Date.parse(c.lastHauledAt) <= 45 * 24 * 3600e3
     ).length
+    const accepted = payload.acceptedExceptions ?? []
+    const ac = accepted.length
     const dateLabel = new Date(payload.until).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -471,44 +486,52 @@ export async function sendDailyDigest(
     // The standing list carries an extra column: how long the stop has been open
     // and when the carrier last hauled for DTS, so a carrier still moving
     // freight without coverage is obvious at a glance.
-    const openRows = open
+    const rowsFor = (list: OpenHardStopCarrier[], accent: string) =>
+      list
       .map((c) => {
         const hauledMs = c.lastHauledAt ? Date.parse(c.lastHauledAt) : NaN
         const recent =
           Number.isFinite(hauledMs) && Date.now() - hauledMs <= 45 * 24 * 3600e3
+        const highlight = recent && accent === '#dc2626'
         return `
-      <tr${recent ? ' style="background:#fef2f2;"' : ''}>
+      <tr${highlight ? ' style="background:#fef2f2;"' : ''}>
         <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
           <div style="font-weight:600;">${esc(c.legalName)}</div>
           <div style="color:#6b7280;font-size:12px;">${idLine(c)}</div>
         </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:#dc2626;">
+        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:${accent};">
           ${c.hardStops.map((i) => esc(i)).join('<br/>')}
         </td>
         <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;font-size:13px;">
-          <div${c.daysOpen != null && c.daysOpen >= 7 ? ' style="color:#b91c1c;font-weight:600;"' : ''}>
+          <div${c.daysOpen != null && c.daysOpen >= 7 && accent === '#dc2626' ? ' style="color:#b91c1c;font-weight:600;"' : ''}>
             Open ${c.daysOpen != null ? `${c.daysOpen} day${c.daysOpen === 1 ? '' : 's'}` : 'unknown'}
           </div>
-          <div style="color:${recent ? '#b91c1c' : '#6b7280'};">
+          <div style="color:${highlight ? '#b91c1c' : '#6b7280'};">
             Last hauled ${fmtDate(c.lastHauledAt)}
           </div>
+          ${c.exceptionDays != null
+            ? `<div style="color:#6b7280;">Exception ${c.exceptionDays} day${c.exceptionDays === 1 ? '' : 's'} old</div>`
+            : ''}
+          ${c.note ? `<div style="color:#b45309;">${esc(c.note)}</div>` : ''}
         </td>
         <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(c.dotNumber)}</td>
       </tr>`
       })
       .join('')
 
-    const openSection = openRows
-      ? `
-        <h2 style="color:#dc2626;font-size:16px;margin:24px 0 8px;">
-          Open Hard Stops — Active Carriers, Still Unresolved (${op})
-        </h2>
-        <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">
-          Every carrier active in Brokerware whose hard stop is still open today.
-          ${opRecent > 0
-            ? `<span style="color:#b91c1c;font-weight:600;">${opRecent} hauled for DTS in the last 45 days (highlighted).</span>`
-            : ''}
-        </p>
+    const openRows = rowsFor(open, '#dc2626')
+    const acceptedRows = rowsFor(accepted, '#b45309')
+
+    const statusTable = (
+      title: string,
+      color: string,
+      blurb: string,
+      rows: string
+    ) =>
+      rows
+        ? `
+        <h2 style="color:${color};font-size:16px;margin:24px 0 8px;">${title}</h2>
+        <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">${blurb}</p>
         <table style="width:100%;border-collapse:collapse;">
           <thead>
             <tr style="background:#f9fafb;">
@@ -518,9 +541,30 @@ export async function sendDailyDigest(
               <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
             </tr>
           </thead>
-          <tbody>${openRows}</tbody>
+          <tbody>${rows}</tbody>
         </table>`
-      : ''
+        : ''
+
+    const openSection = statusTable(
+      `Open Hard Stops — Needs Action (${op})`,
+      '#dc2626',
+      `Active carriers with a hard stop nobody has signed off on.` +
+        (opRecent > 0
+          ? ` <span style="color:#b91c1c;font-weight:600;">${opRecent} hauled for DTS in the last 45 days (highlighted).</span>`
+          : ''),
+      openRows
+    )
+
+    const acceptedSection = statusTable(
+      `Accepted With Exception — RMIS Still Not Updated (${ac})`,
+      '#b45309',
+      `Reviewed and approved as an exception, so no action is expected today. ` +
+        `Listed because the exception accepts the risk rather than removing it: ` +
+        `RMIS still shows no valid certificate, so the coverage isn't being ` +
+        `tracked for expiry. These move back to Needs Action if RMIS hasn't ` +
+        `caught up within 30 days.`,
+      acceptedRows
+    )
 
     const replyRows = payload.replies
       .map(
@@ -541,12 +585,13 @@ export async function sendDailyDigest(
       <div style="background:#AB0534;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
         <h1 style="margin:0;font-size:20px;">DTS Carrier Daily Digest</h1>
         <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">
-          ${dateLabel} · ${hs} new hard stop${hs === 1 ? '' : 's'}${op ? `, ${op} open` : ''}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}${sf ? ` · ${sf} flagged for re-vet` : ''}
+          ${dateLabel} · ${hs} new hard stop${hs === 1 ? '' : 's'}${op ? `, ${op} needing action` : ''}${ac ? `, ${ac} accepted with exception` : ''}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}${sf ? ` · ${sf} flagged for re-vet` : ''}
         </p>
       </div>
       <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
         ${section(`New Hard Stops — Do Not Use Until Resolved (${hs})`, '#dc2626', carrierRows(payload.hardStops, '#dc2626', (c) => c.hardStops))}
         ${openSection}
+        ${acceptedSection}
         ${section(`Hard Stops Resolved — Insurance Restored (${rs})`, '#047857', carrierRows(payload.resolved ?? [], '#047857', (c) => c.hardStops))}
         ${section(`Requires Review (${rv})`, '#d97706', carrierRows(payload.reviews, '#b45309', (c) => c.reviews))}
         ${scoreFlagSummary}
@@ -560,7 +605,7 @@ export async function sendDailyDigest(
             </tr></thead>
             <tbody>${replyRows}</tbody>
           </table>` : ''}
-        ${hs + op + rv + rp + sf + rs === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
+        ${hs + op + ac + rv + rp + sf + rs === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
         <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;">
           <a href="${APP_URL}/carriers"
              style="background:#0063A0;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;font-size:14px;">

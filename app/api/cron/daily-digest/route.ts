@@ -212,11 +212,19 @@ export async function POST(request: Request) {
     //    sections above are change notifications: a carrier alerted once on the
     //    day its insurance lapsed would never be mentioned again, even while it
     //    kept hauling for DTS. This repeats until the stop actually clears.
+    //    Carriers a reviewer has knowingly signed off on (Exception Approved)
+    //    are split into their own quieter list: the exception accepts the risk
+    //    rather than removing it, so it still gets reported, but it shouldn't
+    //    compete with carriers nobody has looked at. An exception that RMIS
+    //    hasn't caught up with after EXCEPTION_MAX_DAYS escalates back, so a
+    //    temporary exception can't quietly become permanent.
+    const EXCEPTION_MAX_DAYS = 30
     const openHardStops: OpenHardStopCarrier[] = []
+    const acceptedExceptions: OpenHardStopCarrier[] = []
     {
       const { data: activeCarriers } = await (supabaseAdmin as any)
         .from('carriers')
-        .select('dot_number, legal_name, mc_number, brokerware_status, last_hauled_at')
+        .select('dot_number, legal_name, mc_number, brokerware_status, last_hauled_at, carrier_status')
         .limit(100000)
       const activeByDot = new Map<string, any>()
       for (const c of activeCarriers ?? []) {
@@ -259,28 +267,77 @@ export async function POST(request: Request) {
         }
       }
 
+      // When each exception-approved carrier was signed off, so an aged
+      // exception can be escalated. Recorded either as a status_change or as a
+      // vetting save that set the status.
+      const exceptionDots = openDots.filter(
+        (d) => activeByDot.get(d)?.carrier_status === 'Exception Approved'
+      )
+      const exceptionSinceByDot = new Map<string, string>()
+      if (exceptionDots.length > 0) {
+        const { data: statusEvents } = await (supabaseAdmin as any)
+          .from('carrier_events')
+          .select('dot_number, event_type, summary, detail, created_at')
+          .in('dot_number', exceptionDots)
+          .in('event_type', ['status_change', 'vetting_saved'])
+          .order('created_at', { ascending: false })
+          .limit(100000)
+        for (const e of statusEvents ?? []) {
+          const d = String(e.dot_number)
+          if (exceptionSinceByDot.has(d)) continue
+          const setsException =
+            e.detail?.carrier_status === 'Exception Approved' ||
+            (Array.isArray(e.detail?.changes) &&
+              e.detail.changes.some((ch: unknown) =>
+                String(ch).includes('Exception Approved')
+              ))
+          if (!setsException) continue
+          exceptionSinceByDot.set(d, e.created_at)
+        }
+      }
+
       const dayMs = 24 * 3600e3
+      const daysSince = (iso: string | null | undefined): number | null => {
+        const ms = iso ? Date.parse(iso) : NaN
+        return Number.isFinite(ms)
+          ? Math.max(0, Math.floor((now.getTime() - ms) / dayMs))
+          : null
+      }
       for (const [dot, stops] of Array.from(openByDot.entries())) {
         const c = activeByDot.get(dot)
-        const onset = onsetByDot.get(dot)
-        const onsetMs = onset ? Date.parse(onset) : NaN
-        openHardStops.push({
+        const exceptionSince = exceptionSinceByDot.get(dot) ?? null
+        const exceptionDays = daysSince(exceptionSince)
+        const entry: OpenHardStopCarrier = {
           dotNumber: dot,
           legalName: c?.legal_name ?? `DOT ${dot}`,
           mcNumber: c?.mc_number ?? null,
           hardStops: stops,
-          daysOpen: Number.isFinite(onsetMs)
-            ? Math.max(0, Math.floor((now.getTime() - onsetMs) / dayMs))
-            : null,
+          daysOpen: daysSince(onsetByDot.get(dot)),
           lastHauledAt: c?.last_hauled_at ?? null,
-        })
+          exceptionSince,
+          exceptionDays,
+        }
+        const accepted = c?.carrier_status === 'Exception Approved'
+        // An exception with no recorded sign-off date can't be aged, so treat it
+        // as current rather than escalating on missing data.
+        const aged = exceptionDays !== null && exceptionDays > EXCEPTION_MAX_DAYS
+        if (accepted && !aged) {
+          acceptedExceptions.push(entry)
+        } else {
+          if (accepted && aged) {
+            entry.note = `Exception approved ${exceptionDays} days ago — RMIS still not updated.`
+          }
+          openHardStops.push(entry)
+        }
       }
       // Most recently hauled first — those are the ones actually being used.
-      openHardStops.sort((a, b) => {
+      const byLastHauled = (a: OpenHardStopCarrier, b: OpenHardStopCarrier) => {
         const av = a.lastHauledAt ? Date.parse(a.lastHauledAt) : -Infinity
         const bv = b.lastHauledAt ? Date.parse(b.lastHauledAt) : -Infinity
         return bv - av
-      })
+      }
+      openHardStops.sort(byLastHauled)
+      acceptedExceptions.sort(byLastHauled)
     }
 
     const replyList: DigestReply[] = replies
@@ -300,6 +357,7 @@ export async function POST(request: Request) {
     const itemCount =
       hardStops.length +
       openHardStops.length +
+      acceptedExceptions.length +
       resolved.length +
       reviews.length +
       replyList.length +
@@ -309,6 +367,7 @@ export async function POST(request: Request) {
       until,
       hardStops,
       openHardStops,
+      acceptedExceptions,
       resolved,
       reviews,
       replies: replyList,
@@ -324,6 +383,7 @@ export async function POST(request: Request) {
         scoreFlagged,
         hardStops,
         openHardStops,
+        acceptedExceptions,
         resolved,
         reviews,
         replies: replyList,

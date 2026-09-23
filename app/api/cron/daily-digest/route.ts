@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import {
+  renderDailyDigest,
   sendDailyDigest,
   type DigestCarrier,
   type DigestReply,
@@ -36,6 +37,12 @@ export async function POST(request: Request) {
       body = {}
     }
     const dryRun = body?.dryRun === true
+    // deliver: 'return' builds the email and hands the subject + HTML back to
+    // the caller instead of sending it, so n8n can deliver it through the
+    // Microsoft Outlook node from the Hamilton mailbox. Mail sent from here via
+    // Resend is accepted by the provider but rejected by the DTS tenant, so the
+    // portal is no longer the transport for this digest.
+    const deliverMode: 'send' | 'return' = body?.deliver === 'return' ? 'return' : 'send'
 
     const now = new Date()
     const until = now.toISOString()
@@ -387,6 +394,33 @@ export async function POST(request: Request) {
         resolved,
         reviews,
         replies: replyList,
+      })
+    }
+
+    // Hand the rendered email back for an external transport to deliver. The
+    // window still advances: the standing sections are built from current state
+    // rather than the window, so everything unresolved reappears on the next
+    // run regardless.
+    if (deliverMode === 'return') {
+      const { subject, html } = renderDailyDigest(payload)
+      if (itemCount > 0) {
+        await (supabaseAdmin as any)
+          .from('email_digests')
+          .insert([{ kind: 'daily', since, sent_at: until, item_count: itemCount }])
+      }
+      return NextResponse.json({
+        since,
+        until,
+        itemCount,
+        shouldSend: itemCount > 0,
+        subject,
+        html,
+        hardStops: hardStops.length,
+        openHardStops: openHardStops.length,
+        acceptedExceptions: acceptedExceptions.length,
+        reviews: reviews.length,
+        replies: replyList.length,
+        scoreFlagged,
       })
     }
 

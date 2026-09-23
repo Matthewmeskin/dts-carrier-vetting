@@ -380,6 +380,241 @@ export interface DailyDigestPayload {
   scoreFlagged?: number
 }
 
+/** Build the digest email (subject + HTML). Split out from sending so the
+ *  same email can be handed to a different transport: mail from the portal
+ *  is sent through Resend, which the DTS tenant currently rejects, while the
+ *  n8n Outlook path delivers reliably from the Hamilton mailbox. */
+export function renderDailyDigest(
+  payload: DailyDigestPayload
+): { subject: string; html: string } {
+  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ''
+
+  const esc = (s: string) =>
+    String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const idLine = (c: { dotNumber: string; mcNumber?: string | null }) => {
+    const mc = c.mcNumber ? String(c.mcNumber).replace(/\D/g, '') : ''
+    return `DOT ${esc(c.dotNumber)}${mc ? ` · MC ${esc(mc)}` : ''}`
+  }
+  const link = (dot: string) =>
+    APP_URL ? `<a href="${APP_URL}/carriers/${esc(dot)}" style="color:#0063A0;">View</a>` : ''
+
+  const hs = payload.hardStops.length
+  const rv = payload.reviews.length
+  const rp = payload.replies.length
+  const sf = payload.scoreFlagged ?? 0
+  const rs = payload.resolved?.length ?? 0
+  const open = payload.openHardStops ?? []
+  const op = open.length
+  // Open stops on a carrier that hauled recently are the urgent ones.
+  const opRecent = open.filter(
+    (c) =>
+      c.lastHauledAt != null &&
+      Date.now() - Date.parse(c.lastHauledAt) <= 45 * 24 * 3600e3
+  ).length
+  const accepted = payload.acceptedExceptions ?? []
+  const ac = accepted.length
+  const dateLabel = new Date(payload.until).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+
+  const subject =
+    hs > 0
+      ? `DTS Daily Digest — ${hs} new hard stop${hs === 1 ? '' : 's'}, ${op} open, ${rv} to review (${dateLabel})`
+      : op > 0
+        ? `DTS Daily Digest — ${op} open hard stop${op === 1 ? '' : 's'}${opRecent ? ` (${opRecent} hauling)` : ''}, ${rv} to review (${dateLabel})`
+        : `DTS Daily Digest — ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''} (${dateLabel})`
+
+  // The bulk re-vet queue from a score upload is summarized, not enumerated.
+  const scoreFlagSummary =
+    sf > 0
+      ? `
+      <div style="margin:20px 0 0;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+        <span style="font-weight:600;color:#92400e;">${sf} carrier${sf === 1 ? '' : 's'} flagged for re-vet</span>
+        <span style="color:#92400e;"> by the latest Bluewire score upload.</span>
+        ${APP_URL ? `<a href="${APP_URL}/carriers" style="color:#0063A0;margin-left:6px;">Review the re-vet queue →</a>` : ''}
+      </div>`
+      : ''
+
+  const carrierRows = (list: DigestCarrier[], accent: string, issuesOf: (c: DigestCarrier) => string[]) =>
+    list
+      .map(
+        (c) => `
+    <tr>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
+        <div style="font-weight:600;">${esc(c.legalName)}</div>
+        <div style="color:#6b7280;font-size:12px;">${idLine(c)}</div>
+      </td>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:${accent};">
+        ${issuesOf(c).map((i) => esc(i)).join('<br/>')}
+      </td>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(c.dotNumber)}</td>
+    </tr>`
+      )
+      .join('')
+
+  const section = (title: string, color: string, bodyRows: string) =>
+    bodyRows
+      ? `
+      <h2 style="color:${color};font-size:16px;margin:24px 0 8px;">${title}</h2>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#f9fafb;">
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Issue</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
+          </tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>`
+      : ''
+
+  const fmtDate = (iso: string | null | undefined) =>
+    iso
+      ? new Date(iso).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          timeZone: 'UTC',
+        })
+      : '—'
+
+  // The standing list carries an extra column: how long the stop has been open
+  // and when the carrier last hauled for DTS, so a carrier still moving
+  // freight without coverage is obvious at a glance.
+  const rowsFor = (list: OpenHardStopCarrier[], accent: string) =>
+    list
+    .map((c) => {
+      const hauledMs = c.lastHauledAt ? Date.parse(c.lastHauledAt) : NaN
+      const recent =
+        Number.isFinite(hauledMs) && Date.now() - hauledMs <= 45 * 24 * 3600e3
+      const highlight = recent && accent === '#dc2626'
+      return `
+    <tr${highlight ? ' style="background:#fef2f2;"' : ''}>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
+        <div style="font-weight:600;">${esc(c.legalName)}</div>
+        <div style="color:#6b7280;font-size:12px;">${idLine(c)}</div>
+      </td>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:${accent};">
+        ${c.hardStops.map((i) => esc(i)).join('<br/>')}
+      </td>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;font-size:13px;">
+        <div${c.daysOpen != null && c.daysOpen >= 7 && accent === '#dc2626' ? ' style="color:#b91c1c;font-weight:600;"' : ''}>
+          Open ${c.daysOpen != null ? `${c.daysOpen} day${c.daysOpen === 1 ? '' : 's'}` : 'unknown'}
+        </div>
+        <div style="color:${highlight ? '#b91c1c' : '#6b7280'};">
+          Last hauled ${fmtDate(c.lastHauledAt)}
+        </div>
+        ${c.exceptionDays != null
+          ? `<div style="color:#6b7280;">Exception ${c.exceptionDays} day${c.exceptionDays === 1 ? '' : 's'} old</div>`
+          : ''}
+        ${c.note ? `<div style="color:#b45309;">${esc(c.note)}</div>` : ''}
+      </td>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(c.dotNumber)}</td>
+    </tr>`
+    })
+    .join('')
+
+  const openRows = rowsFor(open, '#dc2626')
+  const acceptedRows = rowsFor(accepted, '#b45309')
+
+  const statusTable = (
+    title: string,
+    color: string,
+    blurb: string,
+    rows: string
+  ) =>
+    rows
+      ? `
+      <h2 style="color:${color};font-size:16px;margin:24px 0 8px;">${title}</h2>
+      <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">${blurb}</p>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#f9fafb;">
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Issue</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Status</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`
+      : ''
+
+  const openSection = statusTable(
+    `Open Hard Stops — Needs Action (${op})`,
+    '#dc2626',
+    `Active carriers with a hard stop nobody has signed off on.` +
+      (opRecent > 0
+        ? ` <span style="color:#b91c1c;font-weight:600;">${opRecent} hauled for DTS in the last 45 days (highlighted).</span>`
+        : ''),
+    openRows
+  )
+
+  const acceptedSection = statusTable(
+    `Accepted With Exception — RMIS Still Not Updated (${ac})`,
+    '#b45309',
+    `Reviewed and approved as an exception, so no action is expected today. ` +
+      `Listed because the exception accepts the risk rather than removing it: ` +
+      `RMIS still shows no valid certificate, so the coverage isn't being ` +
+      `tracked for expiry. These move back to Needs Action if RMIS hasn't ` +
+      `caught up within 30 days.`,
+    acceptedRows
+  )
+
+  const replyRows = payload.replies
+    .map(
+      (r) => `
+    <tr>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
+        <div style="font-weight:600;">${esc(r.legalName)}</div>
+        <div style="color:#6b7280;font-size:12px;">DOT ${esc(r.dotNumber)}</div>
+      </td>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${esc(r.note)}</td>
+      <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(r.dotNumber)}</td>
+    </tr>`
+    )
+    .join('')
+
+  const html = `
+  <div style="font-family:sans-serif;max-width:900px;margin:0 auto;">
+    <div style="background:#AB0534;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
+      <h1 style="margin:0;font-size:20px;">DTS Carrier Daily Digest</h1>
+      <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">
+        ${dateLabel} · ${hs} new hard stop${hs === 1 ? '' : 's'}${op ? `, ${op} needing action` : ''}${ac ? `, ${ac} accepted with exception` : ''}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}${sf ? ` · ${sf} flagged for re-vet` : ''}
+      </p>
+    </div>
+    <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
+      ${section(`New Hard Stops — Do Not Use Until Resolved (${hs})`, '#dc2626', carrierRows(payload.hardStops, '#dc2626', (c) => c.hardStops))}
+      ${openSection}
+      ${acceptedSection}
+      ${section(`Hard Stops Resolved — Insurance Restored (${rs})`, '#047857', carrierRows(payload.resolved ?? [], '#047857', (c) => c.hardStops))}
+      ${section(`Requires Review (${rv})`, '#d97706', carrierRows(payload.reviews, '#b45309', (c) => c.reviews))}
+      ${scoreFlagSummary}
+      ${replyRows ? `
+        <h2 style="color:#047857;font-size:16px;margin:24px 0 8px;">RMIS Replies (${rp})</h2>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:#f9fafb;">
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Reply</th>
+            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
+          </tr></thead>
+          <tbody>${replyRows}</tbody>
+        </table>` : ''}
+      ${hs + op + ac + rv + rp + sf + rs === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;">
+        <a href="${APP_URL}/carriers"
+           style="background:#0063A0;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;font-size:14px;">
+          Open Carrier Portal
+        </a>
+      </div>
+    </div>
+  </div>`
+  return { subject, html }
+}
+
 /**
  * Send the once-a-day digest to the DTS compliance inbox. Returns whether it
  * sent so the caller can record the run; never throws.
@@ -397,243 +632,13 @@ export async function sendDailyDigest(
     if (!apiKey || !from || to.length === 0) {
       return { sent: false, error: 'Email not configured (RESEND_API_KEY / ALERT_EMAIL_FROM / ALERT_EMAIL_TO)' }
     }
-    // Echoed back to the caller so the run log shows WHERE the digest went. A
-    // digest Resend accepts but nobody receives is usually addressed somewhere
-    // other than the inbox being watched, which is otherwise invisible.
-    const recipients = to
-    const sender = from
-    const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ''
+    const { subject, html } = renderDailyDigest(payload)
     const resend = new Resend(apiKey)
-
-    const esc = (s: string) =>
-      String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const idLine = (c: { dotNumber: string; mcNumber?: string | null }) => {
-      const mc = c.mcNumber ? String(c.mcNumber).replace(/\D/g, '') : ''
-      return `DOT ${esc(c.dotNumber)}${mc ? ` · MC ${esc(mc)}` : ''}`
-    }
-    const link = (dot: string) =>
-      APP_URL ? `<a href="${APP_URL}/carriers/${esc(dot)}" style="color:#0063A0;">View</a>` : ''
-
-    const hs = payload.hardStops.length
-    const rv = payload.reviews.length
-    const rp = payload.replies.length
-    const sf = payload.scoreFlagged ?? 0
-    const rs = payload.resolved?.length ?? 0
-    const open = payload.openHardStops ?? []
-    const op = open.length
-    // Open stops on a carrier that hauled recently are the urgent ones.
-    const opRecent = open.filter(
-      (c) =>
-        c.lastHauledAt != null &&
-        Date.now() - Date.parse(c.lastHauledAt) <= 45 * 24 * 3600e3
-    ).length
-    const accepted = payload.acceptedExceptions ?? []
-    const ac = accepted.length
-    const dateLabel = new Date(payload.until).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      timeZone: 'UTC',
-    })
-
-    const subject =
-      hs > 0
-        ? `DTS Daily Digest — ${hs} new hard stop${hs === 1 ? '' : 's'}, ${op} open, ${rv} to review (${dateLabel})`
-        : op > 0
-          ? `DTS Daily Digest — ${op} open hard stop${op === 1 ? '' : 's'}${opRecent ? ` (${opRecent} hauling)` : ''}, ${rv} to review (${dateLabel})`
-          : `DTS Daily Digest — ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''} (${dateLabel})`
-
-    // The bulk re-vet queue from a score upload is summarized, not enumerated.
-    const scoreFlagSummary =
-      sf > 0
-        ? `
-        <div style="margin:20px 0 0;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
-          <span style="font-weight:600;color:#92400e;">${sf} carrier${sf === 1 ? '' : 's'} flagged for re-vet</span>
-          <span style="color:#92400e;"> by the latest Bluewire score upload.</span>
-          ${APP_URL ? `<a href="${APP_URL}/carriers" style="color:#0063A0;margin-left:6px;">Review the re-vet queue →</a>` : ''}
-        </div>`
-        : ''
-
-    const carrierRows = (list: DigestCarrier[], accent: string, issuesOf: (c: DigestCarrier) => string[]) =>
-      list
-        .map(
-          (c) => `
-      <tr>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
-          <div style="font-weight:600;">${esc(c.legalName)}</div>
-          <div style="color:#6b7280;font-size:12px;">${idLine(c)}</div>
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:${accent};">
-          ${issuesOf(c).map((i) => esc(i)).join('<br/>')}
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(c.dotNumber)}</td>
-      </tr>`
-        )
-        .join('')
-
-    const section = (title: string, color: string, bodyRows: string) =>
-      bodyRows
-        ? `
-        <h2 style="color:${color};font-size:16px;margin:24px 0 8px;">${title}</h2>
-        <table style="width:100%;border-collapse:collapse;">
-          <thead>
-            <tr style="background:#f9fafb;">
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Issue</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
-            </tr>
-          </thead>
-          <tbody>${bodyRows}</tbody>
-        </table>`
-        : ''
-
-    const fmtDate = (iso: string | null | undefined) =>
-      iso
-        ? new Date(iso).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            timeZone: 'UTC',
-          })
-        : '—'
-
-    // The standing list carries an extra column: how long the stop has been open
-    // and when the carrier last hauled for DTS, so a carrier still moving
-    // freight without coverage is obvious at a glance.
-    const rowsFor = (list: OpenHardStopCarrier[], accent: string) =>
-      list
-      .map((c) => {
-        const hauledMs = c.lastHauledAt ? Date.parse(c.lastHauledAt) : NaN
-        const recent =
-          Number.isFinite(hauledMs) && Date.now() - hauledMs <= 45 * 24 * 3600e3
-        const highlight = recent && accent === '#dc2626'
-        return `
-      <tr${highlight ? ' style="background:#fef2f2;"' : ''}>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
-          <div style="font-weight:600;">${esc(c.legalName)}</div>
-          <div style="color:#6b7280;font-size:12px;">${idLine(c)}</div>
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:${accent};">
-          ${c.hardStops.map((i) => esc(i)).join('<br/>')}
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;font-size:13px;">
-          <div${c.daysOpen != null && c.daysOpen >= 7 && accent === '#dc2626' ? ' style="color:#b91c1c;font-weight:600;"' : ''}>
-            Open ${c.daysOpen != null ? `${c.daysOpen} day${c.daysOpen === 1 ? '' : 's'}` : 'unknown'}
-          </div>
-          <div style="color:${highlight ? '#b91c1c' : '#6b7280'};">
-            Last hauled ${fmtDate(c.lastHauledAt)}
-          </div>
-          ${c.exceptionDays != null
-            ? `<div style="color:#6b7280;">Exception ${c.exceptionDays} day${c.exceptionDays === 1 ? '' : 's'} old</div>`
-            : ''}
-          ${c.note ? `<div style="color:#b45309;">${esc(c.note)}</div>` : ''}
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(c.dotNumber)}</td>
-      </tr>`
-      })
-      .join('')
-
-    const openRows = rowsFor(open, '#dc2626')
-    const acceptedRows = rowsFor(accepted, '#b45309')
-
-    const statusTable = (
-      title: string,
-      color: string,
-      blurb: string,
-      rows: string
-    ) =>
-      rows
-        ? `
-        <h2 style="color:${color};font-size:16px;margin:24px 0 8px;">${title}</h2>
-        <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">${blurb}</p>
-        <table style="width:100%;border-collapse:collapse;">
-          <thead>
-            <tr style="background:#f9fafb;">
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Issue</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Status</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>`
-        : ''
-
-    const openSection = statusTable(
-      `Open Hard Stops — Needs Action (${op})`,
-      '#dc2626',
-      `Active carriers with a hard stop nobody has signed off on.` +
-        (opRecent > 0
-          ? ` <span style="color:#b91c1c;font-weight:600;">${opRecent} hauled for DTS in the last 45 days (highlighted).</span>`
-          : ''),
-      openRows
-    )
-
-    const acceptedSection = statusTable(
-      `Accepted With Exception — RMIS Still Not Updated (${ac})`,
-      '#b45309',
-      `Reviewed and approved as an exception, so no action is expected today. ` +
-        `Listed because the exception accepts the risk rather than removing it: ` +
-        `RMIS still shows no valid certificate, so the coverage isn't being ` +
-        `tracked for expiry. These move back to Needs Action if RMIS hasn't ` +
-        `caught up within 30 days.`,
-      acceptedRows
-    )
-
-    const replyRows = payload.replies
-      .map(
-        (r) => `
-      <tr>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
-          <div style="font-weight:600;">${esc(r.legalName)}</div>
-          <div style="color:#6b7280;font-size:12px;">DOT ${esc(r.dotNumber)}</div>
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${esc(r.note)}</td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(r.dotNumber)}</td>
-      </tr>`
-      )
-      .join('')
-
-    const html = `
-    <div style="font-family:sans-serif;max-width:900px;margin:0 auto;">
-      <div style="background:#AB0534;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
-        <h1 style="margin:0;font-size:20px;">DTS Carrier Daily Digest</h1>
-        <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">
-          ${dateLabel} · ${hs} new hard stop${hs === 1 ? '' : 's'}${op ? `, ${op} needing action` : ''}${ac ? `, ${ac} accepted with exception` : ''}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}${sf ? ` · ${sf} flagged for re-vet` : ''}
-        </p>
-      </div>
-      <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
-        ${section(`New Hard Stops — Do Not Use Until Resolved (${hs})`, '#dc2626', carrierRows(payload.hardStops, '#dc2626', (c) => c.hardStops))}
-        ${openSection}
-        ${acceptedSection}
-        ${section(`Hard Stops Resolved — Insurance Restored (${rs})`, '#047857', carrierRows(payload.resolved ?? [], '#047857', (c) => c.hardStops))}
-        ${section(`Requires Review (${rv})`, '#d97706', carrierRows(payload.reviews, '#b45309', (c) => c.reviews))}
-        ${scoreFlagSummary}
-        ${replyRows ? `
-          <h2 style="color:#047857;font-size:16px;margin:24px 0 8px;">RMIS Replies (${rp})</h2>
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="background:#f9fafb;">
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Reply</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
-            </tr></thead>
-            <tbody>${replyRows}</tbody>
-          </table>` : ''}
-        ${hs + op + ac + rv + rp + sf + rs === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
-        <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;">
-          <a href="${APP_URL}/carriers"
-             style="background:#0063A0;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;font-size:14px;">
-            Open Carrier Portal
-          </a>
-        </div>
-      </div>
-    </div>`
-
     const { error: sendErr } = await resend.emails.send({ from, to, subject, html })
     if (sendErr) {
-      return { sent: false, to: recipients, from: sender, error: sendErr.message ?? String(sendErr) }
+      return { sent: false, to, from, error: sendErr.message ?? String(sendErr) }
     }
-    return { sent: true, to: recipients, from: sender }
+    return { sent: true, to, from }
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : 'send failed' }
   }

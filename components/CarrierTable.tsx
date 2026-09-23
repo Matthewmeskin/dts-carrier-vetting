@@ -320,12 +320,9 @@ function LastHauledCell({ lastHauledAt }: { lastHauledAt: string | null | undefi
 function HardStopBadge({ count, exception }: { count: number; exception: boolean }) {
   if (!exception) return <Badge tone="red">{count} hard stop(s)</Badge>
   return (
-    <Badge
-      tone="amber"
-      title="Approved as an exception. RMIS still shows the hard stop; it clears when RMIS is updated."
-    >
-      {count} hard stop(s) · exception
-    </Badge>
+    <span title="Approved as an exception. RMIS still shows the hard stop; it clears when RMIS is updated.">
+      <Badge tone="amber">{count} hard stop(s) · exception</Badge>
+    </span>
   )
 }
 

@@ -16,6 +16,13 @@ export interface InsuranceRefreshRequest {
   reminder?: boolean
   /** Whole days until the soonest coverage expires (for reminder wording). */
   daysToExpiration?: number | null
+  /** Why we're asking. 'expiring' — coverage is due to expire (the nightly
+   *  batch). 'missing' — RMIS shows no current certificate on file at all, so
+   *  there is nothing to renew; we need the carrier's certificate pulled in. */
+  reason?: 'expiring' | 'missing'
+  /** Free-text line from whoever raised the request by hand (e.g. "carrier sent
+   *  us their 2026-2027 cargo COI directly"). */
+  note?: string | null
 }
 
 /**
@@ -54,20 +61,36 @@ export async function sendInsuranceRefreshRequest(
       typeof req.daysToExpiration === 'number' && req.daysToExpiration >= 0
         ? req.daysToExpiration
         : null
+    const missing = req.reason === 'missing'
     const subject = req.reminder
       ? `Reminder — Insurance update request — ${req.legalName} (${idLine})`
-      : `Insurance update request — ${req.legalName} (${idLine})`
+      : missing
+        ? `Certificate request — ${coverageList} not on file — ${req.legalName} (${idLine})`
+        : `Insurance update request — ${req.legalName} (${idLine})`
     const lead = req.reminder
       ? `Following up on our earlier request — this carrier's ${coverageList} coverage ` +
         `is still showing as due to expire${dLeft !== null ? ` and expires in ${dLeft} day(s)` : ''}. ` +
         `Could you please pull the updated certificate?`
-      : `Could you please pull the updated insurance certificate for the following ` +
-        `carrier? Their ${coverageList} coverage is showing as due to expire and we'd ` +
-        `like the refreshed certificate on file.`
+      : missing
+        ? `Could you please pull the current certificate of insurance for the ` +
+          `following carrier? Our RMIS record shows no current ${coverageList} ` +
+          `certificate on file for them, so there is nothing for us to verify ` +
+          `against. We can't continue using this carrier until it's on file.`
+        : `Could you please pull the updated insurance certificate for the following ` +
+          `carrier? Their ${coverageList} coverage is showing as due to expire and we'd ` +
+          `like the refreshed certificate on file.`
+    const noteLine = req.note && req.note.trim()
+      ? `<p style="margin:12px 0;">${req.note
+          .trim()
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')}</p>`
+      : ''
     const html = `
       <div style="font-family:sans-serif;max-width:640px;line-height:1.5;color:#111;">
         <p>Hello RMIS Support,</p>
         <p>${lead}</p>
+        ${noteLine}
         <table style="border-collapse:collapse;margin:12px 0;">
           <tr><td style="padding:2px 12px 2px 0;color:#555;">Carrier</td><td style="font-weight:600;">${req.legalName}</td></tr>
           <tr><td style="padding:2px 12px 2px 0;color:#555;">DOT</td><td>${req.dotNumber}</td></tr>
@@ -79,10 +102,14 @@ export async function sendInsuranceRefreshRequest(
       </div>`
     const text =
       `Hello RMIS Support,\n\n${req.reminder ? 'Following up on our earlier request — ' : ''}` +
-      `Please pull the updated insurance certificate for the following carrier ` +
-      `(coverage due to expire${dLeft !== null ? `, expires in ${dLeft} day(s)` : ''}):\n\n` +
+      (missing
+        ? `Please pull the current certificate of insurance for the following carrier ` +
+          `(our RMIS record shows no current ${coverageList} certificate on file):\n\n`
+        : `Please pull the updated insurance certificate for the following carrier ` +
+          `(coverage due to expire${dLeft !== null ? `, expires in ${dLeft} day(s)` : ''}):\n\n`) +
       `Carrier: ${req.legalName}\nDOT: ${req.dotNumber}\n${mc ? `MC: ${mc}\n` : ''}` +
       `Coverage: ${coverageList}\n${expBits.length ? expBits.join('\n') + '\n' : ''}` +
+      `${req.note && req.note.trim() ? `\n${req.note.trim()}\n` : ''}` +
       `\nThank you,\nDTS Compliance`
 
     await resend.emails.send({

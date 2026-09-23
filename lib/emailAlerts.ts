@@ -386,7 +386,7 @@ export interface DailyDigestPayload {
  */
 export async function sendDailyDigest(
   payload: DailyDigestPayload
-): Promise<{ sent: boolean; error?: string; to?: string[] }> {
+): Promise<{ sent: boolean; error?: string; to?: string[]; from?: string }> {
   try {
     const apiKey = process.env.RESEND_API_KEY
     const from = process.env.ALERT_EMAIL_FROM
@@ -401,6 +401,7 @@ export async function sendDailyDigest(
     // digest Resend accepts but nobody receives is usually addressed somewhere
     // other than the inbox being watched, which is otherwise invisible.
     const recipients = to
+    const sender = from
     const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ''
     const resend = new Resend(apiKey)
 
@@ -630,9 +631,9 @@ export async function sendDailyDigest(
 
     const { error: sendErr } = await resend.emails.send({ from, to, subject, html })
     if (sendErr) {
-      return { sent: false, to: recipients, error: sendErr.message ?? String(sendErr) }
+      return { sent: false, to: recipients, from: sender, error: sendErr.message ?? String(sendErr) }
     }
-    return { sent: true, to: recipients }
+    return { sent: true, to: recipients, from: sender }
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : 'send failed' }
   }

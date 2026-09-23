@@ -402,7 +402,7 @@ export async function POST(request: Request) {
     if (!result.sent) {
       // Don't advance the window on send failure — retry the same items next run.
       return NextResponse.json(
-        { since, until, itemCount, sent: false, to: result.to ?? null, error: result.error },
+        { since, until, itemCount, sent: false, to: result.to ?? null, from: result.from ?? null, error: result.error },
         { status: 502 }
       )
     }
@@ -416,6 +416,7 @@ export async function POST(request: Request) {
       until,
       sent: true,
       to: result.to ?? null,
+      from: result.from ?? null,
       hardStops: hardStops.length,
       openHardStops: openHardStops.length,
       acceptedExceptions: acceptedExceptions.length,

@@ -321,7 +321,9 @@ function HardStopBadge({ count, exception }: { count: number; exception: boolean
   if (!exception) return <Badge tone="red">{count} hard stop(s)</Badge>
   return (
     <span title="Approved as an exception. RMIS still shows the hard stop; it clears when RMIS is updated.">
-      <Badge tone="amber">{count} hard stop(s) · exception</Badge>
+      <Badge tone="amber">
+        {count === 1 ? 'Hard stop' : `${count} hard stops`} · exception approved
+      </Badge>
     </span>
   )
 }

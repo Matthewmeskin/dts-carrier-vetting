@@ -112,7 +112,7 @@ export async function sendInsuranceRefreshRequest(
       `${req.note && req.note.trim() ? `\n${req.note.trim()}\n` : ''}` +
       `\nThank you,\nDTS Compliance`
 
-    await resend.emails.send({
+    const { error: sendErr } = await resend.emails.send({
       from,
       to,
       subject,
@@ -120,6 +120,9 @@ export async function sendInsuranceRefreshRequest(
       text,
       ...(replyTo.length ? { replyTo } : {}),
     })
+    if (sendErr) {
+      return { sent: false, to, error: sendErr.message ?? String(sendErr) }
+    }
     return { sent: true, to }
   } catch (e) {
     return { sent: false, to, error: e instanceof Error ? e.message : 'send failed' }
@@ -230,7 +233,10 @@ export async function sendComplianceAlert(carriers: FlaggedCarrier[], batchLabel
       </div>
     </div>`
 
-  await resend.emails.send({ from: FROM, to: TO, subject, html })
+  const { error: sendErr } = await resend.emails.send({ from: FROM, to: TO, subject, html })
+  if (sendErr) {
+    console.error('sendComplianceAlert: Resend rejected the send:', sendErr)
+  }
 }
 
 // ── Expired-insurance report ─────────────────────────────────────────────────
@@ -303,7 +309,10 @@ export async function sendInsuranceExpiryReport(
       </div>
     </div>`
 
-    await resend.emails.send({ from, to, subject, html })
+    const { error: sendErr } = await resend.emails.send({ from, to, subject, html })
+    if (sendErr) {
+      return { sent: false, error: sendErr.message ?? String(sendErr) }
+    }
     return { sent: true }
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : 'send failed' }
@@ -615,7 +624,10 @@ export async function sendDailyDigest(
       </div>
     </div>`
 
-    await resend.emails.send({ from, to, subject, html })
+    const { error: sendErr } = await resend.emails.send({ from, to, subject, html })
+    if (sendErr) {
+      return { sent: false, error: sendErr.message ?? String(sendErr) }
+    }
     return { sent: true }
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : 'send failed' }

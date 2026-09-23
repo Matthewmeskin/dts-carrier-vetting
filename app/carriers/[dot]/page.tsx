@@ -475,7 +475,11 @@ export default function CarrierDetailPage({
         </CardBody>
       </Card>
 
-      <AlertBanner hardStops={displayHardStops} flags={displayFlags} />
+      <AlertBanner
+        hardStops={displayHardStops}
+        flags={displayFlags}
+        exceptionApproved={carrier.carrier_status === 'Exception Approved'}
+      />
 
       {/* Full-width panels — kept short by their own collapse toggles rather than
           squeezing them into a cramped 2-column grid. */}

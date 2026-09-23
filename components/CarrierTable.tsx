@@ -313,6 +313,22 @@ function LastHauledCell({ lastHauledAt }: { lastHauledAt: string | null | undefi
   )
 }
 
+/** Hard-stop count for a row. Red means nobody has signed off. Amber means a
+ *  reviewer approved the carrier as an exception with the stop documented —
+ *  the stop is still real (RMIS hasn't caught up), but it's known and accepted,
+ *  so it shouldn't read like an unactioned alarm. */
+function HardStopBadge({ count, exception }: { count: number; exception: boolean }) {
+  if (!exception) return <Badge tone="red">{count} hard stop(s)</Badge>
+  return (
+    <Badge
+      tone="amber"
+      title="Approved as an exception. RMIS still shows the hard stop; it clears when RMIS is updated."
+    >
+      {count} hard stop(s) · exception
+    </Badge>
+  )
+}
+
 function gapTone(gap: number | null): { tone: string; label: string } {
   if (gap === null || gap === undefined)
     return { tone: 'text-gray-400', label: '—' }
@@ -1218,9 +1234,10 @@ export function CarrierTable({
                       </div>
                       <div className={COL.insurance}>
                         {(c.hard_stops?.length ?? 0) > 0 ? (
-                          <Badge tone="red">
-                            {c.hard_stops!.length} hard stop(s)
-                          </Badge>
+                          <HardStopBadge
+                            count={c.hard_stops!.length}
+                            exception={c.carrier_status === 'Exception Approved'}
+                          />
                         ) : (
                           <div className="flex flex-wrap gap-1">
                             <Badge tone={coverageStatusTone(c.auto_status)}>
@@ -1424,9 +1441,10 @@ export function CarrierTable({
                       ) : null}
                       {c.eld_enrolled && <Badge tone="blue">ELD</Badge>}
                       {(c.hard_stops?.length ?? 0) > 0 ? (
-                        <Badge tone="red">
-                          {c.hard_stops!.length} hard stop(s)
-                        </Badge>
+                        <HardStopBadge
+                          count={c.hard_stops!.length}
+                          exception={c.carrier_status === 'Exception Approved'}
+                        />
                       ) : (
                         <>
                           <Badge tone={coverageStatusTone(c.auto_status)}>

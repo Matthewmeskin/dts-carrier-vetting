@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { parseCarrierAndFactor } from '@/lib/carrierName'
+import { normalizeMc, nameKey, isNonHaulingCarrier } from '@/lib/carrierMatch'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -93,29 +93,8 @@ function toLoadRow(load: LoadObj): Record<string, any> | null {
   }
 }
 
-/** MC number reduced to digits so "MC-307158" and "307158" compare equal. */
-function normalizeMc(mc: string | null | undefined): string {
-  return (mc ?? '').replace(/\D/g, '')
-}
 
-/** Carrier name reduced to a comparable key: Brokerware suffixes like "(*)",
- *  "(#)" or "(*A) CA Only" and the "/Factor" tail are dropped, then case and
- *  punctuation are ignored, so "EDI Express, Inc." matches "EDI EXPRESS INC". */
-function nameKey(name: string | null | undefined): string {
-  if (!name) return ''
-  const base = parseCarrierAndFactor(name).carrierName.replace(/\([^)]*\)/g, ' ')
-  return base
-    .toLowerCase()
-    .replace(/\b(inc|llc|ltd|corp|corporation|co|company)\b/g, ' ')
-    .replace(/[^a-z0-9]+/g, '')
-}
 
-/** Brokerware lists some non-transport accounts as carriers on a load
- *  (cargo-insurance add-ons like Loadsure, placeholder / non-transport
- *  entries). They never "haul", so they must not earn a haul date. */
-function isNonHaulingCarrier(name: string | null | undefined): boolean {
-  return /insurance|loadsure|non[- ]?transport|placeholder/i.test(name ?? '')
-}
 
 /** Best available "hauled on" date for a load — delivery preferred (completed),
  *  then pickup, then created. */

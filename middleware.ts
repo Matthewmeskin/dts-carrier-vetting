@@ -258,6 +258,6 @@ a{display:inline-block;margin-top:1rem;padding:.5rem 1rem;border-radius:.5rem;ba
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/cron|api/webhooks|api/carriers/sync|api/upload-scores|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/cron|api/webhooks|api/carriers/sync|api/carriers/check|api/upload-scores|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }

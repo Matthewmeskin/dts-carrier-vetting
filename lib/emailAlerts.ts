@@ -559,8 +559,8 @@ export function renderDailyDigest(
     `Reviewed and approved as an exception, so no action is expected today. ` +
       `Listed because the exception accepts the risk rather than removing it: ` +
       `RMIS still shows no valid certificate, so the coverage isn't being ` +
-      `tracked for expiry. These move back to Needs Action if RMIS hasn't ` +
-      `caught up within 30 days.`,
+      `tracked for expiry. An exception lasts until the carrier's re-vet comes ` +
+      `due; if RMIS still hasn't caught up by then it moves back to Needs Action.`,
     acceptedRows
   )
 

@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
     let q = supabaseAdmin
       .from('carriers')
-      .select('id, dot_number, mc_number, legal_name, carrier_status, do_not_use, brokerware_status, is_intrastate, created_at, revet_interval_days, revet_reset_at, revet_due_override')
+      .select('id, dot_number, mc_number, legal_name, carrier_status, do_not_use, brokerware_status, safety_rating, is_intrastate, created_at, revet_interval_days, revet_reset_at, revet_due_override')
     q = dot ? q.eq('dot_number', dot) : q.ilike('mc_number', `%${mc}`)
     const { data: rows } = await q.limit(5)
     const carrier = (rows ?? []).find((r: any) => !mc || normalizeMc(r.mc_number) === mc) ?? (rows ?? [])[0]
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
       )
     }
     const c: any = carrier
-    const [insRes, vetRes] = await Promise.all([
+    const [insRes, vetRes, scoreRes] = await Promise.all([
       (supabaseAdmin as any)
         .from('carrier_insurance_latest')
         .select('hard_stops, auto_status, cargo_status, fetched_at')
@@ -58,6 +58,14 @@ export async function GET(request: Request) {
         .order('completed_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      (supabaseAdmin as any)
+        .from('carrier_scores')
+        .select('gap_score')
+        .eq('dot_number', c.dot_number)
+        .order('release_month', { ascending: false })
+        .order('upload_date', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
     const ins: any = insRes.data
     const vetted = (vetRes.data as any)?.completed_at ?? null
@@ -69,6 +77,8 @@ export async function GET(request: Request) {
       carrier_status: c.carrier_status,
       do_not_use: c.do_not_use,
       brokerware_status: c.brokerware_status,
+      safety_rating: c.safety_rating ?? null,
+      gap_score: (scoreRes.data as any)?.gap_score ?? null,
       hard_stops: ins?.hard_stops ?? null,
       last_reviewed: lastReviewed,
       created_at: c.created_at,

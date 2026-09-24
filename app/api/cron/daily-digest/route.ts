@@ -366,7 +366,7 @@ export async function POST(request: Request) {
         .limit(100000)
       const { data: allCarriers } = await supabaseAdmin
         .from('carriers')
-        .select('id, dot_number, mc_number, brokerware_raw_name, legal_name, dba_name, carrier_status, do_not_use, brokerware_status, is_intrastate, created_at, revet_interval_days, revet_reset_at, revet_due_override')
+        .select('id, dot_number, mc_number, brokerware_raw_name, legal_name, dba_name, carrier_status, do_not_use, brokerware_status, safety_rating, is_intrastate, created_at, revet_interval_days, revet_reset_at, revet_due_override')
         .limit(100000)
       const index = new CarrierIndex((allCarriers ?? []) as any)
       const carrierById = new Map<string, any>()
@@ -390,8 +390,9 @@ export async function POST(request: Request) {
 
       const insByDot = new Map<string, any>()
       const vettedByDot = new Map<string, string>()
+      const gapByDot = new Map<string, number | null>()
       if (hitDots.length > 0) {
-        const [insRes, vetRes] = await Promise.all([
+        const [insRes, vetRes, scoreRes] = await Promise.all([
           (supabaseAdmin as any)
             .from('carrier_insurance_latest')
             .select('dot_number, hard_stops')
@@ -404,8 +405,19 @@ export async function POST(request: Request) {
             .not('completed_at', 'is', null)
             .order('completed_at', { ascending: false })
             .limit(100000),
+          (supabaseAdmin as any)
+            .from('carrier_scores')
+            .select('dot_number, gap_score, release_month, upload_date')
+            .in('dot_number', hitDots)
+            .order('release_month', { ascending: false })
+            .order('upload_date', { ascending: false })
+            .limit(100000),
         ])
         for (const r of insRes.data ?? []) insByDot.set(String(r.dot_number), r)
+        for (const r of scoreRes.data ?? []) {
+          const d = String(r.dot_number)
+          if (!gapByDot.has(d)) gapByDot.set(d, r.gap_score ?? null)
+        }
         for (const v of vetRes.data ?? []) {
           const d = String(v.dot_number)
           if (!vettedByDot.has(d)) vettedByDot.set(d, v.completed_at)
@@ -422,6 +434,8 @@ export async function POST(request: Request) {
             carrier_status: c.carrier_status,
             do_not_use: c.do_not_use,
             brokerware_status: c.brokerware_status,
+            safety_rating: c.safety_rating ?? null,
+            gap_score: gapByDot.get(dot) ?? null,
             hard_stops: insByDot.get(dot)?.hard_stops ?? null,
             last_reviewed: lastReviewed,
             created_at: c.created_at,

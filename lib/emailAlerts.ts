@@ -591,10 +591,11 @@ export function renderDailyDigest(
           Loads Tendered to Ineligible Carriers (${tx}${txNew ? `, ${txNew} new` : ''})
         </h2>
         <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">
-          Loads in the TMS whose carrier was not eligible under the selection policy when the
-          portal saw the load: not approved, disabled, or carrying an open hard stop that no one
-          has signed off on. Each one stays here until the carrier is made eligible or the
-          deviation is documented and closed on the carrier's page.
+          Loads in the TMS whose carrier had a substantive problem when the portal saw the load:
+          an open hard stop (insurance, authority, SAFER, rating) with no live exception, a GAP
+          score below 60, a Conditional or Unsatisfactory rating, disabled in the TMS, or an
+          explicit Declined / On Hold decision. Each one stays here until the carrier is cleared
+          or the deviation is documented and closed on the carrier's page.
         </p>
         <table style="width:100%;border-collapse:collapse;">
           <thead>

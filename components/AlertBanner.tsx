@@ -6,6 +6,7 @@ export function AlertBanner({
   exceptionApproved = false,
   exceptionDays = null,
   exceptionAged = false,
+  revetOverdueDays = null,
 }: {
   hardStops?: string[] | null
   flags?: string[] | null
@@ -18,6 +19,8 @@ export function AlertBanner({
   /** The exception has aged past the window with RMIS still not updated, so
    *  the stop is back to needs-action; shown red with the age called out. */
   exceptionAged?: boolean
+  /** Days the re-vet is overdue, when the exception has expired. */
+  revetOverdueDays?: number | null
 }) {
   const hs = hardStops ?? []
   const fl = flags ?? []
@@ -39,10 +42,11 @@ export function AlertBanner({
           </ul>
           <p className="mt-2 text-xs text-red-700">
             Approved as an exception{exceptionDays != null ? ` ${exceptionDays} days ago` : ''},
-            but RMIS still shows the hard stop. That is past the window, so this
-            carrier needs action again: chase the certificate with “Request COI
-            from RMIS”, re-check with “Refresh from RMIS/SAFER”, or re-review the
-            exception.
+            but the re-vet is now overdue{revetOverdueDays != null ? ` by ${revetOverdueDays} days` : ''} and
+            RMIS still shows the hard stop. The exception lasted as long as that
+            vetting did, so this carrier needs action again: re-vet it, chase the
+            certificate with “Request COI from RMIS”, or re-check with “Refresh
+            from RMIS/SAFER”.
           </p>
         </div>
       )}
@@ -61,7 +65,8 @@ export function AlertBanner({
             Approved as an exception with the certificate documented here. The
             stop is driven by the RMIS record and clears on its own once RMIS
             carries the certificate — use “Request COI from RMIS” if it hasn’t
-            been sent, and “Refresh from RMIS/SAFER” to re-check.
+            been sent, and “Refresh from RMIS/SAFER” to re-check. The exception
+            lasts until this carrier’s re-vet comes due.
           </p>
         </div>
       )}

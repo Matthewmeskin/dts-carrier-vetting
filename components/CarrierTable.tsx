@@ -38,7 +38,7 @@ import {
   BIZ_KEY_INCORPORATED,
 } from '@/lib/businessType'
 import { INACTIVE_CARRIER_HOLD_NOTE } from '@/lib/statusNotes'
-import { EXCEPTION_MAX_DAYS, daysSince, exceptionState } from '@/lib/exceptions'
+import { daysSince, exceptionState } from '@/lib/exceptions'
 
 const UNKNOWN_BIZ = 'Unknown'
 
@@ -107,7 +107,7 @@ function buildCarrierCsv(rows: CarrierSummary[]): string {
   ]
   const lines = [headers.join(',')]
   for (const c of rows) {
-    const rv = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days)
+    const rv = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days, c.revet_due_override)
     const disabled = isBrokerwareDisabled(c.brokerware_status)
     const rmis =
       c.rmis_status === 'certified' ? 'Certified'
@@ -282,11 +282,7 @@ const SORT_COLS: Record<SortKey, SortColDef> = {
   },
   revet: {
     getValue: (c) => {
-      const r = computeRevetStatus(
-        c.last_reviewed,
-        c.created_at,
-        c.revet_interval_days
-      )
+      const r = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days, c.revet_due_override)
       return r.dueDate ? r.dueDate.getTime() : null
     },
     type: 'num',
@@ -323,18 +319,27 @@ function LastHauledCell({ lastHauledAt }: { lastHauledAt: string | null | undefi
  *  so it shouldn't read like an unactioned alarm. */
 function HardStopBadge({ count, carrier }: { count: number; carrier: CarrierSummary }) {
   const label = count === 1 ? 'Hard stop' : `${count} hard stops`
-  const state = exceptionState(carrier.carrier_status, carrier.exception_since)
+  const rv = computeRevetStatus(
+    carrier.last_reviewed,
+    carrier.created_at,
+    carrier.revet_interval_days,
+    carrier.revet_due_override
+  )
+  const state = exceptionState(carrier.carrier_status, rv.dueDate)
   if (state === 'none') return <Badge tone="red">{label}</Badge>
-  const days = daysSince(carrier.exception_since)
+  const approvedDays = daysSince(carrier.exception_since)
+  const approvedAgo =
+    approvedDays !== null ? ` ${approvedDays} day${approvedDays === 1 ? '' : 's'} ago` : ''
   if (state === 'aged') {
+    const overdue = rv.daysUntil !== null ? Math.abs(rv.daysUntil) : null
     return (
       <div
         className="inline-flex flex-col items-start gap-0.5"
-        title={`Approved as an exception ${days} days ago, but RMIS still shows the hard stop. Past the ${EXCEPTION_MAX_DAYS}-day window, so it needs action again.`}
+        title={`Approved as an exception${approvedAgo}, but the re-vet is now overdue and RMIS still shows the hard stop, so it needs action again.`}
       >
         <Badge tone="red">{label}</Badge>
         <span className="pl-0.5 text-[10px] font-medium uppercase tracking-wide text-red-700">
-          Exception expired · {days}d
+          Exception expired{overdue !== null ? ` · re-vet overdue ${overdue}d` : ''}
         </span>
       </div>
     )
@@ -342,11 +347,11 @@ function HardStopBadge({ count, carrier }: { count: number; carrier: CarrierSumm
   return (
     <div
       className="inline-flex flex-col items-start gap-0.5"
-      title={`Approved as an exception${days !== null ? ` ${days} day${days === 1 ? '' : 's'} ago` : ''}. RMIS still shows the hard stop; it clears when RMIS is updated, or moves back to needs-action after ${EXCEPTION_MAX_DAYS} days.`}
+      title={`Approved as an exception${approvedAgo}. RMIS still shows the hard stop; it clears when RMIS is updated, and the exception expires when the re-vet comes due.`}
     >
       <Badge tone="amber">{label}</Badge>
       <span className="pl-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
-        Exception approved{days !== null ? ` · ${days}d` : ''}
+        Exception approved{rv.daysUntil !== null && rv.daysUntil >= 0 ? ` · ${rv.daysUntil}d left` : ''}
       </span>
     </div>
   )
@@ -594,29 +599,25 @@ export function CarrierTable({
           )
         case 'DueForRevet': {
           if (isBrokerwareDisabled(c.brokerware_status)) return false
-          const r = computeRevetStatus(
-            c.last_reviewed,
-            c.created_at,
-            c.revet_interval_days
-          )
+          const r = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days, c.revet_due_override)
           return r.state === 'overdue' || r.state === 'due_soon'
         }
         case 'HardStop':
           return (c.hard_stops?.length ?? 0) > 0
-        case 'HardStopOpen':
+        case 'HardStopOpen': {
           // Needs action: an open stop with no sign-off, or one whose exception
-          // has aged past the window with RMIS still not updated.
-          return (
-            (c.hard_stops?.length ?? 0) > 0 &&
-            exceptionState(c.carrier_status, c.exception_since) !== 'accepted' &&
-            !isBrokerwareDisabled(c.brokerware_status)
-          )
-        case 'HardStopException':
-          // Accepted: exception-approved within the window; RMIS still shows it.
-          return (
-            (c.hard_stops?.length ?? 0) > 0 &&
-            exceptionState(c.carrier_status, c.exception_since) === 'accepted'
-          )
+          // has expired (re-vet overdue) with RMIS still not updated.
+          if ((c.hard_stops?.length ?? 0) === 0) return false
+          if (isBrokerwareDisabled(c.brokerware_status)) return false
+          const rv = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days, c.revet_due_override)
+          return exceptionState(c.carrier_status, rv.dueDate) !== 'accepted'
+        }
+        case 'HardStopException': {
+          // Accepted: exception-approved and the re-vet isn't due yet; RMIS still shows it.
+          if ((c.hard_stops?.length ?? 0) === 0) return false
+          const rv = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days, c.revet_due_override)
+          return exceptionState(c.carrier_status, rv.dueDate) === 'accepted'
+        }
         case 'DoNotUse':
           // "Declined" now covers the former Declined / Suspended / Do Not Use.
           return (
@@ -1181,11 +1182,7 @@ export function CarrierTable({
                 {rowVirtualizer.getVirtualItems().map((vi) => {
                   const c = filtered[vi.index]
                   const g = gapTone(c.gap_score)
-                  const rv = computeRevetStatus(
-                    c.last_reviewed,
-                    c.created_at,
-                    c.revet_interval_days
-                  )
+                  const rv = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days, c.revet_due_override)
                   const disabled = isBrokerwareDisabled(c.brokerware_status)
                   return (
                     <div
@@ -1364,11 +1361,7 @@ export function CarrierTable({
             {mobileVirtualizer.getVirtualItems().map((vi) => {
               const c = filtered[vi.index]
               const g = gapTone(c.gap_score)
-              const rv = computeRevetStatus(
-                c.last_reviewed,
-                c.created_at,
-                c.revet_interval_days
-              )
+              const rv = computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days, c.revet_due_override)
               const disabled = isBrokerwareDisabled(c.brokerware_status)
               return (
                 <div

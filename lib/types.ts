@@ -35,6 +35,8 @@ export interface CarrierSummary {
   /** When the carrier was last set to Exception Approved (activity log), so the
    *  UI can age the exception the same way the digest does. */
   exception_since: string | null
+  /** Manually-set re-vet due date; wins over the interval-based calculation. */
+  revet_due_override: string | null
   business_type: string | null
   eld_enrolled: boolean | null
   w9_on_file: boolean | null

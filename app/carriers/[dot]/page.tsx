@@ -481,7 +481,8 @@ export default function CarrierDetailPage({
         flags={displayFlags}
         exceptionApproved={carrier.carrier_status === 'Exception Approved'}
         exceptionDays={daysSince(carrier.exception_since)}
-        exceptionAged={exceptionState(carrier.carrier_status, carrier.exception_since) === 'aged'}
+        exceptionAged={exceptionState(carrier.carrier_status, revet.dueDate) === 'aged'}
+        revetOverdueDays={revet.daysUntil !== null && revet.daysUntil < 0 ? Math.abs(revet.daysUntil) : null}
       />
 
       {/* Full-width panels — kept short by their own collapse toggles rather than

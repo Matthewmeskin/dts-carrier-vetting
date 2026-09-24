@@ -1,10 +1,12 @@
-// Exception-approved hard stops: one definition of "accepted" vs "aged", shared
-// by the carriers table, the carrier page and the daily digest so all three
-// agree on the day a carrier flips from amber back to red.
-
-/** An Exception Approved carrier whose RMIS record still carries the hard stop
- *  after this many days is escalated back to needs-action. */
-export const EXCEPTION_MAX_DAYS = 30
+// Exception-approved hard stops: one definition of "accepted" vs "expired",
+// shared by the carriers table, the carrier page and the daily digest so all
+// three flip on the same day.
+//
+// An exception lasts exactly as long as the carrier's current vetting: it is
+// accepted until the carrier's re-vet comes due, and expires the day the re-vet
+// is overdue. Set the re-vet cadence to 60 days and the exception is good for
+// 60 days; set a specific due date and the exception ends on that date. There
+// is no separate exception clock to drift out of step with the re-vet clock.
 
 export type ExceptionState = 'none' | 'accepted' | 'aged'
 
@@ -16,18 +18,18 @@ export function daysSince(iso: string | null | undefined, now: number = Date.now
 
 /** Where an open hard stop stands for this carrier.
  *  - 'none': not exception-approved — a plain open stop.
- *  - 'accepted': exception-approved within the window (or with no recorded
- *    sign-off date; missing data never escalates on its own).
- *  - 'aged': exception-approved more than EXCEPTION_MAX_DAYS ago and RMIS still
- *    hasn't caught up, so it goes back to needs-action. */
+ *  - 'accepted': exception-approved and the re-vet is not yet due (or the due
+ *    date is unknown; missing data never escalates on its own).
+ *  - 'aged': exception-approved but the re-vet is overdue and RMIS still
+ *    carries the stop, so it goes back to needs-action. */
 export function exceptionState(
   carrierStatus: string | null | undefined,
-  exceptionSince: string | null | undefined,
+  revetDueDate: Date | null | undefined,
   now: number = Date.now()
 ): ExceptionState {
   if (carrierStatus !== 'Exception Approved') return 'none'
-  const d = daysSince(exceptionSince, now)
-  return d !== null && d > EXCEPTION_MAX_DAYS ? 'aged' : 'accepted'
+  if (!revetDueDate || Number.isNaN(revetDueDate.getTime())) return 'accepted'
+  return revetDueDate.getTime() < now ? 'aged' : 'accepted'
 }
 
 /** Whether an activity-log event records the carrier being set to Exception

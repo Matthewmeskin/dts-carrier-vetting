@@ -7,7 +7,7 @@ import {
   type DigestReply,
   type OpenHardStopCarrier,
 } from '@/lib/emailAlerts'
-import { isBrokerwareDisabled } from '@/lib/revet'
+import { computeRevetStatus, isBrokerwareDisabled } from '@/lib/revet'
 import { exceptionState, daysSince as daysSinceIso } from '@/lib/exceptions'
 import { fetchExceptionSince } from '@/lib/exceptionsServer'
 
@@ -232,7 +232,7 @@ export async function POST(request: Request) {
     {
       const { data: activeCarriers } = await (supabaseAdmin as any)
         .from('carriers')
-        .select('dot_number, legal_name, mc_number, brokerware_status, last_hauled_at, carrier_status')
+        .select('dot_number, legal_name, mc_number, brokerware_status, last_hauled_at, carrier_status, created_at, revet_interval_days, revet_reset_at, revet_due_override')
         .limit(100000)
       const activeByDot = new Map<string, any>()
       for (const c of activeCarriers ?? []) {
@@ -281,6 +281,30 @@ export async function POST(request: Request) {
         openDots.filter((d) => activeByDot.get(d)?.carrier_status === 'Exception Approved')
       )
       const daysSince = (iso: string | null | undefined) => daysSinceIso(iso, now.getTime())
+
+      // Latest completed vetting per open-stop carrier: the re-vet clock the
+      // exception is tied to anchors on it (or on revet_reset_at / created_at).
+      const lastVettedByDot = new Map<string, string>()
+      if (openDots.length > 0) {
+        const { data: vets } = await (supabaseAdmin as any)
+          .from('vetting_records')
+          .select('dot_number, completed_at')
+          .in('dot_number', openDots)
+          .not('completed_at', 'is', null)
+          .order('completed_at', { ascending: false })
+          .limit(100000)
+        for (const v of vets ?? []) {
+          const d = String(v.dot_number)
+          if (!lastVettedByDot.has(d)) lastVettedByDot.set(d, v.completed_at)
+        }
+      }
+      const revetOf = (dot: string, c: any) => {
+        const vetted = lastVettedByDot.get(dot) ?? null
+        const reset = c?.revet_reset_at ?? null
+        const lastReviewed =
+          vetted && reset ? (Date.parse(vetted) >= Date.parse(reset) ? vetted : reset) : vetted ?? reset
+        return computeRevetStatus(lastReviewed, c?.created_at, c?.revet_interval_days, c?.revet_due_override)
+      }
       for (const [dot, stops] of Array.from(openByDot.entries())) {
         const c = activeByDot.get(dot)
         const exceptionSince = exceptionSinceByDot.get(dot) ?? null
@@ -295,12 +319,17 @@ export async function POST(request: Request) {
           exceptionSince,
           exceptionDays,
         }
-        const state = exceptionState(c?.carrier_status, exceptionSince, now.getTime())
+        const rv = revetOf(dot, c)
+        const state = exceptionState(c?.carrier_status, rv.dueDate, now.getTime())
         if (state === 'accepted') {
+          if (rv.daysUntil !== null && rv.daysUntil >= 0) {
+            entry.note = `Exception runs until the re-vet is due in ${rv.daysUntil}d.`
+          }
           acceptedExceptions.push(entry)
         } else {
           if (state === 'aged') {
-            entry.note = `Exception approved ${exceptionDays} days ago — RMIS still not updated.`
+            const overdue = rv.daysUntil !== null ? Math.abs(rv.daysUntil) : null
+            entry.note = `Exception expired — re-vet overdue${overdue !== null ? ` by ${overdue}d` : ''}, RMIS still not updated.`
           }
           openHardStops.push(entry)
         }

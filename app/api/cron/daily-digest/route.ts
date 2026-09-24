@@ -447,13 +447,17 @@ export async function POST(request: Request) {
         )
       }
 
-      const { data: openRows } = await (supabaseAdmin as any)
+      // Every row for a load in the window, resolved or not: a deviation that
+      // was closed and then recurs (or was closed in error) must re-open, not
+      // stay hidden behind an old resolution.
+      const { data: windowRows } = await (supabaseAdmin as any)
         .from('tender_exceptions')
-        .select('id, load_id, dot_number, first_seen_at, reasons')
-        .is('resolved_at', null)
+        .select('id, load_id, dot_number, first_seen_at, reasons, resolved_at')
+        .gte('pickup_date', windowStart)
         .limit(100000)
-      const openByKey = new Map<string, any>()
-      for (const r of openRows ?? []) openByKey.set(`${r.load_id}:${r.dot_number}`, r)
+      const rowByKey = new Map<string, any>()
+      for (const r of windowRows ?? []) rowByKey.set(`${r.load_id}:${r.dot_number}`, r)
+      const openRows = (windowRows ?? []).filter((r: any) => !r.resolved_at)
 
       const stillViolating = new Set<string>()
       const upserts: any[] = []
@@ -471,8 +475,9 @@ export async function POST(request: Request) {
         const key = `${h.loadId}:${dot}`
         if (stillViolating.has(key)) continue
         stillViolating.add(key)
-        const existing = openByKey.get(key)
-        const isNew = !existing
+        const existing = rowByKey.get(key)
+        // New to the digest if never seen, or seen but since closed out.
+        const isNew = !existing || !!existing.resolved_at
         upserts.push({
           load_id: h.loadId,
           dot_number: dot,
@@ -483,6 +488,11 @@ export async function POST(request: Request) {
           carrier_status: h.carrier.carrier_status ?? null,
           last_seen_at: until,
           reported_at: until,
+          // A current violation is open by definition — clears any earlier
+          // resolution so a recurrence can't hide behind it.
+          resolved_at: null,
+          resolution: null,
+          resolved_by: null,
           ...(isNew ? { first_seen_at: until } : {}),
         })
         tenderExceptions.push({
@@ -493,7 +503,7 @@ export async function POST(request: Request) {
           customerName: h.customer,
           pickupDate: h.pickup,
           reasons: el.reasons,
-          firstSeenAt: existing?.first_seen_at ?? until,
+          firstSeenAt: existing && !existing.resolved_at ? existing.first_seen_at : until,
           isNew,
         })
         if (isNew) newEvents.push({ dot, carrierId: h.carrier.id ?? null, loadId: h.loadId, reasons: el.reasons })

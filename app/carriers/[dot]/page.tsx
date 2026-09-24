@@ -19,6 +19,7 @@ import { AuthorityPanel } from '@/components/AuthorityPanel'
 import { SosPanel } from '@/components/SosPanel'
 import { InsurancePanel } from '@/components/InsurancePanel'
 import { RmisRefreshButton } from '@/components/RmisRefreshButton'
+import { daysSince, exceptionState } from '@/lib/exceptions'
 import { InsuranceRequestButton } from '@/components/InsuranceRequestButton'
 import { EldPanel } from '@/components/EldPanel'
 import { NoaPanel } from '@/components/NoaPanel'
@@ -479,6 +480,8 @@ export default function CarrierDetailPage({
         hardStops={displayHardStops}
         flags={displayFlags}
         exceptionApproved={carrier.carrier_status === 'Exception Approved'}
+        exceptionDays={daysSince(carrier.exception_since)}
+        exceptionAged={exceptionState(carrier.carrier_status, carrier.exception_since) === 'aged'}
       />
 
       {/* Full-width panels — kept short by their own collapse toggles rather than

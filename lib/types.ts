@@ -32,6 +32,9 @@ export interface CarrierSummary {
   created_at: string | null
   brokerware_status: string | null
   brokerware_carrier_id: number | null
+  /** When the carrier was last set to Exception Approved (activity log), so the
+   *  UI can age the exception the same way the digest does. */
+  exception_since: string | null
   business_type: string | null
   eld_enrolled: boolean | null
   w9_on_file: boolean | null
@@ -65,6 +68,8 @@ export interface CarrierRecord {
   brokerware_carrier_id: number | null
   brokerware_status: string | null
   brokerware_synced_at: string | null
+  /** When the carrier was last set to Exception Approved, when known. */
+  exception_since?: string | null
   created_at: string
   updated_at: string
 }

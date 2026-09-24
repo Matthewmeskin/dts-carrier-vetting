@@ -38,6 +38,7 @@ import {
   BIZ_KEY_INCORPORATED,
 } from '@/lib/businessType'
 import { INACTIVE_CARRIER_HOLD_NOTE } from '@/lib/statusNotes'
+import { EXCEPTION_MAX_DAYS, daysSince, exceptionState } from '@/lib/exceptions'
 
 const UNKNOWN_BIZ = 'Unknown'
 
@@ -320,17 +321,32 @@ function LastHauledCell({ lastHauledAt }: { lastHauledAt: string | null | undefi
  *  reviewer approved the carrier as an exception with the stop documented —
  *  the stop is still real (RMIS hasn't caught up), but it's known and accepted,
  *  so it shouldn't read like an unactioned alarm. */
-function HardStopBadge({ count, exception }: { count: number; exception: boolean }) {
+function HardStopBadge({ count, carrier }: { count: number; carrier: CarrierSummary }) {
   const label = count === 1 ? 'Hard stop' : `${count} hard stops`
-  if (!exception) return <Badge tone="red">{label}</Badge>
+  const state = exceptionState(carrier.carrier_status, carrier.exception_since)
+  if (state === 'none') return <Badge tone="red">{label}</Badge>
+  const days = daysSince(carrier.exception_since)
+  if (state === 'aged') {
+    return (
+      <div
+        className="inline-flex flex-col items-start gap-0.5"
+        title={`Approved as an exception ${days} days ago, but RMIS still shows the hard stop. Past the ${EXCEPTION_MAX_DAYS}-day window, so it needs action again.`}
+      >
+        <Badge tone="red">{label}</Badge>
+        <span className="pl-0.5 text-[10px] font-medium uppercase tracking-wide text-red-700">
+          Exception expired · {days}d
+        </span>
+      </div>
+    )
+  }
   return (
     <div
       className="inline-flex flex-col items-start gap-0.5"
-      title="Approved as an exception. RMIS still shows the hard stop; it clears when RMIS is updated."
+      title={`Approved as an exception${days !== null ? ` ${days} day${days === 1 ? '' : 's'} ago` : ''}. RMIS still shows the hard stop; it clears when RMIS is updated, or moves back to needs-action after ${EXCEPTION_MAX_DAYS} days.`}
     >
       <Badge tone="amber">{label}</Badge>
       <span className="pl-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
-        Exception approved
+        Exception approved{days !== null ? ` · ${days}d` : ''}
       </span>
     </div>
   )
@@ -588,16 +604,18 @@ export function CarrierTable({
         case 'HardStop':
           return (c.hard_stops?.length ?? 0) > 0
         case 'HardStopOpen':
-          // Hard stop nobody has signed off on — the needs-action list.
+          // Needs action: an open stop with no sign-off, or one whose exception
+          // has aged past the window with RMIS still not updated.
           return (
             (c.hard_stops?.length ?? 0) > 0 &&
-            c.carrier_status !== 'Exception Approved' &&
+            exceptionState(c.carrier_status, c.exception_since) !== 'accepted' &&
             !isBrokerwareDisabled(c.brokerware_status)
           )
         case 'HardStopException':
-          // Hard stop a reviewer accepted as an exception; RMIS still shows it.
+          // Accepted: exception-approved within the window; RMIS still shows it.
           return (
-            (c.hard_stops?.length ?? 0) > 0 && c.carrier_status === 'Exception Approved'
+            (c.hard_stops?.length ?? 0) > 0 &&
+            exceptionState(c.carrier_status, c.exception_since) === 'accepted'
           )
         case 'DoNotUse':
           // "Declined" now covers the former Declined / Suspended / Do Not Use.
@@ -1255,10 +1273,7 @@ export function CarrierTable({
                       </div>
                       <div className={COL.insurance}>
                         {(c.hard_stops?.length ?? 0) > 0 ? (
-                          <HardStopBadge
-                            count={c.hard_stops!.length}
-                            exception={c.carrier_status === 'Exception Approved'}
-                          />
+                          <HardStopBadge count={c.hard_stops!.length} carrier={c} />
                         ) : (
                           <div className="flex flex-wrap gap-1">
                             <Badge tone={coverageStatusTone(c.auto_status)}>
@@ -1462,10 +1477,7 @@ export function CarrierTable({
                       ) : null}
                       {c.eld_enrolled && <Badge tone="blue">ELD</Badge>}
                       {(c.hard_stops?.length ?? 0) > 0 ? (
-                        <HardStopBadge
-                          count={c.hard_stops!.length}
-                          exception={c.carrier_status === 'Exception Approved'}
-                        />
+                        <HardStopBadge count={c.hard_stops!.length} carrier={c} />
                       ) : (
                         <>
                           <Badge tone={coverageStatusTone(c.auto_status)}>

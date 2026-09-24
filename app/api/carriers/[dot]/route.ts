@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { fetchExceptionSince } from '@/lib/exceptionsServer'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -130,8 +131,13 @@ export async function GET(
         })()
       : null
 
+    const exceptionSince =
+      (carrier as any).carrier_status === 'Exception Approved'
+        ? (await fetchExceptionSince([dot])).get(dot) ?? null
+        : null
+
     return NextResponse.json({
-      carrier,
+      carrier: { ...(carrier as any), exception_since: exceptionSince },
       scores,
       insurance: insuranceOut,
       vettingRecords: recordsWithDocs,

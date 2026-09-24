@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { computeRevetStatus, isBrokerwareDisabled } from '@/lib/revet'
 import { stateFromZip } from '@/lib/sosNormalize'
+import { fetchExceptionSince } from '@/lib/exceptionsServer'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -40,6 +41,7 @@ interface CarrierSummary {
   created_at: string | null
   brokerware_status: string | null
   brokerware_carrier_id: number | null
+  exception_since: string | null
   business_type: string | null
   eld_enrolled: boolean | null
   w9_on_file: boolean | null
@@ -136,6 +138,13 @@ export async function GET(request: NextRequest) {
     if (vetRes.error) throw vetRes.error
 
     const carriers = carriersRes.data
+    // Sign-off dates for exception-approved carriers, so the table can age an
+    // exception on the same 30-day clock as the digest.
+    const exceptionSince = await fetchExceptionSince(
+      (carriers ?? [])
+        .filter((c: any) => c.carrier_status === 'Exception Approved')
+        .map((c: any) => String(c.dot_number))
+    )
     const latestScores = latestPerDot(scoresRes.data ?? [])
     const latestInsurance = latestPerDot(insRes.data ?? [])
     const latestVetting = latestPerDot(vetRes.data ?? [])
@@ -228,6 +237,7 @@ export async function GET(request: NextRequest) {
         created_at: c.created_at ?? null,
         brokerware_status: c.brokerware_status ?? null,
         brokerware_carrier_id: c.brokerware_carrier_id ?? null,
+        exception_since: exceptionSince.get(dot) ?? null,
         business_type: ins?.w9_company_type ?? null,
         eld_enrolled: ins?.rmis_eld_enrolled ?? null,
         // On file when RMIS has it OR a copy was uploaded to the portal. No

@@ -6,11 +6,7 @@ import {
   type DigestCarrier,
   type DigestReply,
   type OpenHardStopCarrier,
-  type TenderException,
 } from '@/lib/emailAlerts'
-import { CarrierIndex, isNonHaulingCarrier } from '@/lib/carrierMatch'
-import { evaluateEligibility } from '@/lib/eligibility'
-import { logCarrierEvents } from '@/lib/auditLog'
 import { computeRevetStatus, isBrokerwareDisabled } from '@/lib/revet'
 import { exceptionState, daysSince as daysSinceIso } from '@/lib/exceptions'
 import { fetchExceptionSince } from '@/lib/exceptionsServer'
@@ -348,205 +344,7 @@ export async function POST(request: Request) {
       acceptedExceptions.sort(byLastHauled)
     }
 
-        // 4) POLICY-DEVIATION REPORT — loads the TMS tendered to carriers that are
-    //    not eligible under the selection policy. This is the "did we act on
-    //    what we knew" record: every deviation is caught within a day, written
-    //    to tender_exceptions and the carrier's timeline, and repeated in the
-    //    digest until the carrier is made eligible or the deviation is closed
-    //    out with a note.
-    const tenderExceptions: TenderException[] = []
-    {
-      const TENDER_WINDOW_DAYS = 14
-      const windowStart = new Date(now.getTime() - TENDER_WINDOW_DAYS * 864e5).toISOString()
-      const { data: recentLoads } = await (supabaseAdmin as any)
-        .from('loads')
-        .select('load_id, customer_name, pickup_date, raw')
-        .gte('pickup_date', windowStart)
-        .lte('pickup_date', until)
-        .limit(100000)
-      const { data: allCarriers } = await supabaseAdmin
-        .from('carriers')
-        .select('id, dot_number, mc_number, brokerware_raw_name, legal_name, dba_name, carrier_status, do_not_use, brokerware_status, safety_rating, is_intrastate, created_at, revet_interval_days, revet_reset_at, revet_due_override')
-        .limit(100000)
-      const index = new CarrierIndex((allCarriers ?? []) as any)
-      const carrierById = new Map<string, any>()
-      for (const c of allCarriers ?? []) carrierById.set(String((c as any).id), c)
-
-      type Hit = { loadId: number; carrier: any; customer: string | null; pickup: string | null }
-      const hits: Hit[] = []
-      for (const l of recentLoads ?? []) {
-        const entries: any[] = Array.isArray(l.raw?.carriers) ? l.raw.carriers : []
-        const seen = new Set<string>()
-        for (const e of entries) {
-          if (isNonHaulingCarrier(e?.carrierName)) continue
-          for (const c of index.match(e)) {
-            if (seen.has(c.id)) continue
-            seen.add(c.id)
-            hits.push({ loadId: Number(l.load_id), carrier: carrierById.get(c.id), customer: l.customer_name ?? null, pickup: l.pickup_date ?? null })
-          }
-        }
-      }
-      const hitDots = Array.from(new Set(hits.map((h) => String(h.carrier?.dot_number)).filter((d) => d && d !== 'undefined')))
-
-      const insByDot = new Map<string, any>()
-      const vettedByDot = new Map<string, string>()
-      const gapByDot = new Map<string, number | null>()
-      if (hitDots.length > 0) {
-        const [insRes, vetRes, scoreRes] = await Promise.all([
-          (supabaseAdmin as any)
-            .from('carrier_insurance_latest')
-            .select('dot_number, hard_stops')
-            .in('dot_number', hitDots)
-            .limit(100000),
-          (supabaseAdmin as any)
-            .from('vetting_records')
-            .select('dot_number, completed_at')
-            .in('dot_number', hitDots)
-            .not('completed_at', 'is', null)
-            .order('completed_at', { ascending: false })
-            .limit(100000),
-          (supabaseAdmin as any)
-            .from('carrier_scores')
-            .select('dot_number, gap_score, release_month, upload_date')
-            .in('dot_number', hitDots)
-            .order('release_month', { ascending: false })
-            .order('upload_date', { ascending: false })
-            .limit(100000),
-        ])
-        for (const r of insRes.data ?? []) insByDot.set(String(r.dot_number), r)
-        for (const r of scoreRes.data ?? []) {
-          const d = String(r.dot_number)
-          if (!gapByDot.has(d)) gapByDot.set(d, r.gap_score ?? null)
-        }
-        for (const v of vetRes.data ?? []) {
-          const d = String(v.dot_number)
-          if (!vettedByDot.has(d)) vettedByDot.set(d, v.completed_at)
-        }
-      }
-      const eligibilityOf = (c: any) => {
-        const dot = String(c.dot_number)
-        const vetted = vettedByDot.get(dot) ?? null
-        const reset = c.revet_reset_at ?? null
-        const lastReviewed =
-          vetted && reset ? (Date.parse(vetted) >= Date.parse(reset) ? vetted : reset) : vetted ?? reset
-        return evaluateEligibility(
-          {
-            carrier_status: c.carrier_status,
-            do_not_use: c.do_not_use,
-            brokerware_status: c.brokerware_status,
-            safety_rating: c.safety_rating ?? null,
-            gap_score: gapByDot.get(dot) ?? null,
-            hard_stops: insByDot.get(dot)?.hard_stops ?? null,
-            last_reviewed: lastReviewed,
-            created_at: c.created_at,
-            revet_interval_days: c.revet_interval_days,
-            revet_due_override: c.revet_due_override,
-            is_intrastate: c.is_intrastate,
-          },
-          now.getTime()
-        )
-      }
-
-      // Every row for a load in the window, resolved or not: a deviation that
-      // was closed and then recurs (or was closed in error) must re-open, not
-      // stay hidden behind an old resolution.
-      const { data: windowRows } = await (supabaseAdmin as any)
-        .from('tender_exceptions')
-        .select('id, load_id, dot_number, first_seen_at, reasons, resolved_at')
-        .gte('pickup_date', windowStart)
-        .limit(100000)
-      const rowByKey = new Map<string, any>()
-      for (const r of windowRows ?? []) rowByKey.set(`${r.load_id}:${r.dot_number}`, r)
-      const openRows = (windowRows ?? []).filter((r: any) => !r.resolved_at)
-
-      const stillViolating = new Set<string>()
-      const upserts: any[] = []
-      const newEvents: { dot: string; carrierId: string | null; loadId: number; reasons: string[] }[] = []
-      const eligCache = new Map<string, ReturnType<typeof eligibilityOf>>()
-      for (const h of hits) {
-        if (!h.carrier) continue
-        const dot = String(h.carrier.dot_number)
-        let el = eligCache.get(dot)
-        if (!el) {
-          el = eligibilityOf(h.carrier)
-          eligCache.set(dot, el)
-        }
-        if (el.eligible) continue
-        const key = `${h.loadId}:${dot}`
-        if (stillViolating.has(key)) continue
-        stillViolating.add(key)
-        const existing = rowByKey.get(key)
-        // New to the digest if never seen, or seen but since closed out.
-        const isNew = !existing || !!existing.resolved_at
-        upserts.push({
-          load_id: h.loadId,
-          dot_number: dot,
-          carrier_name: h.carrier.legal_name ?? null,
-          customer_name: h.customer,
-          pickup_date: h.pickup,
-          reasons: el.reasons,
-          carrier_status: h.carrier.carrier_status ?? null,
-          last_seen_at: until,
-          reported_at: until,
-          // A current violation is open by definition — clears any earlier
-          // resolution so a recurrence can't hide behind it.
-          resolved_at: null,
-          resolution: null,
-          resolved_by: null,
-          ...(isNew ? { first_seen_at: until } : {}),
-        })
-        tenderExceptions.push({
-          loadId: h.loadId,
-          dotNumber: dot,
-          legalName: h.carrier.legal_name ?? `DOT ${dot}`,
-          mcNumber: h.carrier.mc_number ?? null,
-          customerName: h.customer,
-          pickupDate: h.pickup,
-          reasons: el.reasons,
-          firstSeenAt: existing && !existing.resolved_at ? existing.first_seen_at : until,
-          isNew,
-        })
-        if (isNew) newEvents.push({ dot, carrierId: h.carrier.id ?? null, loadId: h.loadId, reasons: el.reasons })
-      }
-      if (!dryRun) {
-        if (upserts.length > 0) {
-          await (supabaseAdmin as any)
-            .from('tender_exceptions')
-            .upsert(upserts, { onConflict: 'load_id,dot_number' })
-        }
-        // Open rows whose load is still in the window but whose carrier is now
-        // eligible: auto-resolve with the reason recorded.
-        const loadIdsInWindow = new Set((recentLoads ?? []).map((l: any) => Number(l.load_id)))
-        const autoResolve = (openRows ?? []).filter(
-          (r: any) => loadIdsInWindow.has(Number(r.load_id)) && !stillViolating.has(`${r.load_id}:${r.dot_number}`)
-        )
-        if (autoResolve.length > 0) {
-          await (supabaseAdmin as any)
-            .from('tender_exceptions')
-            .update({ resolved_at: until, resolution: 'Carrier became eligible', resolved_by: 'system (digest)' })
-            .in('id', autoResolve.map((r: any) => r.id))
-        }
-        if (newEvents.length > 0) {
-          await logCarrierEvents(
-            newEvents.map((e) => ({
-              dot: e.dot,
-              carrierId: e.carrierId,
-              type: 'tender_exception' as const,
-              summary: `Load ${e.loadId} tendered while NOT eligible — ${e.reasons.join('; ')}.`,
-              detail: { loadId: e.loadId, reasons: e.reasons },
-              actor: 'system (digest)',
-            }))
-          )
-        }
-      }
-      tenderExceptions.sort(
-        (a, b) =>
-          Number(b.isNew) - Number(a.isNew) ||
-          (Date.parse(b.pickupDate ?? '') || 0) - (Date.parse(a.pickupDate ?? '') || 0)
-      )
-    }
-
-    const replyList: DigestReply[] = replies
+        const replyList: DigestReply[] = replies
       .filter((r) => !disabled(r.dot))
       .map((r) => ({
         dotNumber: r.dot,
@@ -561,7 +359,6 @@ export async function POST(request: Request) {
     // going out daily while any active carrier is uninsured — silence only
     // means the list is genuinely empty.
     const itemCount =
-      tenderExceptions.length +
       hardStops.length +
       openHardStops.length +
       acceptedExceptions.length +
@@ -572,7 +369,6 @@ export async function POST(request: Request) {
     const payload = {
       since,
       until,
-      tenderExceptions,
       hardStops,
       openHardStops,
       acceptedExceptions,
@@ -589,7 +385,6 @@ export async function POST(request: Request) {
         until,
         itemCount,
         scoreFlagged,
-        tenderExceptions,
         hardStops,
         openHardStops,
         acceptedExceptions,
@@ -617,7 +412,6 @@ export async function POST(request: Request) {
         shouldSend: itemCount > 0,
         subject,
         html,
-        tenderExceptions: tenderExceptions.length,
         hardStops: hardStops.length,
         openHardStops: openHardStops.length,
         acceptedExceptions: acceptedExceptions.length,
@@ -654,7 +448,6 @@ export async function POST(request: Request) {
       sent: true,
       to: result.to ?? null,
       from: result.from ?? null,
-      tenderExceptions: tenderExceptions.length,
       hardStops: hardStops.length,
       openHardStops: openHardStops.length,
       acceptedExceptions: acceptedExceptions.length,

@@ -357,25 +357,9 @@ export interface OpenHardStopCarrier {
    *  escalated back into the actionable list. */
   note?: string | null
 }
-/** A load the TMS tendered to a carrier that was not eligible under the
- *  selection policy when the portal saw it. */
-export interface TenderException {
-  loadId: number
-  dotNumber: string
-  legalName: string
-  mcNumber?: string | null
-  customerName?: string | null
-  pickupDate?: string | null
-  reasons: string[]
-  /** First time the digest reported it — repeats until resolved. */
-  firstSeenAt: string
-  isNew: boolean
-}
 export interface DailyDigestPayload {
   since: string
   until: string
-  /** Loads tendered to ineligible carriers — the policy-deviation report. */
-  tenderExceptions?: TenderException[]
   hardStops: DigestCarrier[]
   /** Every active carrier with an open hard stop TODAY that nobody has signed
    *  off on. Repeats every day until the stop clears, so a carrier that is
@@ -429,9 +413,6 @@ export function renderDailyDigest(
   ).length
   const accepted = payload.acceptedExceptions ?? []
   const ac = accepted.length
-  const tenders = payload.tenderExceptions ?? []
-  const tx = tenders.length
-  const txNew = tenders.filter((t) => t.isNew).length
   const dateLabel = new Date(payload.until).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -440,9 +421,7 @@ export function renderDailyDigest(
   })
 
   const subject =
-    tx > 0
-      ? `DTS Daily Digest — ${tx} load${tx === 1 ? '' : 's'} tendered to ineligible carriers${txNew ? ` (${txNew} new)` : ''}, ${op} open hard stop${op === 1 ? '' : 's'} (${dateLabel})`
-      : hs > 0
+    hs > 0
       ? `DTS Daily Digest — ${hs} new hard stop${hs === 1 ? '' : 's'}, ${op} open, ${rv} to review (${dateLabel})`
       : op > 0
         ? `DTS Daily Digest — ${op} open hard stop${op === 1 ? '' : 's'}${opRecent ? ` (${opRecent} hauling)` : ''}, ${rv} to review (${dateLabel})`
@@ -564,52 +543,6 @@ export function renderDailyDigest(
       </table>`
       : ''
 
-  const tenderRows = tenders
-    .map(
-      (t) => `
-      <tr${t.isNew ? ' style="background:#fef2f2;"' : ''}>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;white-space:nowrap;">
-          <div style="font-weight:600;">Load ${esc(String(t.loadId))}</div>
-          <div style="color:#6b7280;font-size:12px;">${t.customerName ? esc(t.customerName) : ''}</div>
-          <div style="color:#6b7280;font-size:12px;">PU ${fmtDate(t.pickupDate)}</div>
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">
-          <div style="font-weight:600;">${esc(t.legalName)}</div>
-          <div style="color:#6b7280;font-size:12px;">${idLine(t)}</div>
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;color:#dc2626;font-size:13px;">
-          ${t.reasons.map((r) => esc(r)).join('<br/>')}
-          <div style="color:#6b7280;font-size:12px;margin-top:4px;">${t.isNew ? 'New today' : `First reported ${fmtDate(t.firstSeenAt)}`}</div>
-        </td>
-        <td style="padding:8px;border:1px solid #e5e7eb;vertical-align:top;">${link(t.dotNumber)}</td>
-      </tr>`
-    )
-    .join('')
-  const tenderSection = tenderRows
-    ? `
-        <h2 style="color:#dc2626;font-size:16px;margin:24px 0 8px;">
-          Loads Tendered to Ineligible Carriers (${tx}${txNew ? `, ${txNew} new` : ''})
-        </h2>
-        <p style="margin:0 0 8px;color:#6b7280;font-size:13px;">
-          Loads in the TMS whose carrier had a substantive problem when the portal saw the load:
-          an open hard stop (insurance, authority, SAFER, rating) with no live exception, a GAP
-          score below 60, a Conditional or Unsatisfactory rating, disabled in the TMS, or an
-          explicit Declined / On Hold decision. Each one stays here until the carrier is cleared
-          or the deviation is documented and closed on the carrier's page.
-        </p>
-        <table style="width:100%;border-collapse:collapse;">
-          <thead>
-            <tr style="background:#f9fafb;">
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Load</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Carrier</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Why ineligible</th>
-              <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">&nbsp;</th>
-            </tr>
-          </thead>
-          <tbody>${tenderRows}</tbody>
-        </table>`
-    : ''
-
   const openSection = statusTable(
     `Open Hard Stops — Needs Action (${op})`,
     '#dc2626',
@@ -650,11 +583,10 @@ export function renderDailyDigest(
     <div style="background:#AB0534;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">
       <h1 style="margin:0;font-size:20px;">DTS Carrier Daily Digest</h1>
       <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">
-        ${dateLabel} · ${tx ? `${tx} ineligible tender${tx === 1 ? '' : 's'} · ` : ''}${hs} new hard stop${hs === 1 ? '' : 's'}${op ? `, ${op} needing action` : ''}${ac ? `, ${ac} accepted with exception` : ''}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}${sf ? ` · ${sf} flagged for re-vet` : ''}
+        ${dateLabel} · ${hs} new hard stop${hs === 1 ? '' : 's'}${op ? `, ${op} needing action` : ''}${ac ? `, ${ac} accepted with exception` : ''}, ${rv} to review${rp ? `, ${rp} RMIS repl${rp === 1 ? 'y' : 'ies'}` : ''}${sf ? ` · ${sf} flagged for re-vet` : ''}
       </p>
     </div>
     <div style="background:white;padding:8px 24px 24px;border:1px solid #e5e7eb;border-top:none;">
-      ${tenderSection}
         ${section(`New Hard Stops — Do Not Use Until Resolved (${hs})`, '#dc2626', carrierRows(payload.hardStops, '#dc2626', (c) => c.hardStops))}
       ${openSection}
       ${acceptedSection}
@@ -671,7 +603,7 @@ export function renderDailyDigest(
           </tr></thead>
           <tbody>${replyRows}</tbody>
         </table>` : ''}
-      ${hs + op + ac + rv + rp + sf + rs + tx === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
+      ${hs + op + ac + rv + rp + sf + rs === 0 ? `<p style="color:#6b7280;">Nothing new needs attention today.</p>` : ''}
       <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;">
         <a href="${APP_URL}/carriers"
            style="background:#0063A0;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;font-size:14px;">

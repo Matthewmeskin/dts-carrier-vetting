@@ -25,8 +25,6 @@ export type CarrierEventType =
   | 'payment_vetting_review'
   | 'approval_requested'
   | 'approval_decided'
-  | 'tender_exception'
-  | 'tender_check'
 
 export interface CarrierEventInput {
   dot: string

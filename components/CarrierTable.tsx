@@ -190,6 +190,8 @@ type StatusFilter =
   | 'NeedsReview'
   | 'DueForRevet'
   | 'HardStop'
+  | 'HardStopOpen'
+  | 'HardStopException'
   | 'NotInRmis'
   | 'DoNotUse'
   | 'OnHold'
@@ -199,7 +201,8 @@ type StatusFilter =
 // a stale/corrupt saved value can never put the filter into a bad state.
 const STATUS_VALUES = new Set<StatusFilter>([
   'BrokerwareActive', 'All', 'Active', 'Approved', 'NeedsReview',
-  'DueForRevet', 'HardStop', 'NotInRmis', 'DoNotUse', 'OnHold', 'Disabled',
+  'DueForRevet', 'HardStop', 'HardStopOpen', 'HardStopException', 'NotInRmis',
+  'DoNotUse', 'OnHold', 'Disabled',
 ])
 
 function isBrokerwareActive(status: string | null | undefined): boolean {
@@ -318,13 +321,18 @@ function LastHauledCell({ lastHauledAt }: { lastHauledAt: string | null | undefi
  *  the stop is still real (RMIS hasn't caught up), but it's known and accepted,
  *  so it shouldn't read like an unactioned alarm. */
 function HardStopBadge({ count, exception }: { count: number; exception: boolean }) {
-  if (!exception) return <Badge tone="red">{count} hard stop(s)</Badge>
+  const label = count === 1 ? 'Hard stop' : `${count} hard stops`
+  if (!exception) return <Badge tone="red">{label}</Badge>
   return (
-    <span title="Approved as an exception. RMIS still shows the hard stop; it clears when RMIS is updated.">
-      <Badge tone="amber">
-        {count === 1 ? 'Hard stop' : `${count} hard stops`} · exception approved
-      </Badge>
-    </span>
+    <div
+      className="inline-flex flex-col items-start gap-0.5"
+      title="Approved as an exception. RMIS still shows the hard stop; it clears when RMIS is updated."
+    >
+      <Badge tone="amber">{label}</Badge>
+      <span className="pl-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+        Exception approved
+      </span>
+    </div>
   )
 }
 
@@ -579,6 +587,18 @@ export function CarrierTable({
         }
         case 'HardStop':
           return (c.hard_stops?.length ?? 0) > 0
+        case 'HardStopOpen':
+          // Hard stop nobody has signed off on — the needs-action list.
+          return (
+            (c.hard_stops?.length ?? 0) > 0 &&
+            c.carrier_status !== 'Exception Approved' &&
+            !isBrokerwareDisabled(c.brokerware_status)
+          )
+        case 'HardStopException':
+          // Hard stop a reviewer accepted as an exception; RMIS still shows it.
+          return (
+            (c.hard_stops?.length ?? 0) > 0 && c.carrier_status === 'Exception Approved'
+          )
         case 'DoNotUse':
           // "Declined" now covers the former Declined / Suspended / Do Not Use.
           return (
@@ -944,7 +964,9 @@ export function CarrierTable({
             <option value="Approved">Approved</option>
             <option value="NeedsReview">Needs Review</option>
             <option value="DueForRevet">Due for Re-vet</option>
-            <option value="HardStop">Hard Stop</option>
+            <option value="HardStop">Hard Stop (any)</option>
+            <option value="HardStopOpen">Hard Stop — needs action</option>
+            <option value="HardStopException">Hard Stop — exception approved</option>
             <option value="NotInRmis">Not in RMIS</option>
             <option value="DoNotUse">Declined / Do Not Use</option>
             <option value="OnHold">On Hold</option>

@@ -21,6 +21,23 @@ export function SiteHeader() {
   const pathname = usePathname()
   const [me, setMe] = useState<{ email: string | null; role: Role } | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [pendingApprovals, setPendingApprovals] = useState<number>(0)
+
+  // Open approval requests — a badge on the Approvals link so a Manager /
+  // Director sees work waiting without opening the page.
+  useEffect(() => {
+    if (!me) return
+    let cancelled = false
+    fetch('/api/approvals?count=1', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && typeof d?.pending === 'number') setPendingApprovals(d.pending)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [me, pathname])
 
   useEffect(() => {
     if (pathname === '/login') return
@@ -75,6 +92,28 @@ export function SiteHeader() {
               {n.label}
             </Link>
           ))}
+          {me && (
+            <Link
+              href="/approvals"
+              className={cn(
+                'flex items-center gap-1.5 whitespace-nowrap rounded px-2.5 py-1.5 transition hover:bg-gray-100 sm:px-3',
+                pathname.startsWith('/approvals') ? 'font-medium text-dts-blue' : 'text-gray-700'
+              )}
+            >
+              Approvals
+              {pendingApprovals > 0 && (
+                <span
+                  className={cn(
+                    'inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold leading-5',
+                    me.role === 'staff' ? 'bg-gray-200 text-gray-700' : 'bg-red-600 text-white'
+                  )}
+                  title={`${pendingApprovals} waiting for approval`}
+                >
+                  {pendingApprovals}
+                </span>
+              )}
+            </Link>
+          )}
           {me?.role === 'director' && (
             <Link
               href="/admin/users"

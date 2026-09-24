@@ -183,6 +183,38 @@ export function VettingChecklist({
   const blockedApproval =
     !!role && requiredLevel !== 'none' && !roleCanApprove(role, requiredLevel)
 
+  // Submit-for-approval: saves the vetting as-is (Pending Review) and opens a
+  // request in the approval queue for the required role.
+  const [submitting, setSubmitting] = useState(false)
+  const [submitMsg, setSubmitMsg] = useState<string | null>(null)
+  async function submitForApproval() {
+    setSubmitting(true)
+    setSubmitMsg(null)
+    try {
+      await save()
+      const wanted = meetsBaseline ? 'Approved' : 'Exception Approved'
+      const res = await fetch('/api/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dotNumber: dot,
+          requestedStatus: wanted,
+          note: internalNotes.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not submit for approval')
+      setSubmitMsg(
+        `${data.resubmitted ? 'Re-submitted' : 'Submitted'} to the ${ROLE_LABEL[data.requiredLevel as 'manager' | 'director']} approval queue as ${data.requestedStatus}.`
+      )
+      onSaved?.()
+    } catch (e) {
+      setSubmitMsg(e instanceof Error ? e.message : 'Could not submit for approval')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const latest = vettingRecords[0]
   const autoInputs = useMemo<ChecklistAutoInputs>(
     () => ({ safetyRating, insurance, score, sos, documentTypes, isIntrastate }),
@@ -639,14 +671,26 @@ export function VettingChecklist({
                     </p>
                   )}
                   {blockedApproval && (
-                    <p className="mt-1 text-xs text-amber-700">
-                      This carrier needs{' '}
-                      <span className="font-semibold">
-                        {ROLE_LABEL[requiredLevel as 'manager' | 'director']}
-                      </span>
-                      -level approval — your role ({role ? ROLE_LABEL[role] : '—'}) can set a
-                      hold/decline but not approve it.
-                    </p>
+                    <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 p-2">
+                      <p className="text-xs text-amber-800">
+                        This carrier needs{' '}
+                        <span className="font-semibold">
+                          {ROLE_LABEL[requiredLevel as 'manager' | 'director']}
+                        </span>
+                        -level approval — your role ({role ? ROLE_LABEL[role] : '—'}) can set a
+                        hold/decline but not approve it. Finish the checklist and notes, then
+                        send it to the approval queue.
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Button size="sm" onClick={submitForApproval} disabled={submitting || saving}>
+                          {submitting ? 'Submitting…' : `Save & submit for ${ROLE_LABEL[requiredLevel as 'manager' | 'director']} approval`}
+                        </Button>
+                        <span className="text-[11px] text-amber-700">
+                          Requests {meetsBaseline ? 'Approved' : 'Exception Approved'}; your internal notes go with it.
+                        </span>
+                      </div>
+                      {submitMsg && <p className="mt-1 text-xs text-gray-700">{submitMsg}</p>}
+                    </div>
                   )}
                   {statusError && (
                     <p className="mt-1 text-xs text-red-700">{statusError}</p>

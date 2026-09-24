@@ -38,6 +38,8 @@ interface Row {
 
 const TYPE_META: Record<string, { label: string; tone: BadgeTone }> = {
   vetting_saved: { label: 'Vetting', tone: 'green' },
+  approval_requested: { label: 'Approval requested', tone: 'amber' },
+  approval_decided: { label: 'Approval decision', tone: 'blue' },
   status_change: { label: 'Status', tone: 'blue' },
   checklist_change: { label: 'Checklist', tone: 'blue' },
   document_upload: { label: 'Document', tone: 'blue' },

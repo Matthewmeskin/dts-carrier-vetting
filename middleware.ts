@@ -71,7 +71,10 @@ export async function middleware(request: NextRequest) {
   const isLogin = path === '/login'
   // The OAuth callback must run without a session (it's what creates one), and
   // the SSO exchange from the AP payables portal likewise runs pre-session.
-  const isAuthFlow = path.startsWith('/auth') || path === '/api/auth/sso'
+  // The password-reset page runs on a recovery token it reads from the URL
+  // fragment, not on this app's cookie session, so it is open too.
+  const isAuthFlow =
+    path.startsWith('/auth') || path === '/api/auth/sso' || path === '/reset-password'
   // Where an account without this portal lands. Exempt from the gates below,
   // or a denied user would bounce between here, /mfa and /login forever.
   const isNoAccess = path === '/no-access'

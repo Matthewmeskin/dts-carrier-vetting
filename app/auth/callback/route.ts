@@ -19,6 +19,10 @@ export async function GET(request: Request) {
   const isRecovery = searchParams.get('flow') === 'recovery'
 
   if (!code) {
+    // A recovery link (implicit grant) carries its tokens in the URL fragment,
+    // which never reaches the server. Forward to the reset page; browsers keep
+    // the fragment across the redirect, and that page reads it client-side.
+    if (isRecovery) return NextResponse.redirect(`${origin}/reset-password`)
     return NextResponse.redirect(`${origin}/login?error=oauth`)
   }
 

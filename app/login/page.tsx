@@ -1,8 +1,9 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabaseBrowser'
+import { createRecoveryClient } from '@/lib/supabaseRecovery'
 import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -25,6 +26,17 @@ function LoginForm() {
           ? 'That reset link has expired or was already used. Request a new one.'
           : null
   )
+  const resetDone = params.get('reset') === 'done'
+
+  // A recovery link that Supabase sent to its default site URL (rather than
+  // this portal's own reset page) lands here carrying the tokens in the URL
+  // fragment. Forward it to the reset page; the fragment survives the hop.
+  useEffect(() => {
+    const h = window.location.hash
+    if (h.includes('type=recovery') || h.includes('error_code=otp_expired')) {
+      window.location.replace(`/reset-password${h}`)
+    }
+  }, [])
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   // Forgot-password: swaps the form for an email-only reset request.
@@ -36,11 +48,12 @@ function LoginForm() {
     setLoading(true)
     setError(null)
     try {
-      const supabase = createSupabaseBrowserClient()
-      // The link lands on /auth/callback, which exchanges the code for a
-      // session and sends the user on to /reset-password to choose a new one.
+      const supabase = createRecoveryClient()
+      // The link lands on /auth/callback (already on the Supabase redirect
+      // allowlist for Google sign-in), which forwards to /reset-password; the
+      // tokens ride along in the URL fragment.
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?flow=recovery&next=${encodeURIComponent('/reset-password')}`,
+        redirectTo: `${window.location.origin}/auth/callback?flow=recovery`,
       })
       if (error) throw error
       setResetSent(true)
@@ -136,6 +149,11 @@ function LoginForm() {
           </form>
         ) : (
         <form onSubmit={onSubmit} className="space-y-4">
+          {resetDone && !error && (
+            <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+              Password updated. Sign in with your new password.
+            </p>
+          )}
           <Input
             label="Email"
             type="email"

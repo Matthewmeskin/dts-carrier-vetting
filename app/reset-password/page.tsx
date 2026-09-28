@@ -1,15 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createSupabaseBrowserClient } from '@/lib/supabaseBrowser'
+import { createRecoveryClient } from '@/lib/supabaseRecovery'
 import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
 
-// Where a password-reset link lands after /auth/callback has exchanged the
-// code for a session: the user is signed in on a recovery session and picks a
-// new password. On success they go straight to the portal.
+// Where a password-reset link lands. The link carries a short-lived recovery
+// session in the URL fragment; the recovery client picks it up, the person
+// chooses a new password, and then signs in normally. One DTS login covers
+// every portal, so the new password applies to all of them.
 export default function ResetPasswordPage() {
   const [ready, setReady] = useState<'checking' | 'ok' | 'none'>('checking')
   const [email, setEmail] = useState<string | null>(null)
@@ -19,10 +20,11 @@ export default function ResetPasswordPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setEmail(data.user.email ?? null)
+    const supabase = createRecoveryClient()
+    // getSession() waits for the client to parse the fragment first.
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.user) {
+        setEmail(data.session.user.email ?? null)
         setReady('ok')
       } else {
         setReady('none')
@@ -43,11 +45,12 @@ export default function ResetPasswordPage() {
     }
     setSaving(true)
     try {
-      const supabase = createSupabaseBrowserClient()
+      const supabase = createRecoveryClient()
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
-      // Full navigation so the middleware picks up the refreshed session.
-      window.location.assign('/carriers')
+      // Drop the recovery session; the person signs in fresh with the new password.
+      await supabase.auth.signOut({ scope: 'local' })
+      window.location.assign('/login?reset=done')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update the password')
       setSaving(false)
@@ -76,9 +79,11 @@ export default function ResetPasswordPage() {
           <form onSubmit={onSubmit} className="space-y-4">
             {email && (
               <p className="text-sm text-gray-600">
-                Choosing a new password for <span className="font-medium">{email}</span>.
+                Choosing a new password for <span className="font-medium">{email}</span>. It
+                applies to every DTS portal.
               </p>
             )}
+            <input type="hidden" name="username" autoComplete="username" value={email ?? ''} readOnly />
             <Input
               label="New password"
               type="password"

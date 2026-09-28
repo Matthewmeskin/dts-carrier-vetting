@@ -127,14 +127,22 @@ export function SiteHeader() {
           )}
           {me && (
             <div className="ml-1 flex items-center gap-2 border-l border-gray-200 pl-2">
-              <div className="hidden text-right sm:block">
-                <div className="max-w-[160px] truncate text-xs text-gray-600" title={me.email ?? ''}>
-                  {me.email}
+              <Link
+                href="/account"
+                title="Account settings · change password"
+                className={cn(
+                  'rounded px-2 py-1 text-right transition hover:bg-gray-100',
+                  pathname.startsWith('/account') ? 'bg-gray-100' : ''
+                )}
+              >
+                <div className="hidden sm:block">
+                  <div className="max-w-[160px] truncate text-xs text-gray-600">{me.email}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                    {ROLE_LABEL[me.role] ?? me.role}
+                  </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-gray-400">
-                  {ROLE_LABEL[me.role] ?? me.role}
-                </div>
-              </div>
+                <span className="text-xs text-gray-600 sm:hidden">Account</span>
+              </Link>
               <button
                 onClick={signOut}
                 className="whitespace-nowrap rounded px-2.5 py-1.5 text-gray-600 hover:bg-gray-100"

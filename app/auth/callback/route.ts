@@ -13,6 +13,10 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next') || '/carriers'
+  // Password-recovery links land here too. That user already has an account
+  // (created and vetted when they were invited), so the Google-only domain
+  // gate below — which deletes a just-created account on a miss — must not run.
+  const isRecovery = searchParams.get('flow') === 'recovery'
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=oauth`)
@@ -21,7 +25,12 @@ export async function GET(request: Request) {
   const supabase = createSupabaseServerClient()
   const { error } = await supabase.auth.exchangeCodeForSession(code)
   if (error) {
-    return NextResponse.redirect(`${origin}/login?error=oauth`)
+    return NextResponse.redirect(
+      isRecovery ? `${origin}/login?reset=1&error=recovery` : `${origin}/login?error=oauth`
+    )
+  }
+  if (isRecovery) {
+    return NextResponse.redirect(`${origin}/reset-password`)
   }
 
   const {

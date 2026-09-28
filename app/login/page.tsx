@@ -21,10 +21,35 @@ function LoginForm() {
       ? 'That Google account isn’t on an authorized company domain.'
       : errorParam === 'oauth'
         ? 'Google sign-in failed. Please try again.'
-        : null
+        : errorParam === 'recovery'
+          ? 'That reset link has expired or was already used. Request a new one.'
+          : null
   )
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  // Forgot-password: swaps the form for an email-only reset request.
+  const [resetMode, setResetMode] = useState(params.get('reset') === '1')
+  const [resetSent, setResetSent] = useState(false)
+
+  async function sendReset(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    try {
+      const supabase = createSupabaseBrowserClient()
+      // The link lands on /auth/callback, which exchanges the code for a
+      // session and sends the user on to /reset-password to choose a new one.
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?flow=recovery&next=${encodeURIComponent('/reset-password')}`,
+      })
+      if (error) throw error
+      setResetSent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send the reset link')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function signInWithGoogle() {
     setGoogleLoading(true)
@@ -71,6 +96,45 @@ function LoginForm() {
             Carrier Compliance Portal
           </span>
         </div>
+        {resetMode ? (
+          <form onSubmit={sendReset} className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Enter your email and we’ll send a link to set a new password.
+            </p>
+            <Input
+              label="Email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            {resetSent && !error && (
+              <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+                If an account exists for {email}, a reset link is on its way. Check your inbox
+                and junk folder; the link is good for one hour.
+              </p>
+            )}
+            {error && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+            )}
+            <Button type="submit" disabled={loading || resetSent} className="w-full justify-center">
+              {loading ? <Spinner size={14} className="text-white" /> : null}
+              {loading ? 'Sending…' : resetSent ? 'Link sent' : 'Send reset link'}
+            </Button>
+            <button
+              type="button"
+              onClick={() => {
+                setResetMode(false)
+                setResetSent(false)
+                setError(null)
+              }}
+              className="block w-full text-center text-sm text-dts-blue hover:underline"
+            >
+              Back to sign in
+            </button>
+          </form>
+        ) : (
         <form onSubmit={onSubmit} className="space-y-4">
           <Input
             label="Email"
@@ -80,14 +144,28 @@ function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             required
           />
-          <Input
-            label="Password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div>
+            <Input
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <div className="mt-1 text-right">
+              <button
+                type="button"
+                onClick={() => {
+                  setResetMode(true)
+                  setError(null)
+                }}
+                className="text-xs text-dts-blue hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+          </div>
           {params.get('timeout') === '1' && !error && (
             <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
               You were signed out due to inactivity. Please sign in again.
@@ -106,6 +184,7 @@ function LoginForm() {
             {loading ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
+        )}
 
         <div className="my-4 flex items-center gap-3 text-xs text-gray-400">
           <span className="h-px flex-1 bg-gray-200" />

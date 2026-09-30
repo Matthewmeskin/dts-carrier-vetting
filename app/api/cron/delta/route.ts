@@ -12,7 +12,7 @@ import { evaluateRMIS, isExpiringCoverageStatus } from '@/lib/rmisEvaluator'
 import { sendInsuranceRefreshRequest } from '@/lib/emailAlerts'
 import { isBrokerwareActive } from '@/lib/revet'
 import { logCarrierEvent } from '@/lib/auditLog'
-import { buildInsuranceRow } from '@/app/api/carriers/[dot]/insurance/route'
+import { buildInsuranceRow } from '@/lib/rmisRefresh'
 import { archiveCarrierDocuments } from '@/lib/rmisArchive'
 import { TablesUpdate } from '@/lib/database.types'
 

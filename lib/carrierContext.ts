@@ -21,6 +21,30 @@ export interface CarrierContext {
   factor: any
   sos: any
   noa: any
+  /** Latest web research (OSINT) captured at onboarding by the n8n Carrier
+   *  OSINT workflow: address type, phone footprint, complaints, chameleon
+   *  signals. Null when no check has been stored. */
+  osint: {
+    checked_at: string | null
+    source: string | null
+    location_type: string | null
+    address_lookup: string | null
+    phone_osint: string | null
+    phone_fraud_search: string | null
+    complaints: string | null
+    web_presence: string | null
+    chameleon_flags: string[]
+    chameleon_flag_count: number
+    chameleon_detail: string | null
+    fraud_reports_found: boolean | null
+  } | null
+  /** Automated onboarding decision, when the carrier came in through the
+   *  onboarding webhook. */
+  auto_decision: {
+    decision: string | null
+    reasons: string[]
+    decided_at: string | null
+  } | null
   /** Approved payment baseline (set when a vetting run is marked OK to pay) —
    *  what everyday-bill quick checks compare the invoice against. */
   payment_baseline: any
@@ -39,6 +63,78 @@ export interface CarrierContext {
     auto_status: 'pass' | 'fail' | null
     evidence: string | null
   }>
+}
+
+/**
+ * Run the auto evaluated vetting checklist for a carrier from stored inputs
+ * (latest RMIS insurance row, SOS row, latest Bluewire score, documents on
+ * file). Shared by the payment context, the onboarding decision and the nightly
+ * auto clear so all three see the same evaluation the carrier page shows.
+ */
+export async function loadEvaluatedChecklist(
+  dot: string,
+  carrierRow?: Record<string, any> | null,
+  insuranceRow?: Record<string, any> | null,
+  sosRow?: Record<string, any> | null
+) {
+  let c = carrierRow ?? null
+  if (!c) {
+    const { data } = await supabaseAdmin
+      .from('carriers')
+      .select('*')
+      .eq('dot_number', dot)
+      .maybeSingle()
+    c = (data as any) ?? null
+  }
+  let i = insuranceRow
+  if (i === undefined) {
+    const { data } = await supabaseAdmin
+      .from('carrier_insurance')
+      .select('*')
+      .eq('dot_number', dot)
+      .order('fetched_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    i = (data as any) ?? null
+  }
+  let sos = sosRow
+  if (sos === undefined) {
+    const { data } = await (supabaseAdmin as any)
+      .from('carrier_sos')
+      .select('*')
+      .eq('dot_number', dot)
+      .maybeSingle()
+    sos = (data as any) ?? null
+  }
+
+  const { data: scoreRows } = await supabaseAdmin
+    .from('carrier_scores')
+    .select('*')
+    .eq('dot_number', dot)
+    .order('release_month', { ascending: false })
+    .order('upload_date', { ascending: false })
+    .limit(1)
+  const scoreRecord = (scoreRows?.[0] as any) ?? null
+
+  const { data: docRows } = await supabaseAdmin
+    .from('vetting_documents')
+    .select('document_type')
+    .eq('dot_number', dot)
+  const docTypes = Array.from(
+    new Set((docRows ?? []).map((d: any) => d.document_type).filter(Boolean))
+  ) as string[]
+
+  const evaluated = applyAutoCompletion(
+    attachAutoEvidence(createDefaultChecklist(), {
+      safetyRating: c?.safety_rating ?? null,
+      insurance: (i as any) ?? null,
+      score: scoreRecord,
+      sos: (sos as any) ?? null,
+      documentTypes: docTypes,
+      isIntrastate: !!c?.is_intrastate,
+    })
+  )
+  return { evaluated, scoreRecord, insurance: (i as any) ?? null, sos: (sos as any) ?? null, docTypes }
 }
 
 export async function getCarrierContext(
@@ -89,11 +185,35 @@ export async function getCarrierContext(
     .limit(1)
   const noa = (noaRows?.[0] as any) ?? null
 
+  const { data: osintRows } = await (supabaseAdmin as any)
+    .from('carrier_osint')
+    .select('*')
+    .eq('dot_number', dot)
+    .order('checked_at', { ascending: false })
+    .limit(1)
+  const o = (osintRows?.[0] as any) ?? null
+  const osint = o
+    ? {
+        checked_at: o.checked_at ?? null,
+        source: o.source ?? null,
+        location_type: o.location_type ?? null,
+        address_lookup: o.address_lookup ?? null,
+        phone_osint: o.phone_osint ?? null,
+        phone_fraud_search: o.phone_fraud_search ?? null,
+        complaints: o.complaints ?? null,
+        web_presence: o.web_presence ?? null,
+        chameleon_flags: Array.isArray(o.chameleon_flags) ? o.chameleon_flags : [],
+        chameleon_flag_count: Number(o.chameleon_flag_count ?? 0),
+        chameleon_detail: o.chameleon_detail ?? null,
+        fraud_reports_found: o.fraud_reports_found ?? null,
+      }
+    : null
+
   // Approved payment baseline for everyday-bill quick checks.
   const { data: baselineRow } = await (supabaseAdmin as any)
     .from('payment_baselines')
     .select(
-      'remit_to_name, remit_to_address, remit_to_phone, remit_to_bank, remit_to_account, remit_to_routing, factor_name, carrier_name, carrier_mc, approved_by, approved_at'
+      'remit_to_name, remit_to_address, remit_to_phone, remit_to_bank, remit_to_account, remit_to_routing, factor_name, carrier_name, carrier_mc, approved_by, approved_at, source'
     )
     .eq('dot_number', dot)
     .maybeSingle()
@@ -101,33 +221,7 @@ export async function getCarrierContext(
 
   // Latest safety scores + documents on file, used to auto-evaluate the vetting
   // checklist (the same evaluation the carrier page shows).
-  const { data: scoreRows } = await supabaseAdmin
-    .from('carrier_scores')
-    .select('*')
-    .eq('dot_number', dot)
-    .order('release_month', { ascending: false })
-    .order('upload_date', { ascending: false })
-    .limit(1)
-  const scoreRecord = (scoreRows?.[0] as any) ?? null
-
-  const { data: docRows } = await supabaseAdmin
-    .from('vetting_documents')
-    .select('document_type')
-    .eq('dot_number', dot)
-  const docTypes = Array.from(
-    new Set((docRows ?? []).map((d: any) => d.document_type).filter(Boolean))
-  ) as string[]
-
-  const evaluated = applyAutoCompletion(
-    attachAutoEvidence(createDefaultChecklist(), {
-      safetyRating: c.safety_rating ?? null,
-      insurance: i as any,
-      score: scoreRecord,
-      sos: (sos as any) ?? null,
-      documentTypes: docTypes,
-      isIntrastate: !!c.is_intrastate,
-    })
-  )
+  const { evaluated, scoreRecord } = await loadEvaluatedChecklist(dot, c, i, sos)
   // Only surface steps we could actually auto-evaluate (pass/fail). Manual-review
   // steps (no data-derived status) would just render as empty boxes in the
   // report, so they are omitted.
@@ -239,6 +333,14 @@ export async function getCarrierContext(
         }
       : null,
     noa,
+    osint,
+    auto_decision: c.auto_decision
+      ? {
+          decision: c.auto_decision ?? null,
+          reasons: Array.isArray(c.auto_decision_reasons) ? c.auto_decision_reasons : [],
+          decided_at: c.auto_decision_at ?? null,
+        }
+      : null,
     checklist,
   }
 }

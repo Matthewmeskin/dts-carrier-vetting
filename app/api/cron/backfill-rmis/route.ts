@@ -4,7 +4,7 @@ import { fetchExpandedCarrierXML, RMISCredentials } from '@/lib/rmisClient'
 import { parseRMISXML } from '@/lib/rmisParser'
 import { evaluateRMIS } from '@/lib/rmisEvaluator'
 import { archiveCarrierDocuments } from '@/lib/rmisArchive'
-import { buildInsuranceRow } from '@/app/api/carriers/[dot]/insurance/route'
+import { buildInsuranceRow } from '@/lib/rmisRefresh'
 import { TablesUpdate } from '@/lib/database.types'
 
 export const dynamic = 'force-dynamic'

@@ -136,11 +136,12 @@ export function evaluateAutoDecision(args: {
   const flagCount = Number(osint?.chameleon_flag_count ?? (Array.isArray(osint?.chameleon_flags) ? osint!.chameleon_flags.length : 0))
   if (osint?.fraud_reports_found === true) holdReasons.push('Fraud or complaint reports found online')
   if (flagCount >= 3) holdReasons.push(`${flagCount} chameleon carrier signals: ${(osint?.chameleon_flags ?? []).slice(0, 3).join('; ')}`)
-  if (status('gap_score') === 'fail' || status('category_scores') === 'fail') {
-    holdReasons.push(`Bluewire scores below threshold: ${evidence('gap_score') || evidence('category_scores')}`)
-  }
 
   // ---- Pending: missing data or exceptions a person has to document
+  // Bluewire failures are exception paths under the policy (GAP under 60 is a
+  // director exception, a category under 30 is a manager exception), not holds.
+  if (status('gap_score') === 'fail') reasons.push(`Bluewire ${evidence('gap_score')}, director exception required`)
+  if (status('category_scores') === 'fail') reasons.push(`Bluewire category below threshold: ${evidence('category_scores')}, manager exception required`)
   if (args.rmisError) reasons.push(`RMIS pull failed: ${args.rmisError}`)
   if (!insurance) reasons.push('No RMIS record on file yet')
   if (status('gap_score') === null) reasons.push('Bluewire GAP score not on file yet (arrives with the next monthly upload)')
@@ -198,6 +199,22 @@ export function automationMayChangeStatus(carrier: Record<string, any>): boolean
   return true
 }
 
+/** True when a person has already submitted this carrier for approval and no
+ *  decision has been recorded. The automation stays out of the way then. */
+async function hasOpenApprovalRequest(dot: string): Promise<boolean> {
+  try {
+    const { data } = await (supabaseAdmin as any)
+      .from('approval_requests')
+      .select('id')
+      .eq('dot_number', dot)
+      .is('decision', null)
+      .limit(1)
+    return !!(data && data.length)
+  } catch {
+    return false
+  }
+}
+
 function noteFor(d: DecisionResult): string {
   const head =
     d.decision === 'approve'
@@ -224,7 +241,7 @@ export async function applyAutoDecision(
 ): Promise<{ statusWritten: string | null; changed: boolean }> {
   const actor = opts.actor ?? AUTO_ACTOR
   const now = new Date().toISOString()
-  const may = automationMayChangeStatus(carrier)
+  const may = automationMayChangeStatus(carrier) && !(await hasOpenApprovalRequest(dot))
   const target = STATUS_FOR[d.decision as Exclude<AutoDecision, 'unchanged'>] ?? null
   const prevStatus = String(carrier.carrier_status ?? '')
 
@@ -350,6 +367,16 @@ async function seedPaymentBaseline(dot: string, ctx: Awaited<ReturnType<typeof g
   const payTo = s(ctx.factoring?.pay_to_entity)
   if (!payTo) return { seeded: false, reason: 'no pay to on RMIS' }
   if (ctx.payment_baseline) return { seeded: false, reason: 'baseline already exists' }
+  // When an NOA on file says payments go somewhere other than the RMIS pay to,
+  // the RMIS pay to is not a safe baseline. Same when the roster links a factor
+  // but RMIS says the carrier is not factoring. Leave it for a reviewed invoice.
+  const noaRes = ctx.noa?.result ?? null
+  if (noaRes && (noaRes.payto_name_matches === false || noaRes.payto_address_match === 'mismatch')) {
+    return { seeded: false, reason: 'NOA on file disagrees with the RMIS pay to' }
+  }
+  if (ctx.factor && ctx.factoring?.is_factoring !== true) {
+    return { seeded: false, reason: 'factor linked in roster but RMIS says not factoring' }
+  }
   const now = new Date().toISOString()
   const row = {
     dot_number: dot,

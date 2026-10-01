@@ -13,6 +13,7 @@ import {
   mfaTrustMs,
   verifyMfaCookie,
 } from '@/lib/mfa'
+import { hubSignInUrl, localPath } from '@/lib/dtsLogin'
 
 // Require a signed-in user for the whole portal. Refreshes the Supabase session
 // cookie on every request and redirects unauthenticated users to /login.
@@ -79,11 +80,29 @@ export async function middleware(request: NextRequest) {
   // or a denied user would bounce between here, /mfa and /login forever.
   const isNoAccess = path === '/no-access'
 
+  // One DTS sign-in (lib/dtsLogin.ts): a signed-out page visit goes to the
+  // hub's shared login and comes back signed in, to the page it asked for.
+  // API calls keep the old redirect; a cross-site one would only fail.
+  // Both hub redirects carry the response's cookies, so a dead session the
+  // auth check just cleared does not come back on the next visit.
+  const toHub = (next: string) => {
+    const res = NextResponse.redirect(hubSignInUrl(next))
+    response.cookies.getAll().forEach((c) => res.cookies.set(c))
+    return res
+  }
+  if (!user && !isLogin && !isAuthFlow && !isApi) {
+    return toHub(path + request.nextUrl.search)
+  }
   if (!user && !isLogin && !isAuthFlow) {
     const redirect = request.nextUrl.clone()
     redirect.pathname = '/login'
     redirect.searchParams.set('next', path)
     return NextResponse.redirect(redirect)
+  }
+  // /login itself goes to the shared login too. ?local=1 keeps this portal's
+  // own form, for a failed hand-off or a hub outage.
+  if (!user && isLogin && !request.nextUrl.searchParams.has('local')) {
+    return toHub(localPath(request.nextUrl.searchParams.get('next')))
   }
   if (user && isLogin) {
     const home = request.nextUrl.clone()

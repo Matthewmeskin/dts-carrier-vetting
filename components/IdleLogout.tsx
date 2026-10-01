@@ -54,8 +54,11 @@ export function IdleLogout() {
       /* ignore */
     }
     try {
+      // Only this portal's session: one DTS sign-in spans every portal, and an
+      // idle vetting tab should not sign someone out of the payables portal
+      // they are working in. The Sign out button ends them all.
       const supabase = createSupabaseBrowserClient()
-      await supabase.auth.signOut()
+      await supabase.auth.signOut({ scope: 'local' })
     } catch {
       /* ignore — still redirect */
     }

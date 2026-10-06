@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabaseBrowser'
-import { createRecoveryClient } from '@/lib/supabaseRecovery'
 import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -48,14 +47,17 @@ function LoginForm() {
     setLoading(true)
     setError(null)
     try {
-      const supabase = createRecoveryClient()
-      // The link lands on /auth/callback (already on the Supabase redirect
-      // allowlist for Google sign-in), which forwards to /reset-password; the
-      // tokens ride along in the URL fragment.
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?flow=recovery`,
+      // The server asks the n8n relay to mint a recovery link and mail it from
+      // the Hamilton mailbox; the link lands on /reset-password here.
+      const res = await fetch('/api/auth/forgot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       })
-      if (error) throw error
+      if (!res.ok) {
+        const d = await res.json().catch(() => null)
+        throw new Error(d?.error || 'Could not send the reset link')
+      }
       setResetSent(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send the reset link')

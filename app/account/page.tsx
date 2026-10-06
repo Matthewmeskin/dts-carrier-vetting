@@ -69,16 +69,17 @@ export default function AccountPage() {
     setSaving(true)
     try {
       const supabase = createSupabaseBrowserClient()
-      if (hasPassword) {
-        if (!me?.email) throw new Error('No email on this account')
-        const { error: authErr } = await supabase.auth.signInWithPassword({
-          email: me.email,
-          password: current,
-        })
-        if (authErr) throw new Error('The current password is incorrect.')
+      // The project requires the current password inside the same request
+      // (Supabase "require current password" setting); the server checks it.
+      const attrs = hasPassword ? { password, current_password: current } : { password }
+      const { error } = await supabase.auth.updateUser(attrs as { password: string })
+      if (error) {
+        throw new Error(
+          /current password/i.test(error.message) && hasPassword
+            ? 'The current password is incorrect.'
+            : error.message
+        )
       }
-      const { error } = await supabase.auth.updateUser({ password })
-      if (error) throw error
       setDone(true)
       setHasPassword(true)
       setCurrent('')

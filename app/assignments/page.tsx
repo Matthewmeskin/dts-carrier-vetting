@@ -105,7 +105,8 @@ export default function AssignmentsPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-900">Assignments</h1>
         <p className="text-sm text-gray-500">
-          Who owns each carrier&apos;s vetting. Counts cover carriers active in Brokerware.
+          Every carrier can have one owner: the person responsible for keeping its vetting current.
+          Owners see their carriers by setting the Carriers list filter to <span className="font-medium text-gray-700">Assigned to: Me</span>.
         </p>
       </div>
 
@@ -119,6 +120,7 @@ export default function AssignmentsPage() {
         </div>
       ) : (
         <>
+          {isManager && <Distribute members={members} carriers={carriers} onApplied={load} />}
           <WorkloadTable
             members={members}
             me={me}
@@ -127,7 +129,6 @@ export default function AssignmentsPage() {
             carriers={carriers}
             onChanged={load}
           />
-          {isManager && <Distribute members={members} carriers={carriers} onApplied={load} />}
         </>
       )}
     </div>
@@ -412,9 +413,20 @@ function Distribute({
     <Card>
       <CardHeader
         title="Hand out carriers"
-        subtitle="Split a slice of the roster across people. Preview first; nothing changes until you apply."
+        subtitle="Give each person a share of the carriers to look after."
       />
       <CardBody className="space-y-5">
+        <div className="rounded-md border border-dts-blue/20 bg-dts-blue/5 px-4 py-3 text-sm text-gray-700">
+          <p className="font-medium text-gray-900">How this works</p>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+            <li>Choose which carriers to hand out. The usual choice is the ones nobody owns yet.</li>
+            <li>Tick the people who should get them.</li>
+            <li>Pick how to split them up. &ldquo;Evenly&rdquo; gives everyone about the same number, in alphabetical blocks (for example A&ndash;G, H&ndash;Q, R&ndash;Z).</li>
+          </ol>
+          <p className="mt-1.5">
+            Click <span className="font-medium">Preview</span> to see who would get what. Nothing changes until you click <span className="font-medium">Apply</span>.
+          </p>
+        </div>
         <div className="grid gap-5 md:grid-cols-3">
           <div className="space-y-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">1 · Which carriers</div>

@@ -39,6 +39,7 @@ import {
 } from '@/lib/businessType'
 import { INACTIVE_CARRIER_HOLD_NOTE } from '@/lib/statusNotes'
 import { daysSince, exceptionState } from '@/lib/exceptions'
+import { memberInitials, memberName, type TeamMember } from '@/lib/assignments'
 
 const UNKNOWN_BIZ = 'Unknown'
 
@@ -103,7 +104,7 @@ function buildCarrierCsv(rows: CarrierSummary[]): string {
     'Carrier', 'DBA', 'DOT', 'MC', 'City', 'State', 'GAP', 'Flagged Scores',
     'Hard Stops', 'Auto Status', 'Auto Expiration', 'Cargo Status',
     'Cargo Expiration', 'RMIS', 'ELD Enrolled', 'Brokerware Status',
-    'Vetting Status', 'Last Reviewed', 'Last Hauled', 'Re-vet',
+    'Vetting Status', 'Owner', 'Last Reviewed', 'Last Hauled', 'Re-vet',
   ]
   const lines = [headers.join(',')]
   for (const c of rows) {
@@ -131,6 +132,7 @@ function buildCarrierCsv(rows: CarrierSummary[]): string {
       c.eld_enrolled ? 'Yes' : '',
       disabled ? c.brokerware_status ?? 'Disabled' : c.brokerware_status ?? '',
       c.carrier_status ?? '',
+      c.assignee_name ?? '',
       c.last_reviewed ? formatDate(c.last_reviewed) : '',
       c.last_hauled_at ? formatDate(c.last_hauled_at) : '',
       disabled ? 'Not required' : rv.label,
@@ -218,6 +220,7 @@ type SortKey =
   | 'insurance'
   | 'rmis'
   | 'status'
+  | 'owner'
   | 'reviewed'
   | 'hauled'
   | 'revet'
@@ -270,6 +273,11 @@ const SORT_COLS: Record<SortKey, SortColDef> = {
     type: 'str',
     defaultDir: 'asc',
   },
+  owner: {
+    getValue: (c) => (c.assignee_name ? c.assignee_name.toLowerCase() : null),
+    type: 'str',
+    defaultDir: 'asc',
+  },
   reviewed: {
     getValue: (c) => (c.last_reviewed ? Date.parse(c.last_reviewed) : null),
     type: 'num',
@@ -288,6 +296,28 @@ const SORT_COLS: Record<SortKey, SortColDef> = {
     type: 'num',
     defaultDir: 'asc',
   },
+}
+
+/** Who owns the carrier: an initials chip plus the name; "me" is highlighted. */
+function OwnerCell({ carrier, meId }: { carrier: CarrierSummary; meId: string | null }) {
+  if (!carrier.assignee_id) return <span className="text-gray-400">Unassigned</span>
+  const name = carrier.assignee_name ?? 'Unknown'
+  const mine = meId != null && carrier.assignee_id === meId
+  return (
+    <span className="inline-flex items-center gap-1.5" title={name}>
+      <span
+        className={cn(
+          'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold',
+          mine ? 'bg-dts-blue text-white' : 'bg-gray-200 text-gray-700'
+        )}
+      >
+        {memberInitials(name)}
+      </span>
+      <span className={cn('truncate', mine ? 'font-medium text-gray-900' : 'text-gray-700')}>
+        {mine ? 'Me' : name}
+      </span>
+    </span>
+  )
 }
 
 /** Last-hauled date with a relative hint: red once past the dormancy
@@ -422,6 +452,7 @@ const COL = {
   insurance: 'w-44 shrink-0 pr-2',
   rmis: 'w-28 shrink-0 pr-2',
   status: 'w-44 shrink-0 pr-2',
+  owner: 'w-28 shrink-0 pr-2',
   reviewed: 'w-28 shrink-0 pr-2',
   hauled: 'w-28 shrink-0 pr-2',
   revet: 'w-28 shrink-0',
@@ -450,6 +481,7 @@ interface PersistedView {
   haulPreset: string
   haulFrom: string
   haulTo: string
+  assignee: string
   scrollTop: number
 }
 
@@ -466,9 +498,12 @@ function loadView(): Partial<PersistedView> {
 export function CarrierTable({
   carriers,
   lastUpload,
+  onChanged,
 }: {
   carriers: CarrierSummary[]
   lastUpload: string | null
+  /** Called after a bulk change so the parent can reload the list. */
+  onChanged?: () => void | Promise<void>
 }) {
   const router = useRouter()
   // Hold the persisted view in a ref (reading sessionStorage in a ref is safe —
@@ -491,6 +526,11 @@ export function CarrierTable({
   const [haulPreset, setHaulPreset] = useState<string>('')
   const [haulFrom, setHaulFrom] = useState<string>('')
   const [haulTo, setHaulTo] = useState<string>('')
+  // Owner filter: '' = anyone, 'me', 'none' = unassigned, or a team member id.
+  const [assignee, setAssignee] = useState<string>('')
+  const [team, setTeam] = useState<TeamMember[]>([])
+  const [me, setMe] = useState<{ id: string; role: string } | null>(null)
+  const [bulkAssignee, setBulkAssignee] = useState<string>('')
   const [sortKey, setSortKey] = useState<SortKey>('gap')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
@@ -521,9 +561,34 @@ export function CarrierTable({
     if (typeof v.haulPreset === 'string') setHaulPreset(v.haulPreset)
     if (typeof v.haulFrom === 'string') setHaulFrom(v.haulFrom)
     if (typeof v.haulTo === 'string') setHaulTo(v.haulTo)
+    if (typeof v.assignee === 'string') setAssignee(v.assignee)
+    // A link from the Assignments page can open the list pre-filtered to one
+    // owner (?assignee=<id>|me|none); that beats the saved view.
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get('assignee')
+      if (fromUrl) setAssignee(fromUrl)
+    } catch {
+      /* ignore */
+    }
     if (v.sortKey && v.sortKey in SORT_COLS) setSortKey(v.sortKey)
     if (v.sortDir === 'asc' || v.sortDir === 'desc') setSortDir(v.sortDir)
   }, [saved])
+
+  // The team roster (for the owner filter and bulk assign) and who I am.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/team', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return
+        setTeam(d.members ?? [])
+        setMe(d.me ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Clicking a column header sorts by it; clicking the active column flips the
   // direction. A fresh column starts in its natural direction.
@@ -557,6 +622,13 @@ export function CarrierTable({
         if (!hay.includes(q)) return false
       }
       if (revettingOnly && !c.requires_revetting) return false
+      if (assignee === 'me') {
+        if (!me || c.assignee_id !== me.id) return false
+      } else if (assignee === 'none') {
+        if (c.assignee_id) return false
+      } else if (assignee) {
+        if (c.assignee_id !== assignee) return false
+      }
       // Every filter except the ones that explicitly target the full roster
       // ("All") or disabled carriers ("Disabled") should show only carriers
       // Brokerware reports as Active — disabled/inactive carriers are noise for
@@ -633,7 +705,7 @@ export function CarrierTable({
       }
     })
     return rows
-  }, [carriers, search, status, revettingOnly, hasBrokerwareData])
+  }, [carriers, search, status, revettingOnly, hasBrokerwareData, assignee, me])
 
   // Per-problem carrier counts for the multi-select, over the base set.
   const facets = useMemo(() => problemFacets(base), [base])
@@ -747,6 +819,7 @@ export function CarrierTable({
           haulPreset,
           haulFrom,
           haulTo,
+          assignee,
           scrollTop: scrollRef.current?.scrollTop ?? 0,
         })
       )
@@ -765,6 +838,7 @@ export function CarrierTable({
     haulPreset,
     haulFrom,
     haulTo,
+    assignee,
   ])
 
   // Persist whenever a filter changes (covers navigating away via any link).
@@ -803,7 +877,8 @@ export function CarrierTable({
     missingDocs.length > 0 ||
     haulPreset !== '' ||
     haulFrom !== '' ||
-    haulTo !== ''
+    haulTo !== '' ||
+    assignee !== ''
 
   // Reset every filter back to the default view (sort is left untouched).
   const clearFilters = useCallback(() => {
@@ -816,6 +891,7 @@ export function CarrierTable({
     setHaulPreset('')
     setHaulFrom('')
     setHaulTo('')
+    setAssignee('')
   }, [])
 
   // Download the currently-visible rows as a CSV (opens in Excel).
@@ -918,14 +994,43 @@ export function CarrierTable({
         setBulkMode(null)
         setSelected(new Set())
         router.refresh() // reload server data so statuses reflect the change
+        await onChanged?.()
       } catch (e) {
         setBulkError(e instanceof Error ? e.message : 'Bulk update failed.')
       } finally {
         setBulkBusy(false)
       }
     },
-    [selected, bulkNote, router]
+    [selected, bulkNote, router, onChanged]
   )
+
+  // Hand the selected carriers to one person (or clear their owner).
+  const applyAssign = useCallback(async () => {
+    const dots = Array.from(selected)
+    if (dots.length === 0) return
+    const target = bulkAssignee === 'me' ? me?.id ?? '' : bulkAssignee === 'none' ? '' : bulkAssignee
+    if (bulkAssignee === '') return
+    setBulkBusy(true)
+    setBulkError(null)
+    try {
+      const res = await fetch('/api/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dots, assigneeId: target || null }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not assign.')
+      setSelected(new Set())
+      setBulkAssignee('')
+      await onChanged?.()
+    } catch (e) {
+      setBulkError(e instanceof Error ? e.message : 'Could not assign.')
+    } finally {
+      setBulkBusy(false)
+    }
+  }, [selected, bulkAssignee, me, onChanged])
+
+  const canAssignAnyone = me?.role === 'manager' || me?.role === 'director'
 
   const th = (
     col: SortKey,
@@ -990,6 +1095,22 @@ export function CarrierTable({
             <option value="DoNotUse">Declined / Do Not Use</option>
             <option value="OnHold">On Hold</option>
             <option value="Disabled">Inactive / Disabled (Brokerware)</option>
+          </Select>
+        </div>
+        <div className="w-44">
+          <Select
+            label="Assigned to"
+            value={assignee}
+            onChange={(e) => setAssignee(e.target.value)}
+          >
+            <option value="">Anyone</option>
+            <option value="me">Me</option>
+            <option value="none">Unassigned</option>
+            {team.map((m) => (
+              <option key={m.id} value={m.id}>
+                {memberName(m)}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="pb-[1px]">
@@ -1119,6 +1240,29 @@ export function CarrierTable({
           >
             Take off hold
           </Button>
+          <span className="mx-1 h-5 w-px bg-dts-blue/20" aria-hidden />
+          <select
+            value={bulkAssignee}
+            onChange={(e) => setBulkAssignee(e.target.value)}
+            aria-label="Assign selected carriers to"
+            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+          >
+            <option value="">Assign to…</option>
+            <option value="me">Me</option>
+            {canAssignAnyone &&
+              team
+                .filter((m) => m.id !== me?.id)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {memberName(m)}
+                  </option>
+                ))}
+            <option value="none">Unassign</option>
+          </select>
+          <Button size="sm" variant="outline" onClick={applyAssign} disabled={bulkBusy || !bulkAssignee}>
+            Apply
+          </Button>
+          {bulkError && !bulkMode && <span className="text-xs text-red-600">{bulkError}</span>}
           <button
             type="button"
             onClick={clearSelection}
@@ -1134,7 +1278,7 @@ export function CarrierTable({
 
       {/* Desktop / tablet: full wide table (horizontal scroll if needed) */}
       <div className="hidden overflow-x-auto md:block">
-        <div className="min-w-[1180px]">
+        <div className="min-w-[1290px]">
           {/* Header row */}
           <div className="flex items-center border-b border-gray-100 px-5 py-2 text-xs font-semibold text-gray-500">
             <div className={COL.select}>
@@ -1161,6 +1305,7 @@ export function CarrierTable({
             {th('insurance', 'Insurance', COL.insurance)}
             {th('rmis', 'RMIS', COL.rmis)}
             {th('status', 'Status', COL.status)}
+            {th('owner', 'Owner', COL.owner)}
             {th('reviewed', 'Last Reviewed', COL.reviewed)}
             {th('hauled', 'Last Hauled', COL.hauled)}
             {th('revet', 'Re-vet', COL.revet)}
@@ -1309,6 +1454,9 @@ export function CarrierTable({
                             {c.carrier_status ?? '—'}
                           </Badge>
                         )}
+                      </div>
+                      <div className={cn(COL.owner, 'text-xs')}>
+                        <OwnerCell carrier={c} meId={me?.id ?? null} />
                       </div>
                       <div
                         className={cn(
@@ -1493,6 +1641,9 @@ export function CarrierTable({
                     <div className="mt-1 text-xs">
                       <span className="text-gray-400">Last hauled: </span>
                       <LastHauledCell lastHauledAt={c.last_hauled_at} />
+                      <span className="text-gray-300"> · </span>
+                      <span className="text-gray-400">Owner: </span>
+                      <OwnerCell carrier={c} meId={me?.id ?? null} />
                     </div>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { fetchExceptionSince } from '@/lib/exceptionsServer'
 import { supabaseAdmin } from '@/lib/supabase'
+import { memberName } from '@/lib/assignments'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -136,6 +137,26 @@ export async function GET(
         ? (await fetchExceptionSince([dot])).get(dot) ?? null
         : null
 
+    // Who owns this carrier's vetting, with a display name for the header.
+    const { data: assignRow } = await (supabaseAdmin as any)
+      .from('carrier_assignments')
+      .select('assignee_id, assigned_at')
+      .eq('dot_number', dot)
+      .maybeSingle()
+    let assignment = { assignee_id: null as string | null, assignee_name: null as string | null, assigned_at: null as string | null }
+    if (assignRow?.assignee_id) {
+      const { data: prof } = await (supabaseAdmin as any)
+        .from('profiles')
+        .select('id, email, full_name')
+        .eq('id', assignRow.assignee_id)
+        .maybeSingle()
+      assignment = {
+        assignee_id: String(assignRow.assignee_id),
+        assignee_name: memberName(prof),
+        assigned_at: assignRow.assigned_at ?? null,
+      }
+    }
+
     return NextResponse.json({
       carrier: { ...(carrier as any), exception_since: exceptionSince },
       scores,
@@ -146,6 +167,7 @@ export async function GET(
       factor,
       documentTypes,
       events: (eventsRes as any).data ?? [],
+      assignment,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 })

@@ -31,6 +31,7 @@ import { RmisMonitoring } from '@/components/RmisMonitoring'
 import { CarrierActivity } from '@/components/CarrierActivity'
 import { AddressCheck } from '@/components/AddressCheck'
 import { IntrastateToggle } from '@/components/IntrastateToggle'
+import { AssignOwner } from '@/components/AssignOwner'
 
 const REVET_TONE: Record<RevetState, BadgeTone> = {
   overdue: 'red',
@@ -231,6 +232,14 @@ export default function CarrierDetailPage({
                 carrier.dba_name !== carrier.legal_name && (
                   <p className="text-sm text-gray-500">dba {carrier.dba_name}</p>
                 )}
+              <div className="mt-2">
+                <AssignOwner
+                  dot={carrier.dot_number}
+                  assigneeId={detail.assignment?.assignee_id ?? null}
+                  assigneeName={detail.assignment?.assignee_name ?? null}
+                  onChanged={load}
+                />
+              </div>
               <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
                 <span>DOT {carrier.dot_number}</span>
                 {hyperionCarrierUrl(carrier.brokerware_carrier_id) && (

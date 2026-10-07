@@ -41,6 +41,7 @@ const TYPE_META: Record<string, { label: string; tone: BadgeTone }> = {
   approval_requested: { label: 'Approval requested', tone: 'amber' },
   approval_decided: { label: 'Approval decision', tone: 'blue' },
   status_change: { label: 'Status', tone: 'blue' },
+  assignment: { label: 'Assignment', tone: 'blue' },
   checklist_change: { label: 'Checklist', tone: 'blue' },
   document_upload: { label: 'Document', tone: 'blue' },
   recertification: { label: 'Recertified', tone: 'green' },

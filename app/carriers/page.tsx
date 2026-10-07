@@ -107,7 +107,7 @@ export default function CarriersPage() {
           {error}
         </div>
       ) : (
-        <CarrierTable carriers={carriers} lastUpload={lastUpload} />
+        <CarrierTable carriers={carriers} lastUpload={lastUpload} onChanged={load} />
       )}
     </div>
   )

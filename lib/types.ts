@@ -43,6 +43,9 @@ export interface CarrierSummary {
   agreement_on_file: boolean | null
   is_factoring: boolean | null
   noa_on_file: boolean
+  /** Team member who owns this carrier's vetting (carrier_assignments). */
+  assignee_id: string | null
+  assignee_name: string | null
 }
 
 export interface CarrierRecord {
@@ -301,4 +304,5 @@ export interface CarrierDetail {
   factor: FactorRecord | null
   events: CarrierEventRecord[]
   documentTypes?: string[]
+  assignment?: { assignee_id: string | null; assignee_name: string | null; assigned_at: string | null }
 }

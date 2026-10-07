@@ -12,6 +12,7 @@ const NAV = [
   { href: '/carriers', label: 'Carriers' },
   { href: '/changes', label: 'Changes' },
   { href: '/activity', label: 'Activity' },
+  { href: '/assignments', label: 'Assignments' },
   { href: '/factors', label: 'Factors' },
   { href: '/upload', label: 'Upload Scores' },
   { href: '/w9-upload', label: 'W-9 Upload' },

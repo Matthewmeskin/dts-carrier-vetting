@@ -28,6 +28,7 @@ export type CarrierEventType =
   | 'onboarding'
   | 'osint_check'
   | 'auto_decision'
+  | 'assignment'
 
 export interface CarrierEventInput {
   dot: string

@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { computeRevetStatus, isBrokerwareDisabled } from '@/lib/revet'
 import { stateFromZip } from '@/lib/sosNormalize'
 import { fetchExceptionSince } from '@/lib/exceptionsServer'
+import { memberName } from '@/lib/assignments'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -49,6 +50,8 @@ interface CarrierSummary {
   agreement_on_file: boolean | null
   is_factoring: boolean | null
   noa_on_file: boolean
+  assignee_id: string | null
+  assignee_name: string | null
 }
 
 /** The later of two ISO timestamps (either may be null). */
@@ -101,7 +104,7 @@ export async function GET(request: NextRequest) {
     // which is a ~40KB XML blob per row and would balloon the payload to tens of
     // MB across the roster. Explicit high limit avoids PostgREST's 1000-row cap
     // silently hiding carriers as history accumulates.
-    const [carriersRes, scoresRes, insRes, vetRes, docsRes] = await Promise.all([
+    const [carriersRes, scoresRes, insRes, vetRes, docsRes, assignRes, teamRes] = await Promise.all([
       carrierQuery,
       supabaseAdmin
         .from('carrier_scores')
@@ -132,6 +135,9 @@ export async function GET(request: NextRequest) {
         .select('dot_number, document_type')
         .in('document_type', ['noa', 'broker_carrier_agreement', 'tariff', 'w9'])
         .limit(100000),
+      // Who owns each carrier, plus the roster to turn ids into names.
+      (supabaseAdmin as any).from('carrier_assignments').select('dot_number, assignee_id').limit(100000),
+      (supabaseAdmin as any).from('profiles').select('id, email, full_name'),
     ])
     if (carriersRes.error) throw carriersRes.error
     if (scoresRes.error) throw scoresRes.error
@@ -166,6 +172,10 @@ export async function GET(request: NextRequest) {
         .map((r) => String(r.dot_number))
     )
     const w9PortalDots = dotsWithDoc('w9')
+    const nameById = new Map<string, string>()
+    for (const p of (teamRes?.data ?? []) as any[]) nameById.set(String(p.id), memberName(p))
+    const assigneeByDot = new Map<string, string>()
+    for (const a of (assignRes?.data ?? []) as any[]) assigneeByDot.set(String(a.dot_number), String(a.assignee_id))
 
     let merged: CarrierSummary[] = (carriers ?? []).map((c: any) => {
       const dot = String(c.dot_number)
@@ -249,6 +259,8 @@ export async function GET(request: NextRequest) {
           ins?.broker_carrier_agreement_on_file === true || bcaDots.has(dot),
         is_factoring: ins?.is_factoring ?? null,
         noa_on_file: noaDots.has(dot),
+        assignee_id: assigneeByDot.get(dot) ?? null,
+        assignee_name: assigneeByDot.has(dot) ? nameById.get(assigneeByDot.get(dot)!) ?? 'Unknown' : null,
       }
     })
 

@@ -1,12 +1,36 @@
-import type { Metadata } from 'next'
-import { SiteHeader } from '@/components/SiteHeader'
+import type { Metadata, Viewport } from 'next'
+import { Montserrat, Lato } from 'next/font/google'
+import { PortalShell } from '@/components/PortalShell'
 import { IdleLogout } from '@/components/IdleLogout'
 import './globals.css'
 
+// The same type pairing as the other DTS portals: Montserrat for headings and
+// navigation, Lato for everything else.
+const montserrat = Montserrat({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-montserrat',
+  display: 'swap',
+})
+
+const lato = Lato({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  variable: '--font-lato',
+  display: 'swap',
+})
+
 export const metadata: Metadata = {
-  title: 'DTS Carrier Compliance Portal',
+  title: 'DTS Carrier Vetting',
   description:
     'Track carrier compliance, monitor vetting policy, and document reasonable care for Diversified Transportation Services.',
+  robots: { index: false, follow: false },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#AB0534',
 }
 
 export default function RootLayout({
@@ -15,21 +39,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${montserrat.variable} ${lato.variable}`}>
       <body>
         <IdleLogout />
-        <div className="min-h-screen flex flex-col">
-          <SiteHeader />
-          <main className="flex-1 mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6">
-            {children}
-          </main>
-          <footer className="border-t border-gray-200 bg-white">
-            <div className="mx-auto max-w-[1400px] px-4 py-4 text-xs text-gray-500 sm:px-6">
-              Diversified Transportation Services — Torrance, CA · Internal
-              compliance tool
-            </div>
-          </footer>
-        </div>
+        <PortalShell>{children}</PortalShell>
       </body>
     </html>
   )

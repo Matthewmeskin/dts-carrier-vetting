@@ -6,9 +6,9 @@ type Variant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost'
 type Size = 'sm' | 'md' | 'lg'
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-dts-blue text-white hover:bg-[#00547f] disabled:bg-blue-300',
-  secondary:
-    'bg-dts-maroon text-white hover:bg-[#8c042b] disabled:bg-[#d98ba3]',
+  // Maroon is the DTS call-to-action colour across every portal.
+  primary: 'bg-maroon text-white hover:bg-maroon-700 disabled:bg-maroon-200',
+  secondary: 'bg-brandblue text-white hover:bg-brandblue-700 disabled:bg-brandblue-200',
   outline:
     'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50',
   danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300',
@@ -36,7 +36,7 @@ export function Button({
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-dts-blue/40',
+        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-maroon/30',
         VARIANTS[variant],
         SIZES[size],
         className

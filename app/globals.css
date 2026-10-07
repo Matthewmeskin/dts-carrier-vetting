@@ -15,11 +15,20 @@ body {
 }
 
 body {
-  background: #f4f5f7;
-  color: #111827;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
+  background: #f7f8fa;
+  color: #1a1d21;
+  font-family: var(--font-lato), Lato, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Headings and the menu use the brand display face, like the other portals. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-montserrat), Montserrat, system-ui, sans-serif;
+  letter-spacing: -0.01em;
 }
 
 * {

@@ -107,9 +107,8 @@ function LoginForm() {
       <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <Logo className="h-10 w-auto" />
-          <span className="text-sm font-medium text-gray-500">
-            Carrier Compliance Portal
-          </span>
+          <span className="font-heading text-base font-bold text-maroon">Carrier Vetting</span>
+          <span className="text-xs text-gray-500">Internal use only · one login for every DTS portal</span>
         </div>
         {resetMode ? (
           <form onSubmit={sendReset} className="space-y-4">

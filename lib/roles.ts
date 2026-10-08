@@ -30,8 +30,9 @@ export const APPROVING_STATUSES = ['Approved', 'Exception Approved']
  * level and safety rating. Per the §9.4 decision summary:
  *  - Unsatisfactory / Conditional rating → Director (owner-level)
  *  - GAP < 60 (owner_exception)           → Director
- *  - GAP 60–64.99 (manager_exception)     → Manager
- *  - Any category ≤ 30 (additional_vetting) → Manager
+ *  - GAP 60–64.99 (manager_exception)     → Manager (rows scored before
+ *    Oct 2026; that band now clears automatically)
+ *  - Any category < 30 (additional_vetting) → Manager
  *  - Clean (auto_clear)                   → none
  */
 export function requiredApprovalLevel(

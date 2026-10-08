@@ -8,6 +8,7 @@ import {
   scoreFieldPasses,
   MIN_30_THRESHOLD,
   PERFECT_SCORE,
+  GAP_THRESHOLD,
   getApprovalLevelLabel,
   ApprovalLevel,
 } from '@/lib/scoringRules'
@@ -34,8 +35,7 @@ function approvalTone(level?: string | null): BadgeTone {
 
 function gapColor(gap: number | null | undefined): string {
   if (gap === null || gap === undefined) return 'text-gray-400'
-  if (gap >= 65) return 'text-green-700'
-  if (gap >= 60) return 'text-amber-600'
+  if (gap >= GAP_THRESHOLD) return 'text-green-700'
   return 'text-red-600'
 }
 
@@ -154,7 +154,7 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
                   {formatScore(latest.gap_score)}
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
-                  <span>Threshold: 65.00</span>
+                  <span>Threshold: {GAP_THRESHOLD.toFixed(2)}</span>
                   {gapDelta !== null && Math.abs(gapDelta) >= 0.01 && (
                     <span
                       className={cn(
@@ -251,10 +251,9 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
               })}
             </div>
             <p className="mt-2 text-xs text-gray-400">
-              Crash, Violation, CSA Basics, and Driver OOS must be ≥{' '}
-              {MIN_30_THRESHOLD}. Critical/Acute Violation, New Entrant, MCS-150,
-              and Safety Rating must be {PERFECT_SCORE}. Judicial Hellholes is not
-              considered.
+              Every safety category must be ≥ {MIN_30_THRESHOLD}. Judicial
+              Hellholes is not considered. A carrier clears automatically at
+              GAP ≥ {GAP_THRESHOLD} with every category ≥ {MIN_30_THRESHOLD}.
             </p>
 
             <div className="mt-4">

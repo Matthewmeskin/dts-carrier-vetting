@@ -142,8 +142,8 @@ export function createDefaultChecklist(): VettingChecklist {
       {
         id: 'gap_score',
         category: 'assessment',
-        label: 'Confirmed overall Bluewire GAP Score ≥ 65',
-        description: 'Review the GAP score from the most recent monthly Bluewire upload. Score must be 65.00 or higher to clear automatically.',
+        label: 'Confirmed overall Bluewire GAP Score ≥ 60',
+        description: 'Review the GAP score from the most recent monthly Bluewire upload. Score must be 60.00 or higher to clear automatically.',
         policyRef: 'Section 9.2',
         required: true,
         completed: false,
@@ -153,7 +153,7 @@ export function createDefaultChecklist(): VettingChecklist {
         id: 'category_scores',
         category: 'assessment',
         label: 'Confirmed safety category scores meet thresholds',
-        description: 'Crash, Violation, CSA Basics, and Driver OOS must be at or above 30. Critical/Acute Violation, New Entrant, MCS-150, and Safety Rating must be 100. Judicial Hellholes is not considered. Any failing score requires additional vetting.',
+        description: 'Every safety category (Crash, Violation, CSA Basics, Driver OOS, Critical/Acute Violation, New Entrant, MCS-150, Safety Rating) must be at or above 30. Judicial Hellholes is not considered. Any failing score requires additional vetting.',
         policyRef: 'Section 9.3',
         required: true,
         completed: false,
@@ -432,7 +432,7 @@ function computeAutoEvaluations(
     }
   }
 
-  // Overall Bluewire GAP ≥ 65
+  // Overall Bluewire GAP ≥ GAP_THRESHOLD (60)
   if (score && score.gap_score != null) {
     out.gap_score = {
       status: score.gap_score >= GAP_THRESHOLD ? 'pass' : 'fail',
@@ -440,8 +440,7 @@ function computeAutoEvaluations(
     }
   }
 
-  // Category scores meet their thresholds (≥30 for Crash/Violation/CSA/Driver
-  // OOS, =100 for Critical-Acute/New Entrant/MCS-150/Safety Rating).
+  // Category scores meet their threshold (≥30 for every safety category).
   if (score) {
     const failing: string[] = []
     let anyPresent = false
@@ -458,7 +457,7 @@ function computeAutoEvaluations(
         status: failing.length === 0 ? 'pass' : 'fail',
         evidence:
           failing.length === 0
-            ? `All category scores meet thresholds (≥${MIN_30_THRESHOLD} / =${PERFECT_SCORE})`
+            ? `All category scores meet the threshold (≥${MIN_30_THRESHOLD})`
             : `Failing: ${failing.join(', ')}`,
       }
     }

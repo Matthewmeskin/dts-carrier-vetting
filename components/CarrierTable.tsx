@@ -1,5 +1,6 @@
 'use client'
 
+import { GAP_THRESHOLD } from '@/lib/scoringRules'
 import {
   useCallback,
   useEffect,
@@ -390,8 +391,7 @@ function HardStopBadge({ count, carrier }: { count: number; carrier: CarrierSumm
 function gapTone(gap: number | null): { tone: string; label: string } {
   if (gap === null || gap === undefined)
     return { tone: 'text-gray-400', label: '—' }
-  if (gap >= 65) return { tone: 'text-green-700', label: formatScore(gap) }
-  if (gap >= 60) return { tone: 'text-amber-600', label: formatScore(gap) }
+  if (gap >= GAP_THRESHOLD) return { tone: 'text-green-700', label: formatScore(gap) }
   return { tone: 'text-red-600', label: formatScore(gap) }
 }
 

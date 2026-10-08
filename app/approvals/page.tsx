@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { GAP_THRESHOLD } from '@/lib/scoringRules'
 import Link from 'next/link'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Badge, carrierStatusTone } from '@/components/ui/Badge'
@@ -168,11 +169,9 @@ function RequestCard({
                 'text-lg font-bold',
                 row.gap_score === null
                   ? 'text-gray-400'
-                  : row.gap_score >= 65
+                  : row.gap_score >= GAP_THRESHOLD
                     ? 'text-green-700'
-                    : row.gap_score >= 60
-                      ? 'text-amber-600'
-                      : 'text-red-600'
+                    : 'text-red-600'
               )}
             >
               {row.gap_score === null ? '—' : formatScore(row.gap_score)}

@@ -55,10 +55,12 @@ This portal handles everything humans need to see and do.
 ## Compliance logic
 
 - **Bluewire scoring** (`lib/scoringRules.ts`): a carrier clears automatically
-  at GAP ≥ 60 with every safety category score ≥ 30 (Judicial Hellholes is not
-  considered). Approval levels: `auto_clear`, `additional_vetting` (GAP clears,
-  a category is under 30), `owner_exception` (GAP < 60). `manager_exception`
-  (GAP 60–64, pre-Oct 2026 policy) survives only on rows scored before.
+  at GAP ≥ 60 when Crash, Violation, CSA Basics and Driver OOS are ≥ 30 and
+  Critical/Acute, New Entrant, MCS-150 and Safety Rating are 100 (Judicial
+  Hellholes is not considered). Approval levels: `auto_clear`,
+  `additional_vetting` (GAP clears, a category fails), `owner_exception`
+  (GAP < 60). `manager_exception` (GAP 60–64, pre-Oct 2026 policy) survives
+  only on rows scored before.
 - **RMIS policy** (`lib/rmisEvaluator.ts`): hard stops for inactive authority,
   Conditional/Unsatisfactory rating, missing/insufficient auto ($1M) or cargo
   ($100K) coverage, and authority under 90 days. Flags for authority under

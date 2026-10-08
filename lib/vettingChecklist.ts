@@ -153,7 +153,7 @@ export function createDefaultChecklist(): VettingChecklist {
         id: 'category_scores',
         category: 'assessment',
         label: 'Confirmed safety category scores meet thresholds',
-        description: 'Every safety category (Crash, Violation, CSA Basics, Driver OOS, Critical/Acute Violation, New Entrant, MCS-150, Safety Rating) must be at or above 30. Judicial Hellholes is not considered. Any failing score requires additional vetting.',
+        description: 'Crash, Violation, CSA Basics, and Driver OOS must be at or above 30. Critical/Acute Violation, New Entrant, MCS-150, and Safety Rating must be 100. Judicial Hellholes is not considered. Any failing score requires additional vetting.',
         policyRef: 'Section 9.3',
         required: true,
         completed: false,
@@ -440,7 +440,8 @@ function computeAutoEvaluations(
     }
   }
 
-  // Category scores meet their threshold (≥30 for every safety category).
+  // Category scores meet their thresholds (≥30 for Crash/Violation/CSA/Driver
+  // OOS, =100 for Critical-Acute/New Entrant/MCS-150/Safety Rating).
   if (score) {
     const failing: string[] = []
     let anyPresent = false
@@ -457,7 +458,7 @@ function computeAutoEvaluations(
         status: failing.length === 0 ? 'pass' : 'fail',
         evidence:
           failing.length === 0
-            ? `All category scores meet the threshold (≥${MIN_30_THRESHOLD})`
+            ? `All category scores meet thresholds (≥${MIN_30_THRESHOLD} / =${PERFECT_SCORE})`
             : `Failing: ${failing.join(', ')}`,
       }
     }

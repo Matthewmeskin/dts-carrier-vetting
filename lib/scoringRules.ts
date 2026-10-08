@@ -1,12 +1,10 @@
 // Policy (updated Oct 2026): a carrier clears automatically when the overall
-// GAP score is 60 or higher AND every safety category score is 30 or higher.
-// Before this the GAP bar was 65, four categories had to be a perfect 100,
-// and GAP 60–64.99 was a manager exception.
+// GAP score is 60 or higher (it was 65) AND the category scores meet their
+// thresholds. GAP 60–64.99 used to be a manager exception; it now clears.
 export const GAP_THRESHOLD = 60
-// Every gating category passes at or above 30.
+// "At or above 30" categories.
 export const MIN_30_THRESHOLD = 30
-// Kept for the 'perfect' requirement type (no field uses it under the
-// current policy).
+// "Must be a perfect 100" scores.
 export const PERFECT_SCORE = 100
 
 export type ScoreRequirement = 'min30' | 'perfect' | 'ignored'
@@ -18,18 +16,18 @@ export interface ScoreFieldDef {
 }
 
 // The full set of component scores and how each one gates approval:
-//  - min30:   must be >= 30 (every safety category)
-//  - perfect: must be 100   (no longer used by policy; kept for old rows)
+//  - min30:   must be >= 30 (Crash, Violation, CSA Basics, Driver OOS)
+//  - perfect: must be 100   (Critical/Acute Violation, New Entrant, MCS-150, Safety Rating)
 //  - ignored: shown for context only, never gates (Judicial Hellholes)
 export const SCORE_FIELDS: ScoreFieldDef[] = [
   { key: 'crash_score', label: 'Crash Score', requirement: 'min30' },
   { key: 'violation_score', label: 'Violation Score', requirement: 'min30' },
   { key: 'csa_basics_score', label: 'CSA Basics Score', requirement: 'min30' },
   { key: 'driver_oos_score', label: 'Driver OOS Score', requirement: 'min30' },
-  { key: 'critical_acute_violation_score', label: 'Critical/Acute Violation Score', requirement: 'min30' },
-  { key: 'new_entrant_score', label: 'New Entrant Score', requirement: 'min30' },
-  { key: 'mcs_150_score', label: 'MCS-150 Score', requirement: 'min30' },
-  { key: 'safety_rating_score', label: 'Safety Rating Score', requirement: 'min30' },
+  { key: 'critical_acute_violation_score', label: 'Critical/Acute Violation Score', requirement: 'perfect' },
+  { key: 'new_entrant_score', label: 'New Entrant Score', requirement: 'perfect' },
+  { key: 'mcs_150_score', label: 'MCS-150 Score', requirement: 'perfect' },
+  { key: 'safety_rating_score', label: 'Safety Rating Score', requirement: 'perfect' },
   { key: 'judicial_hellholes_score', label: 'Judicial Hellholes Score', requirement: 'ignored' },
 ]
 

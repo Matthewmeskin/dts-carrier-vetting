@@ -251,9 +251,11 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
               })}
             </div>
             <p className="mt-2 text-xs text-gray-400">
-              Every safety category must be ≥ {MIN_30_THRESHOLD}. Judicial
-              Hellholes is not considered. A carrier clears automatically at
-              GAP ≥ {GAP_THRESHOLD} with every category ≥ {MIN_30_THRESHOLD}.
+              Crash, Violation, CSA Basics, and Driver OOS must be ≥{' '}
+              {MIN_30_THRESHOLD}. Critical/Acute Violation, New Entrant, MCS-150,
+              and Safety Rating must be {PERFECT_SCORE}. Judicial Hellholes is not
+              considered. A carrier clears automatically at GAP ≥ {GAP_THRESHOLD}
+              with every category meeting its threshold.
             </p>
 
             <div className="mt-4">

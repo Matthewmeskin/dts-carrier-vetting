@@ -1,20 +1,13 @@
-'use client'
-
-import { useState } from 'react'
-
-// Tries the official logo (png, then uppercase .PNG) and falls back to the SVG
-// so the header never shows a broken image.
-const CANDIDATES = ['/dts-logo.png', '/dts-logo.PNG', '/dts-logo.svg']
-
+// The DTS logo from /public: the light version has black lettering, the dark
+// one white, and the `dark` class on <html> (see ThemeToggle) picks which.
 export function Logo({ className }: { className?: string }) {
-  const [i, setI] = useState(0)
+  const alt = 'DTS — Diversified Transportation Services'
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={CANDIDATES[i]}
-      alt="DTS — Diversified Transportation Services"
-      className={className}
-      onError={() => setI((x) => Math.min(x + 1, CANDIDATES.length - 1))}
-    />
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/dts-logo.png" alt={alt} className={`${className ?? ''} dark:hidden`} />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/dts-logo-dark.png" alt={alt} className={`${className ?? ''} hidden dark:block`} />
+    </>
   )
 }

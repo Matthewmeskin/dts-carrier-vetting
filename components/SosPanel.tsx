@@ -660,12 +660,15 @@ export function SosPanel({
                 </Badge>
               )}
             </div>
-            <Link
-              href={factor.id ? `/factors/${factor.id}` : '/factors'}
+            <a
+              href={`https://dts-ap-portal.vercel.app/factors/${factor.id ?? ''}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-xs text-dts-blue hover:underline"
+              title="Factor registry lives in the Payables portal"
             >
-              View factor →
-            </Link>
+              View factor in Payables ↗
+            </a>
           </div>
           {factor.sos_summary && (
             <p className="mt-1.5 text-xs text-gray-500">{factor.sos_summary}</p>

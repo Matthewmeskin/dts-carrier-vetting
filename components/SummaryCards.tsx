@@ -14,23 +14,11 @@ const CARDS: {
   label: string
   accent: string
 }[] = [
-  { key: 'totalCarriers', label: 'Total Carriers', accent: 'text-dts-blue' },
-  {
-    key: 'dueForRevet',
-    label: 'Due for Re-vet',
-    accent: 'text-orange-600',
-  },
-  {
-    key: 'requireRevetting',
-    label: 'Require Revetting',
-    accent: 'text-amber-600',
-  },
-  { key: 'hardStopsActive', label: 'Hard Stops Active', accent: 'text-red-600' },
-  {
-    key: 'changesThisWeek',
-    label: 'Changes This Week',
-    accent: 'text-dts-darkblue',
-  },
+  { key: 'totalCarriers', label: 'Total Carriers', accent: 'border-l-brandblue text-brandblue' },
+  { key: 'dueForRevet', label: 'Due for Re-vet', accent: 'border-l-amber-500 text-amber-700' },
+  { key: 'requireRevetting', label: 'Require Revetting', accent: 'border-l-amber-500 text-amber-700' },
+  { key: 'hardStopsActive', label: 'Hard Stops Active', accent: 'border-l-maroon text-maroon' },
+  { key: 'changesThisWeek', label: 'Changes This Week', accent: 'border-l-slate-400 text-ink' },
 ]
 
 export function SummaryCards({
@@ -41,13 +29,13 @@ export function SummaryCards({
   loading?: boolean
 }) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {CARDS.map((c) => (
-        <Card key={c.key} className="px-5 py-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+        <Card key={c.key} className={cn('border-l-4 px-4 py-3', c.accent)}>
+          <div className="text-2xs font-medium uppercase tracking-wider text-ink-muted">
             {c.label}
           </div>
-          <div className={cn('mt-1 text-3xl font-bold', c.accent)}>
+          <div className={cn('mt-0.5 font-heading text-2xl font-semibold tabular-nums', c.accent)}>
             {loading || !metrics ? (
               <span className="text-gray-300">—</span>
             ) : (

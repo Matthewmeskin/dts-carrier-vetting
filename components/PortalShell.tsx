@@ -36,7 +36,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Data',
     items: [
-      { href: '/factors', label: 'Factors' },
       { href: '/upload', label: 'Upload Scores' },
       { href: '/w9-upload', label: 'W-9 Upload' },
     ],

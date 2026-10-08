@@ -8,13 +8,14 @@ export type BadgeTone =
   | 'blue'
   | 'maroon'
 
+// Same tones as the Payables portal: a soft fill with a hairline ring.
 const TONES: Record<BadgeTone, string> = {
-  green: 'bg-green-100 text-green-800 border-green-200',
-  red: 'bg-red-100 text-red-800 border-red-200',
-  amber: 'bg-amber-100 text-amber-800 border-amber-200',
-  gray: 'bg-gray-100 text-gray-700 border-gray-200',
-  blue: 'bg-blue-100 text-blue-800 border-blue-200',
-  maroon: 'bg-[#fbe7ee] text-dts-maroon border-[#f3c6d5]',
+  green: 'bg-emerald-50 text-emerald-900 ring-emerald-200',
+  red: 'bg-red-50 text-red-800 ring-red-200',
+  amber: 'bg-amber-50 text-amber-900 ring-amber-200',
+  gray: 'bg-slate-100 text-slate-700 ring-slate-200',
+  blue: 'bg-brandblue-50 text-brandblue-800 ring-brandblue-200',
+  maroon: 'bg-maroon-50 text-maroon-800 ring-maroon-200',
 }
 
 export function Badge({
@@ -29,7 +30,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap',
+        'inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold leading-4 ring-1 ring-inset',
         TONES[tone],
         className
       )}

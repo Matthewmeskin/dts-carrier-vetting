@@ -37,13 +37,13 @@
   }
 }
 
-html,
+/* On body only, never on html: with both set, body becomes its own scroll
+   container and the sticky sidebar anchors to it instead of the window, so
+   the menu scrolls away with the page. On body alone the rule propagates to
+   the viewport and sticky works. */
 body {
   max-width: 100vw;
   overflow-x: hidden;
-}
-
-body {
   background: rgb(var(--page));
   color: rgb(var(--ink));
   font-family: var(--font-lato), Lato, system-ui, -apple-system, 'Segoe UI', Roboto,

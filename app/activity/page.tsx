@@ -249,38 +249,38 @@ export default function ActivityLogPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">User Activity Log</h1>
+        <h1 className="font-heading text-lg font-semibold text-ink sm:text-xl">User Activity Log</h1>
         <Link href="/carriers" className="text-sm font-medium text-dts-blue hover:underline">
           ← Carriers
         </Link>
       </div>
 
-      <div className="mb-4 flex rounded-md border border-gray-200 p-0.5 text-sm w-fit">
+      <div className="mb-4 inline-flex rounded-lg bg-slate-100 p-0.5 text-sm">
         <button
           type="button"
           onClick={() => setView('activity')}
-          className={`rounded px-3 py-1.5 font-medium ${view === 'activity' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+          className={`rounded-md px-3 py-1 font-heading text-[13px] font-medium transition ${view === 'activity' ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'}`}
         >
           Daily activity
         </button>
         <button
           type="button"
           onClick={() => setView('disabled')}
-          className={`rounded px-3 py-1.5 font-medium ${view === 'disabled' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+          className={`rounded-md px-3 py-1 font-heading text-[13px] font-medium transition ${view === 'disabled' ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'}`}
         >
           Disabled carriers
         </button>
         <button
           type="button"
           onClick={() => setView('onhold')}
-          className={`rounded px-3 py-1.5 font-medium ${view === 'onhold' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+          className={`rounded-md px-3 py-1 font-heading text-[13px] font-medium transition ${view === 'onhold' ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'}`}
         >
           On hold
         </button>
         <button
           type="button"
           onClick={() => setView('declined')}
-          className={`rounded px-3 py-1.5 font-medium ${view === 'declined' ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+          className={`rounded-md px-3 py-1 font-heading text-[13px] font-medium transition ${view === 'declined' ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'}`}
         >
           Declined
         </button>
@@ -299,7 +299,7 @@ export default function ActivityLogPage() {
                       key={p.key}
                       type="button"
                       onClick={() => applyDisabledPreset(p.key, p.days)}
-                      className={`rounded px-2.5 py-1 font-medium ${dPreset === p.key ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                      className={`rounded px-2.5 py-1 font-medium ${dPreset === p.key ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'}`}
                     >
                       {p.label}
                     </button>
@@ -405,7 +405,7 @@ export default function ActivityLogPage() {
                       key={p.key}
                       type="button"
                       onClick={() => applyHeldPreset(p.key, p.days)}
-                      className={`rounded px-2.5 py-1 font-medium ${hPreset === p.key ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                      className={`rounded px-2.5 py-1 font-medium ${hPreset === p.key ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'}`}
                     >
                       {p.label}
                     </button>
@@ -503,7 +503,7 @@ export default function ActivityLogPage() {
                       key={p.key}
                       type="button"
                       onClick={() => applyDeclinedPreset(p.key, p.days)}
-                      className={`rounded px-2.5 py-1 font-medium ${xPreset === p.key ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                      className={`rounded px-2.5 py-1 font-medium ${xPreset === p.key ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'}`}
                     >
                       {p.label}
                     </button>
@@ -599,14 +599,14 @@ export default function ActivityLogPage() {
                 <button
                   type="button"
                   onClick={() => setPeopleOnly(false)}
-                  className={`rounded px-2.5 py-1 font-medium ${!peopleOnly ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                  className={`rounded px-2.5 py-1 font-medium ${!peopleOnly ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'}`}
                 >
                   All
                 </button>
                 <button
                   type="button"
                   onClick={() => setPeopleOnly(true)}
-                  className={`rounded px-2.5 py-1 font-medium ${peopleOnly ? 'bg-dts-blue text-white' : 'text-gray-600'}`}
+                  className={`rounded px-2.5 py-1 font-medium ${peopleOnly ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'}`}
                 >
                   People only
                 </button>

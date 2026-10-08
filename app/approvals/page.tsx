@@ -290,13 +290,13 @@ export default function ApprovalsPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Approvals</h1>
+          <h1 className="font-heading text-xl font-semibold text-ink">Approvals</h1>
           <p className="mt-1 text-sm text-gray-500">
             Carriers that tripped an approval gate and are waiting on a Manager or Director. Approving
             applies the status and completes the vetting; sending back returns it to the reviewer with a note.
           </p>
         </div>
-        <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-sm">
+        <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-sm">
           {(['pending', 'decided'] as const).map((t) => (
             <button
               key={t}

@@ -114,7 +114,7 @@ export default function AccountPage() {
   return (
     <div className="mx-auto max-w-xl space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Account</h1>
+        <h1 className="font-heading text-lg font-semibold text-ink sm:text-xl">Account</h1>
         <p className="mt-1 text-sm text-gray-500">
           Signed in as <span className="font-medium text-gray-700">{me.email}</span>
           {' · '}

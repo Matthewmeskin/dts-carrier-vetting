@@ -103,7 +103,7 @@ export default function AssignmentsPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Assignments</h1>
+        <h1 className="font-heading text-lg font-semibold text-ink sm:text-xl">Assignments</h1>
         <p className="text-sm text-gray-500">
           Every carrier can have one owner: the person responsible for keeping its vetting current.
           Owners see their carriers by setting the Carriers list filter to <span className="font-medium text-gray-700">Assigned to: Me</span>.
@@ -222,7 +222,7 @@ function WorkloadTable({
                         <span
                           className={cn(
                             'inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold',
-                            mine ? 'bg-dts-blue text-white' : 'bg-gray-200 text-gray-700'
+                            mine ? 'bg-maroon text-white' : 'bg-gray-200 text-gray-700'
                           )}
                         >
                           {memberInitials(name)}

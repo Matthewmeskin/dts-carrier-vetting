@@ -69,7 +69,7 @@ export default function CarriersPage() {
     return (
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Carrier Network</h1>
+          <h1 className="font-heading text-lg font-semibold text-ink sm:text-xl">Carrier Network</h1>
           <p className="text-sm text-gray-500">
             Compliance status across every carrier in the DTS network.
           </p>
@@ -85,7 +85,7 @@ export default function CarriersPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Carrier Network</h1>
+          <h1 className="font-heading text-lg font-semibold text-ink sm:text-xl">Carrier Network</h1>
           <p className="text-sm text-gray-500">
             Compliance status across every carrier in the DTS network.
           </p>

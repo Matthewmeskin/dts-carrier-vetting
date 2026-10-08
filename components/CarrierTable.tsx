@@ -308,7 +308,7 @@ function OwnerCell({ carrier, meId }: { carrier: CarrierSummary; meId: string | 
       <span
         className={cn(
           'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold',
-          mine ? 'bg-dts-blue text-white' : 'bg-gray-200 text-gray-700'
+          mine ? 'bg-maroon text-white' : 'bg-gray-200 text-gray-700'
         )}
       >
         {memberInitials(name)}
@@ -1280,7 +1280,7 @@ export function CarrierTable({
       <div className="hidden overflow-x-auto md:block">
         <div className="min-w-[1290px]">
           {/* Header row */}
-          <div className="flex items-center border-b border-gray-100 px-5 py-2 text-xs font-semibold text-gray-500">
+          <div className="flex items-center border-b border-line bg-slate-50/70 px-5 py-2 font-heading text-2xs font-semibold text-ink-faint">
             <div className={COL.select}>
               <input
                 type="checkbox"

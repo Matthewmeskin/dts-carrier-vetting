@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
@@ -121,6 +122,7 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-5">
+      <PageHeader title="Users" subtitle="Who can sign in to this portal and what they may approve. One login spans every DTS portal." />
       <Card>
         <CardHeader
           title="Users & access"

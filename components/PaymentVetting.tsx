@@ -228,7 +228,7 @@ export function PaymentVetting({ dot }: { dot: string }) {
               }
               className={`px-3 py-1.5 text-sm font-medium ${
                 mode === 'quick'
-                  ? 'bg-dts-blue text-white'
+                  ? 'bg-maroon text-white'
                   : 'bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40'
               }`}
             >
@@ -239,7 +239,7 @@ export function PaymentVetting({ dot }: { dot: string }) {
               onClick={() => setMode('full')}
               className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium ${
                 mode === 'full'
-                  ? 'bg-dts-blue text-white'
+                  ? 'bg-maroon text-white'
                   : 'bg-white text-gray-600 hover:bg-gray-50'
               }`}
             >

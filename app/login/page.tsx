@@ -104,7 +104,7 @@ function LoginForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+      <div className="w-full max-w-sm rounded-md border border-line bg-white p-8">
         <div className="mb-6 flex flex-col items-center gap-2">
           <Logo className="h-10 w-auto" />
           <span className="font-heading text-base font-bold text-maroon">Carrier Vetting</span>

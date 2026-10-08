@@ -47,7 +47,7 @@ export default function UploadPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">
+        <h1 className="font-heading text-lg font-semibold text-ink sm:text-xl">
           Upload Bluewire Scores
         </h1>
         <p className="text-sm text-gray-500">
@@ -68,7 +68,7 @@ export default function UploadPage() {
               type="file"
               accept=".xlsx,.xls"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-dts-blue file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
+              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-maroon file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
             />
             <Button onClick={upload} disabled={!file || uploading}>
               {uploading ? <Spinner size={14} className="text-white" /> : null}

@@ -86,7 +86,7 @@ export default function ChangesPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Carrier Changes</h1>
+          <h1 className="font-heading text-lg font-semibold text-ink sm:text-xl">Carrier Changes</h1>
           <p className="text-sm text-gray-500">
             RMIS-detected changes across the network, flagged against the DTS
             vetting framework.
@@ -95,28 +95,28 @@ export default function ChangesPage() {
         {loading && <Spinner />}
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="px-5 py-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="border-l-4 border-l-maroon px-4 py-3">
+          <div className="text-2xs font-medium uppercase tracking-wider text-ink-muted">
             At Risk (Hard Stop)
           </div>
-          <div className="mt-1 text-3xl font-bold text-red-600">
+          <div className="mt-0.5 font-heading text-2xl font-semibold tabular-nums text-maroon">
             {counts ? counts.atRisk : '—'}
           </div>
         </Card>
-        <Card className="px-5 py-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+        <Card className="border-l-4 border-l-amber-500 px-4 py-3">
+          <div className="text-2xs font-medium uppercase tracking-wider text-ink-muted">
             Needs Review
           </div>
-          <div className="mt-1 text-3xl font-bold text-amber-600">
+          <div className="mt-0.5 font-heading text-2xl font-semibold tabular-nums text-amber-700">
             {counts ? counts.needsReview : '—'}
           </div>
         </Card>
-        <Card className="px-5 py-4">
-          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+        <Card className="border-l-4 border-l-brandblue px-4 py-3">
+          <div className="text-2xs font-medium uppercase tracking-wider text-ink-muted">
             Unreviewed
           </div>
-          <div className="mt-1 text-3xl font-bold text-dts-blue">
+          <div className="mt-0.5 font-heading text-2xl font-semibold tabular-nums text-brandblue">
             {counts ? counts.unreviewed : '—'}
           </div>
         </Card>

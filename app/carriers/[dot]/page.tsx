@@ -199,7 +199,7 @@ export default function CarrierDetailPage({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="font-heading text-xl font-semibold text-ink">
                   {carrier.legal_name || `DOT ${carrier.dot_number}`}
                 </h1>
                 <Badge tone={carrierStatusTone(carrier.carrier_status)}>

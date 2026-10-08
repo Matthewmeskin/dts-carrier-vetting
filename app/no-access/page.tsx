@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export default function NoAccessPage() {
   return (
     <main className="mx-auto max-w-lg px-4 py-16">
-      <div className="rounded-lg border border-slate-200 bg-white px-5 py-5 shadow-sm">
+      <div className="rounded-md border border-line bg-white px-5 py-5">
         <h1 className="text-base font-semibold text-slate-900">
           Carrier Vetting is not open to this account
         </h1>

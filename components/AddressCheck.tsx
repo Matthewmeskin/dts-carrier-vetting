@@ -106,7 +106,7 @@ function InteractiveStreetView({
           href={mapsLink}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-1 rounded-md bg-dts-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-[#00547f]"
+          className="mt-1 rounded-md bg-maroon px-3 py-1.5 text-sm font-medium text-white hover:bg-maroon-700"
         >
           Open Street View ↗
         </a>
@@ -241,7 +241,7 @@ export function AddressCheck({
                 href={mapsLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-md bg-dts-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-[#00547f]"
+                className="rounded-md bg-maroon px-3 py-1.5 text-sm font-medium text-white hover:bg-maroon-700"
               >
                 Open in Google Maps ↗
               </a>

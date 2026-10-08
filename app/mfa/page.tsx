@@ -77,8 +77,8 @@ function MfaForm() {
       <div className="mb-6 flex justify-center">
         <Logo className="h-10 w-auto" />
       </div>
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h1 className="text-lg font-semibold text-gray-900">Verify it’s you</h1>
+      <div className="rounded-md border border-line bg-white p-6">
+        <h1 className="font-heading text-lg font-semibold text-ink">Verify it’s you</h1>
         <p className="mt-1 text-sm text-gray-600">
           {sending
             ? 'Sending a 6-digit code to your email…'

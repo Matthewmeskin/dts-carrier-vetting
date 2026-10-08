@@ -60,7 +60,7 @@ export default function RouteError({
           <button
             type="button"
             onClick={() => reset()}
-            className="rounded-md bg-dts-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-[#00547f]"
+            className="rounded-md bg-maroon px-3 py-1.5 text-sm font-medium text-white hover:bg-maroon-700"
           >
             Try again
           </button>

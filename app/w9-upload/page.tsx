@@ -131,7 +131,7 @@ export default function W9UploadPage() {
         <Link href="/carriers" className="text-sm text-dts-blue hover:underline">
           ← Back to carriers
         </Link>
-        <h1 className="mt-2 text-xl font-bold text-gray-900">Bulk W-9 upload</h1>
+        <h1 className="mt-2 font-heading text-lg font-semibold text-ink sm:text-xl">Bulk W-9 upload</h1>
         <p className="text-sm text-gray-500">
           Drop a batch of W-9 PDFs. Each file is matched to a carrier by its
           filename (legal or DBA name). Confident matches upload as the carrier’s
@@ -149,7 +149,7 @@ export default function W9UploadPage() {
               multiple
               accept=".pdf"
               onChange={(e) => onPick(Array.from(e.target.files ?? []))}
-              className="block text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-dts-blue file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
+              className="block text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-maroon file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-[#00547f]"
             />
             {matching && (
               <span className="inline-flex items-center gap-2 text-sm text-gray-500">

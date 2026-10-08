@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Logo } from './Logo'
+import { ThemeToggle } from './ThemeToggle'
 import { createSupabaseBrowserClient } from '@/lib/supabaseBrowser'
 import { ROLE_LABEL, type Role } from '@/lib/roles'
 import { cn } from '@/lib/utils'
@@ -208,7 +209,13 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
         </div>
-        <div className="border-t border-line px-3 py-2.5">{userBlock(false)}</div>
+        <div className="border-t border-line px-3 py-2.5">
+          {userBlock(false)}
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-2xs uppercase tracking-wider text-ink-faint">Theme</span>
+            <ThemeToggle />
+          </div>
+        </div>
       </aside>
 
       <div className="min-w-0 flex-1">
@@ -216,7 +223,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-20 border-b border-line bg-white lg:hidden">
           <div className="flex items-center gap-3 px-3 py-2">
             {brand('h-8')}
-            <div className="ml-auto">{userBlock(true)}</div>
+            <div className="ml-auto flex items-center gap-2">
+              <ThemeToggle variant="compact" />
+              {userBlock(true)}
+            </div>
           </div>
           <div className="overflow-x-auto border-t border-line px-3 py-1.5 [-webkit-overflow-scrolling:touch]">
             <nav className="flex w-max items-center gap-1">

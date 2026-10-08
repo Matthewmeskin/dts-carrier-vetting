@@ -3,6 +3,10 @@ import type { Config } from 'tailwindcss'
 // Shared DTS look: the same palette, type and neutrals as the Payables hub and
 // the other portals, so moving between them feels like one product.
 const config: Config = {
+  // The `dark` class on <html> is set before paint by the inline script in
+  // app/layout.tsx and switched by components/ThemeToggle.tsx — the same
+  // mechanism as the Payables hub.
+  darkMode: 'class',
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -35,13 +39,27 @@ const config: Config = {
           700: '#004F80',
           800: '#003B60',
         },
+        // The neutrals are CSS variables (rgb channels, so opacity modifiers
+        // like border-line/70 keep working); their light and dark values live
+        // in app/globals.css.
         ink: {
-          DEFAULT: '#1A1D21',
-          muted: '#444C57',
-          faint: '#6B7380',
+          DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
+          muted: 'rgb(var(--ink-muted) / <alpha-value>)',
+          faint: 'rgb(var(--ink-faint) / <alpha-value>)',
         },
-        line: '#E3E7EC',
-        surface: '#F7F8FA',
+        line: {
+          DEFAULT: 'rgb(var(--line) / <alpha-value>)',
+          strong: 'rgb(var(--line-strong) / <alpha-value>)',
+        },
+        surface: 'rgb(var(--surface) / <alpha-value>)',
+        subtle: 'rgb(var(--subtle) / <alpha-value>)',
+        // A card or panel: white in light, a raised slate in dark.
+        card: 'rgb(var(--card) / <alpha-value>)',
+      },
+      // What a bare `border` draws with: the line token, so an uncolored
+      // border is a hairline in dark too, not light grey.
+      borderColor: {
+        DEFAULT: 'rgb(var(--line))',
       },
       fontFamily: {
         sans: ['var(--font-lato)', 'Lato', 'system-ui', 'sans-serif'],

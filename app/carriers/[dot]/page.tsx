@@ -11,7 +11,7 @@ import {
   isBrokerwareDisabled,
   type RevetState,
 } from '@/lib/revet'
-import { formatPhone, hyperionCarrierUrl } from '@/lib/utils'
+import { formatPhone, hyperionCarrierUrl, rmisCarrierUrl } from '@/lib/utils'
 import { stateFromZip } from '@/lib/sosNormalize'
 import { Spinner } from '@/components/ui/Spinner'
 import { AlertBanner } from '@/components/AlertBanner'
@@ -251,6 +251,17 @@ export default function CarrierDetailPage({
                     className="text-dts-blue hover:underline"
                   >
                     Open in Hyperion ↗
+                  </a>
+                )}
+                {rmisCarrierUrl(carrier.rmis_insured_id) && (
+                  <a
+                    href={rmisCarrierUrl(carrier.rmis_insured_id)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Open carrier ${carrier.rmis_insured_id} in RMIS`}
+                    className="text-dts-blue hover:underline"
+                  >
+                    Open in RMIS ↗
                   </a>
                 )}
                 {carrier.mc_number &&

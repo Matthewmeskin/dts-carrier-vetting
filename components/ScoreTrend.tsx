@@ -21,7 +21,9 @@ const SERIES: Series[] = [
   { key: 'violation_score', label: 'Violation', color: '#eab308' },
   { key: 'csa_basics_score', label: 'CSA Basics', color: '#f97316' },
   { key: 'driver_oos_score', label: 'Driver OOS', color: '#ef4444' },
-  { key: 'critical_acute_violation_score', label: 'Critical/Acute', color: '#111827' },
+  // Ink, so the near-black line is near-white in dark mode (it goes through
+  // style=, which allows a CSS variable where an SVG attribute does not).
+  { key: 'critical_acute_violation_score', label: 'Critical/Acute', color: 'rgb(var(--ink))' },
   { key: 'new_entrant_score', label: 'New Entrant', color: '#3b82f6' },
   { key: 'mcs_150_score', label: 'MCS-150', color: '#16a34a' },
   { key: 'judicial_hellholes_score', label: 'Hellhole', color: '#fb7185' },
@@ -94,9 +96,10 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
   const label = (s: ScoreRecord, _i: number) => monthLabelOf(s)
 
   const bands = [
-    { from: 75, to: 100, fill: '#dcfce7' },
-    { from: 60, to: 75, fill: '#fef9c3' },
-    { from: 0, to: 60, fill: '#fee2e2' },
+    // Translucent tints so the bands read on both the light and dark card.
+    { from: 75, to: 100, fill: 'rgb(34 197 94 / 0.14)' },
+    { from: 60, to: 75, fill: 'rgb(234 179 8 / 0.14)' },
+    { from: 0, to: 60, fill: 'rgb(239 68 68 / 0.14)' },
   ]
 
   // Mouse-over hit band for each column (snaps the tooltip to the nearest point).
@@ -163,15 +166,14 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
               width={innerW}
               height={y(b.from) - y(b.to)}
               fill={b.fill}
-              opacity={0.6}
             />
           ))}
 
           {/* Gridlines + Y labels */}
           {[0, 20, 40, 60, 80, 100].map((v) => (
             <g key={v}>
-              <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#e5e7eb" strokeWidth={1} />
-              <text x={padL - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="#9ca3af">
+              <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} className="stroke-line" strokeWidth={1} />
+              <text x={padL - 6} y={y(v) + 3} textAnchor="end" fontSize="9" className="fill-ink-faint">
                 {v}
               </text>
             </g>
@@ -184,7 +186,7 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
               x2={x(hover)}
               y1={padT}
               y2={H - padB}
-              stroke="#9ca3af"
+              className="stroke-ink-faint"
               strokeWidth={1}
               strokeDasharray="3 3"
             />
@@ -199,7 +201,7 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
               textAnchor="middle"
               fontSize="9"
               fontWeight={hover === i ? 700 : 400}
-              fill={hover === i ? '#374151' : '#9ca3af'}
+              className={hover === i ? 'fill-ink' : 'fill-ink-faint'}
             >
               {label(s, i)}
             </text>
@@ -219,7 +221,7 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
             return (
               <g key={String(series.key)}>
                 {pts.length > 1 && (
-                  <path d={d} fill="none" stroke={series.color} strokeWidth={1.75} opacity={0.9} />
+                  <path d={d} fill="none" style={{ stroke: series.color }} strokeWidth={1.75} opacity={0.9} />
                 )}
                 {pts.map((p) => (
                   <circle
@@ -227,8 +229,7 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
                     cx={p.cx}
                     cy={p.cy}
                     r={hover === p.i ? 4 : 2.75}
-                    fill={series.color}
-                    stroke={hover === p.i ? '#fff' : 'none'}
+                    style={{ fill: series.color, stroke: hover === p.i ? 'rgb(var(--card))' : 'none' }}
                     strokeWidth={hover === p.i ? 1 : 0}
                   />
                 ))}
@@ -242,7 +243,7 @@ export function ScoreTrend({ scores }: { scores: ScoreRecord[] }) {
                       textAnchor="start"
                       fontSize="8"
                       fontWeight="600"
-                      fill={series.color}
+                      style={{ fill: series.color }}
                     >
                       {formatScore(last.v)}
                     </text>

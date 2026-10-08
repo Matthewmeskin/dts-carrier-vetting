@@ -2,10 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens — the same values as the Payables hub. Space-separated rgb
+   channels so Tailwind's opacity modifiers (border-line/70) work;
+   tailwind.config.ts maps ink, line, surface, subtle and card to these.
+   Dark values apply only on screen, so a printout is always light. */
 :root {
   --dts-maroon: #ab0534;
   --dts-blue: #0063a0;
   --dts-darkblue: #33658a;
+
+  --ink: 26 29 33; /* #1A1D21 */
+  --ink-muted: 68 76 87; /* #444C57 */
+  --ink-faint: 107 115 128; /* #6B7380 */
+  --line: 227 231 236; /* #E3E7EC */
+  --line-strong: 203 213 225; /* slate-300: input borders, strong rules */
+  --surface: 247 248 250; /* #F7F8FA */
+  --subtle: 248 250 252; /* slate-50: table heads, card headers */
+  --card: 255 255 255;
+  --page: 247 248 250; /* the body behind everything */
+  color-scheme: light;
+}
+@media screen {
+  .dark {
+    --ink: 230 234 239; /* #E6EAEF */
+    --ink-muted: 170 179 190; /* #AAB3BE */
+    --ink-faint: 135 145 160; /* #8791A0 */
+    --line: 42 50 60; /* #2A323C */
+    --line-strong: 58 67 80; /* #3A4350 */
+    --surface: 17 22 29; /* #11161D, a well inside a card */
+    --subtle: 28 35 44; /* #1C232C */
+    --card: 22 28 36; /* #161C24 */
+    --page: 15 20 26; /* #0F141A */
+    color-scheme: dark;
+  }
 }
 
 html,
@@ -15,8 +44,8 @@ body {
 }
 
 body {
-  background: #f7f8fa;
-  color: #1a1d21;
+  background: rgb(var(--page));
+  color: rgb(var(--ink));
   font-family: var(--font-lato), Lato, system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -41,6 +70,266 @@ h4 {
   width: 8px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgb(var(--line-strong));
   border-radius: 4px;
+}
+
+/* ------------------------------------------------------------------------
+   Dark mode.
+
+   The pages are written in literal light utilities (bg-white, text-gray-500,
+   bg-red-50 text-red-700 ...), so rather than a dark: variant on every one
+   of them, this layer re-points the ones in use when <html> has the `dark`
+   class — the same approach as the Payables hub. The neutrals that are
+   already tokens (ink, line, surface, card) need nothing here.
+
+   A base override is `:where(.dark) .x`, which keeps the specificity of the
+   utility it replaces; sitting after @tailwind utilities, it wins on order,
+   and any hover:/disabled: utility (a class plus a pseudo-class) still beats
+   it, so hover states keep working. A hover utility that names a light
+   color is overridden with `.dark .hover\:x:hover`, one class heavier.
+
+   Screen only: print keeps the light utilities and the :root tokens.
+   ------------------------------------------------------------------------ */
+@media screen {
+  /* Panels and neutral fills */
+  :where(.dark) .bg-white,
+  .dark .hover\:bg-white:hover {
+    background-color: rgb(var(--card));
+  }
+  :where(.dark) .bg-white\/95 {
+    background-color: rgb(var(--card) / 0.95);
+  }
+  :where(.dark) .bg-gray-50,
+  :where(.dark) .bg-slate-50,
+  .dark .hover\:bg-gray-50:hover,
+  .dark .hover\:bg-slate-50:hover,
+  .dark .active\:bg-gray-50:active,
+  .dark .disabled\:bg-gray-50:disabled {
+    background-color: rgb(var(--subtle));
+  }
+  :where(.dark) .bg-slate-50\/70 {
+    background-color: rgb(var(--subtle) / 0.7);
+  }
+  :where(.dark) .bg-gray-100,
+  :where(.dark) .bg-slate-100,
+  .dark .hover\:bg-gray-100:hover {
+    background-color: rgb(34 42 53); /* #222A35 */
+  }
+  :where(.dark) .bg-gray-200 {
+    background-color: rgb(var(--line));
+  }
+  :where(.dark) .bg-gray-300 {
+    background-color: rgb(var(--line-strong));
+  }
+
+  /* Neutral borders and rings */
+  :where(.dark) .border-gray-100,
+  :where(.dark) .border-gray-200,
+  :where(.dark) .border-l-gray-200 {
+    border-color: rgb(var(--line));
+  }
+  :where(.dark) .border-gray-300 {
+    border-color: rgb(var(--line-strong));
+  }
+  :where(.dark) .border-l-slate-400 {
+    border-color: rgb(91 102 118); /* #5B6676 */
+  }
+  :where(.dark) .ring-slate-200 {
+    --tw-ring-color: rgb(var(--line));
+  }
+
+  /* Neutral text */
+  :where(.dark) .text-gray-900,
+  :where(.dark) .text-gray-800,
+  :where(.dark) .text-slate-900,
+  .dark .hover\:text-gray-900:hover {
+    color: rgb(var(--ink));
+  }
+  :where(.dark) .text-gray-700,
+  :where(.dark) .text-gray-600,
+  :where(.dark) .text-slate-700,
+  :where(.dark) .text-slate-600,
+  .dark .hover\:text-gray-700:hover,
+  .dark .hover\:text-gray-600:hover {
+    color: rgb(var(--ink-muted));
+  }
+  :where(.dark) .text-gray-500,
+  :where(.dark) .text-gray-400,
+  .dark .disabled\:text-gray-500:disabled,
+  .dark .group:hover .group-hover\:text-gray-500 {
+    color: rgb(var(--ink-faint));
+  }
+  :where(.dark) .text-gray-300 {
+    color: rgb(91 102 118); /* #5B6676 */
+  }
+  .dark .placeholder\:text-gray-400::placeholder {
+    color: rgb(var(--ink-faint));
+  }
+
+  /* Maroon: brand fills (bg-maroon with white text) stay; maroon as text,
+     tint or hairline moves to a lighter rose that reads on slate. */
+  :where(.dark) .text-maroon,
+  :where(.dark) .text-dts-maroon,
+  .dark .hover\:text-maroon:hover {
+    color: rgb(242 122 155); /* #F27A9B */
+  }
+  :where(.dark) .text-maroon-700,
+  :where(.dark) .text-maroon-800 {
+    color: rgb(247 161 184); /* #F7A1B8 */
+  }
+  :where(.dark) .bg-maroon-50,
+  .dark .hover\:bg-maroon-50:hover {
+    background-color: rgb(242 122 155 / 0.12);
+  }
+  :where(.dark) .bg-maroon-100 {
+    background-color: rgb(242 122 155 / 0.2);
+  }
+  :where(.dark) .border-maroon-200,
+  .dark .hover\:border-maroon-200:hover {
+    border-color: rgb(242 122 155 / 0.32);
+  }
+  :where(.dark) .ring-maroon-200 {
+    --tw-ring-color: rgb(242 122 155 / 0.32);
+  }
+
+  /* Brand blue (text-dts-blue is the link colour throughout): the same
+     treatment. Solid blue buttons keep their fill and white text. */
+  :where(.dark) .text-brandblue,
+  :where(.dark) .text-brandblue-700,
+  :where(.dark) .text-dts-blue,
+  :where(.dark) .text-blue-700,
+  .dark .hover\:text-brandblue-700:hover,
+  .dark .hover\:text-dts-blue:hover {
+    color: rgb(93 176 230); /* #5DB0E6 */
+  }
+  :where(.dark) .text-brandblue-800 {
+    color: rgb(141 198 238); /* #8DC6EE */
+  }
+  :where(.dark) .bg-brandblue-50,
+  :where(.dark) .bg-blue-50,
+  .dark .hover\:bg-brandblue-50:hover {
+    background-color: rgb(93 176 230 / 0.12);
+  }
+  :where(.dark) .bg-blue-50\/40,
+  .dark .hover\:bg-blue-50\/40:hover {
+    background-color: rgb(93 176 230 / 0.07);
+  }
+  :where(.dark) .bg-brandblue-100 {
+    background-color: rgb(93 176 230 / 0.2);
+  }
+  :where(.dark) .border-brandblue-200 {
+    border-color: rgb(93 176 230 / 0.35);
+  }
+  :where(.dark) .ring-brandblue-200 {
+    --tw-ring-color: rgb(93 176 230 / 0.35);
+  }
+
+  /* Red: hard stops and errors. Solid fills (bg-red-500/600/700) stay. */
+  :where(.dark) .text-red-900,
+  :where(.dark) .text-red-800 {
+    color: rgb(252 165 165); /* red-300 */
+  }
+  :where(.dark) .text-red-700,
+  :where(.dark) .text-red-600,
+  .dark .hover\:text-red-600:hover {
+    color: rgb(248 113 113); /* red-400 */
+  }
+  :where(.dark) .bg-red-50,
+  .dark .hover\:bg-red-50:hover {
+    background-color: rgb(248 113 113 / 0.12);
+  }
+  :where(.dark) .bg-red-100 {
+    background-color: rgb(248 113 113 / 0.2);
+  }
+  :where(.dark) .border-red-200 {
+    border-color: rgb(248 113 113 / 0.32);
+  }
+  :where(.dark) .ring-red-200 {
+    --tw-ring-color: rgb(248 113 113 / 0.32);
+  }
+
+  /* Amber: flags, warnings and "needs attention" chips. */
+  :where(.dark) .text-amber-900,
+  :where(.dark) .text-amber-800 {
+    color: rgb(252 211 77); /* amber-300 */
+  }
+  :where(.dark) .text-amber-700,
+  :where(.dark) .text-amber-600 {
+    color: rgb(251 191 36); /* amber-400 */
+  }
+  :where(.dark) .bg-amber-50,
+  :where(.dark) .bg-amber-50\/95,
+  .dark .hover\:bg-amber-50:hover {
+    background-color: rgb(251 191 36 / 0.1);
+  }
+  :where(.dark) .bg-amber-50\/60 {
+    background-color: rgb(251 191 36 / 0.07);
+  }
+  :where(.dark) .bg-amber-100 {
+    background-color: rgb(251 191 36 / 0.18);
+  }
+  :where(.dark) .border-amber-200,
+  :where(.dark) .divide-amber-100 > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(251 191 36 / 0.3);
+  }
+  :where(.dark) .border-amber-300 {
+    border-color: rgb(251 191 36 / 0.42);
+  }
+  :where(.dark) .ring-amber-200 {
+    --tw-ring-color: rgb(251 191 36 / 0.3);
+  }
+
+  /* Green and emerald: valid, approved, done. */
+  :where(.dark) .text-green-800,
+  :where(.dark) .text-emerald-900 {
+    color: rgb(110 231 183); /* emerald-300 */
+  }
+  :where(.dark) .text-green-700,
+  :where(.dark) .text-green-600 {
+    color: rgb(52 211 153); /* emerald-400 */
+  }
+  :where(.dark) .bg-green-50,
+  :where(.dark) .bg-emerald-50 {
+    background-color: rgb(52 211 153 / 0.1);
+  }
+  :where(.dark) .bg-green-50\/50 {
+    background-color: rgb(52 211 153 / 0.06);
+  }
+  :where(.dark) .border-green-200 {
+    border-color: rgb(52 211 153 / 0.3);
+  }
+  :where(.dark) .ring-emerald-200 {
+    --tw-ring-color: rgb(52 211 153 / 0.3);
+  }
+
+  /* Form fields. Zero specificity, so any utility on a field still wins;
+     color is left to inherit, which is ink here. */
+  :where(.dark)
+    :where(
+      input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color'],
+          [type='submit'], [type='button'], [type='reset'], [type='image']),
+      select,
+      textarea
+    ) {
+    background-color: rgb(var(--card));
+  }
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: rgb(var(--ink-faint));
+  }
+  .dark ::selection {
+    background-color: rgb(93 176 230 / 0.35);
+  }
+  /* The modal shadow needs more weight to separate from a dark page. */
+  .dark .shadow-xl {
+    --tw-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
+    --tw-shadow-colored: var(--tw-shadow);
+  }
+}
+
+@media print {
+  :root {
+    color-scheme: light;
+  }
 }

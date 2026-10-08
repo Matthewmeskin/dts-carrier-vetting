@@ -18,7 +18,7 @@ export function Table({
 
 export function THead({ children }: { children: React.ReactNode }) {
   return (
-    <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+    <thead className="bg-slate-50/70 text-left font-heading text-2xs font-semibold uppercase tracking-wider text-ink-faint">
       {children}
     </thead>
   )
@@ -34,7 +34,7 @@ export function TH({
   return (
     <th
       className={cn(
-        'whitespace-nowrap border-b border-gray-200 px-3 py-2.5 font-semibold',
+        'whitespace-nowrap border-b border-line px-3 py-2 font-semibold',
         className
       )}
     >
@@ -44,7 +44,7 @@ export function TH({
 }
 
 export function TBody({ children }: { children: React.ReactNode }) {
-  return <tbody className="divide-y divide-gray-100">{children}</tbody>
+  return <tbody className="divide-y divide-line/70">{children}</tbody>
 }
 
 export function TR({
@@ -58,7 +58,7 @@ export function TR({
 }) {
   return (
     <tr
-      className={cn('hover:bg-gray-50/70 transition', className)}
+      className={cn('transition hover:bg-slate-50', className)}
       onClick={onClick}
     >
       {children}

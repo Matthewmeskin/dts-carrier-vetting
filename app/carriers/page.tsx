@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CarrierSummary } from '@/lib/types'
 import { SummaryCards, Metrics } from '@/components/SummaryCards'
 import { CarrierTable } from '@/components/CarrierTable'
@@ -23,7 +23,9 @@ export default function CarriersPage() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
+  const loadedAt = useRef(0)
   const load = useCallback(async () => {
+    loadedAt.current = Date.now()
     setLoading(true)
     setError(null)
     try {
@@ -53,13 +55,19 @@ export default function CarriersPage() {
   // the page picks up documents/statuses that changed while it was in the
   // background.
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') load()
+    // Only when the data is at least a minute old — switching tabs back and
+    // forth shouldn't re-pull the roster each time.
+    const stale = () => Date.now() - loadedAt.current > 60_000
+    const onFocus = () => {
+      if (stale()) load()
     }
-    window.addEventListener('focus', load)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && stale()) load()
+    }
+    window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
     return () => {
-      window.removeEventListener('focus', load)
+      window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [load])

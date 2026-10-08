@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Logo } from './Logo'
@@ -61,6 +61,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const bare = BARE.has(pathname)
 
+  // Who's signed in — once per page load, not on every navigation (the
+  // session can't change underneath a client-side route change).
   useEffect(() => {
     if (bare) return
     let cancelled = false
@@ -77,12 +79,17 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [pathname, bare])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bare])
 
   // Open approval requests — a badge on the Approvals link so a Manager /
   // Director sees work waiting without opening the page.
+  const approvalsFetchedAt = useRef(0)
   useEffect(() => {
     if (!me) return
+    // Refresh on navigation, but no more than once a minute.
+    if (Date.now() - approvalsFetchedAt.current < 60_000) return
+    approvalsFetchedAt.current = Date.now()
     let cancelled = false
     fetch('/api/approvals?count=1', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))

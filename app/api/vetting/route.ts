@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { getOrCreateCarrierFolder } from '@/lib/googleDrive'
+import { driveConfigured, getOrCreateCarrierFolder } from '@/lib/googleDrive'
 import { getSessionUser } from '@/lib/authServer'
 import { logCarrierEvent } from '@/lib/auditLog'
 import { ROLE_LABEL } from '@/lib/roles'
@@ -58,17 +58,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Carrier not found' }, { status: 404 })
     }
 
-    // Google Drive folder (non-fatal)
+    // Google Drive folder (non-fatal). Skipped outright when Drive has no
+    // credentials, so a save doesn't wait on a request that cannot succeed.
     let folder: { id: string; webViewLink: string } | null = null
     let warning: string | undefined
-    try {
-      folder = await getOrCreateCarrierFolder(
-        String(dotNumber),
-        (carrier as any).legal_name ?? ''
-      )
-    } catch (driveErr: any) {
-      warning = `Google Drive folder could not be created: ${driveErr?.message ?? 'unknown error'}`
-      console.error('Drive error:', driveErr)
+    if (driveConfigured()) {
+      try {
+        folder = await getOrCreateCarrierFolder(
+          String(dotNumber),
+          (carrier as any).legal_name ?? ''
+        )
+      } catch (driveErr: any) {
+        warning = `Google Drive folder could not be created: ${driveErr?.message ?? 'unknown error'}`
+        console.error('Drive error:', driveErr)
+      }
     }
 
     // Accept the carrier-status value directly, or map a legacy snake_case one.

@@ -1,5 +1,16 @@
 import { google } from 'googleapis'
 
+/** Whether the Drive integration has credentials at all. Without them every
+ *  folder lookup fails after a round trip, so callers skip the step instead. */
+export function driveConfigured(): boolean {
+  return !!(
+    process.env.GOOGLE_CLIENT_ID &&
+    process.env.GOOGLE_CLIENT_SECRET &&
+    process.env.GOOGLE_REFRESH_TOKEN &&
+    process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID
+  )
+}
+
 function getDriveClient() {
   const auth = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,

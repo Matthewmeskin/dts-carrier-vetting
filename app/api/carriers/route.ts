@@ -127,7 +127,8 @@ export async function GET(request: NextRequest) {
       supabaseAdmin
         .from('vetting_records')
         .select('dot_number, completed_at')
-        .order('completed_at', { ascending: false }),
+        .order('completed_at', { ascending: false })
+        .limit(100000),
       // Portal-uploaded docs that satisfy a requirement (NOA, broker-carrier
       // agreement, W-9) even when RMIS doesn't have them on file.
       supabaseAdmin

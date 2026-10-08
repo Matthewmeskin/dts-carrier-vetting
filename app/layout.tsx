@@ -38,8 +38,9 @@ export const viewport: Viewport = {
 // when the saved choice (localStorage 'theme', see components/ThemeToggle)
 // is 'dark', or is unset/'system' and the OS prefers dark. Without it a dark
 // user sees a white page until React loads. Keep it in step with
-// applyTheme() in ThemeToggle.tsx.
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}})()`
+// applyTheme() in ThemeToggle.tsx. The same script folds the sidebar to its
+// icon rail (localStorage 'sidebar', see components/sidebarState.ts).
+const themeScript = `(function(){try{var h=document.documentElement;var t=localStorage.getItem('theme');if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches))h.classList.add('dark');if(localStorage.getItem('sidebar')==='collapsed')h.classList.add('sb-collapsed')}catch(e){}})()`
 
 export default function RootLayout({
   children,

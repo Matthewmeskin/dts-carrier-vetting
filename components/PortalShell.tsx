@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Logo } from './Logo'
 import { ThemeToggle } from './ThemeToggle'
+import { NavIcon, type NavIconName } from './NavIcons'
+import { applySidebarCollapsed, setSidebarCollapsed, useSidebarCollapsed } from './sidebarState'
+import { memberInitials } from '@/lib/assignments'
 import { createSupabaseBrowserClient } from '@/lib/supabaseBrowser'
 import { ROLE_LABEL, type Role } from '@/lib/roles'
 import { cn } from '@/lib/utils'
@@ -15,35 +18,35 @@ import { cn } from '@/lib/utils'
 
 const HUB_URL = 'https://dts-ap-portal.vercel.app/'
 
-type NavItem = { href: string; label: string; badge?: 'approvals' }
+type NavItem = { href: string; label: string; icon: NavIconName; badge?: 'approvals' }
 type NavGroup = { label: string; items: NavItem[]; directorOnly?: boolean }
 
 const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Carriers',
     items: [
-      { href: '/carriers', label: 'Carriers' },
-      { href: '/changes', label: 'Changes' },
-      { href: '/activity', label: 'Activity' },
+      { href: '/carriers', label: 'Carriers', icon: 'truck' },
+      { href: '/changes', label: 'Changes', icon: 'changes' },
+      { href: '/activity', label: 'Activity', icon: 'activity' },
     ],
   },
   {
     label: 'Work',
     items: [
-      { href: '/assignments', label: 'Assignments' },
-      { href: '/approvals', label: 'Approvals', badge: 'approvals' },
+      { href: '/assignments', label: 'Assignments', icon: 'assignments' },
+      { href: '/approvals', label: 'Approvals', icon: 'approvals', badge: 'approvals' },
     ],
   },
   {
     label: 'Data',
     items: [
-      { href: '/upload', label: 'Upload Scores' },
-      { href: '/w9-upload', label: 'W-9 Upload' },
+      { href: '/upload', label: 'Upload Scores', icon: 'upload' },
+      { href: '/w9-upload', label: 'W-9 Upload', icon: 'document' },
     ],
   },
   {
     label: 'Admin',
-    items: [{ href: '/admin/users', label: 'Users' }],
+    items: [{ href: '/admin/users', label: 'Users', icon: 'users' }],
     directorOnly: true,
   },
 ]
@@ -61,6 +64,12 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false)
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const bare = BARE.has(pathname)
+  const collapsed = useSidebarCollapsed()
+
+  // Re-apply the folded state after React's dev-mode remount resets <html>.
+  useLayoutEffect(() => {
+    applySidebarCollapsed()
+  }, [])
 
   // Who's signed in — once per page load, not on every navigation (the
   // session can't change underneath a client-side route change).
@@ -127,6 +136,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         title={`${pendingApprovals} waiting for approval`}
         className={cn(
           'ml-auto rounded-full px-1.5 py-px text-[11px] font-semibold leading-4 tabular-nums',
+          // On the rail it sits on the icon's corner.
+          'rail:absolute rail:-right-0.5 rail:-top-0.5 rail:ml-0 rail:px-1 rail:text-[9px] rail:leading-[14px]',
           on ? 'bg-white text-maroon' : urgent ? 'bg-maroon text-white' : 'bg-gray-200 text-gray-700'
         )}
       >
@@ -162,28 +173,53 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     ) : null
 
   const brand = (logoClass: string) => (
-    <Link href="/carriers" className="flex items-center gap-2.5 whitespace-nowrap font-heading text-[15px] font-bold text-maroon">
-      <Logo className={cn(logoClass, 'w-auto shrink-0')} />
-      <span className="leading-tight">Carrier Vetting</span>
+    <Link
+      href="/carriers"
+      className="flex items-center gap-2.5 whitespace-nowrap font-heading text-[15px] font-bold text-maroon rail:justify-center"
+      title="Carrier Vetting"
+    >
+      <Logo className={cn(logoClass, 'w-auto shrink-0 rail:h-7')} />
+      <span className="leading-tight rail:hidden">Carrier Vetting</span>
     </Link>
   )
+
+  // Fold the sidebar to an icon rail, or open it back up.
+  const collapseButton = (
+    <button
+      type="button"
+      onClick={() => setSidebarCollapsed(!collapsed)}
+      title={collapsed ? 'Open the menu' : 'Collapse the menu'}
+      aria-label={collapsed ? 'Open the menu' : 'Collapse the menu'}
+      aria-expanded={!collapsed}
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-ink-faint transition hover:bg-brandblue-50 hover:text-brandblue-700"
+    >
+      <NavIcon name={collapsed ? 'chevrons-right' : 'chevrons-left'} className="h-4 w-4" />
+    </button>
+  )
+
+  const initials = me?.email ? memberInitials(me.email) : '?'
 
   return (
     <div className="min-h-screen lg:flex">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-52 shrink-0 flex-col border-r border-line bg-white lg:flex">
-        <div className="border-b border-line px-3 py-2.5">{brand('h-9')}</div>
+      <aside className="sticky top-0 hidden h-screen w-52 shrink-0 flex-col border-r border-line bg-white transition-[width] duration-150 lg:flex rail:w-14">
+        <div className="flex items-center justify-between gap-1 border-b border-line px-3 py-2.5 rail:flex-col rail:gap-1.5 rail:px-0">
+          {brand('h-9')}
+          {collapseButton}
+        </div>
         <div className="flex-1 overflow-y-auto px-1.5 py-3">
           <a
             href={HUB_URL}
-            className="mb-3 block rounded px-2.5 py-1 font-heading text-2xs font-medium text-ink-faint transition hover:bg-brandblue-50 hover:text-brandblue-700"
+            title="All portals"
+            className="mb-3 flex items-center gap-2 rounded px-2.5 py-1 font-heading text-2xs font-medium text-ink-faint transition hover:bg-brandblue-50 hover:text-brandblue-700 rail:justify-center rail:px-0 rail:py-1.5"
           >
-            ← All portals
+            <NavIcon name="grid" className="hidden h-4 w-4 rail:block" />
+            <span className="rail:hidden">← All portals</span>
           </a>
-          <nav className="flex flex-col gap-4">
-            {groups.map((g) => (
-              <div key={g.label}>
-                <div className="px-2.5 pb-1 font-heading text-2xs font-semibold uppercase tracking-wider text-ink-faint">
+          <nav className="flex flex-col gap-4 rail:gap-2">
+            {groups.map((g, gi) => (
+              <div key={g.label} className={cn(gi > 0 && 'rail:border-t rail:border-line rail:pt-2')}>
+                <div className="px-2.5 pb-1 font-heading text-2xs font-semibold uppercase tracking-wider text-ink-faint rail:hidden">
                   {g.label}
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -194,12 +230,17 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
                         key={item.href}
                         href={item.href}
                         aria-current={on ? 'page' : undefined}
+                        title={item.label}
                         className={cn(
-                          'flex items-center gap-2 rounded px-2.5 py-1.5 font-heading text-[13px] font-medium transition',
+                          'relative flex items-center gap-2 rounded px-2.5 py-1.5 font-heading text-[13px] font-medium transition rail:justify-center rail:px-0 rail:py-2',
                           on ? 'bg-maroon text-white' : 'text-ink-muted hover:bg-brandblue-50 hover:text-brandblue-700'
                         )}
                       >
-                        {item.label}
+                        <NavIcon
+                          name={item.icon}
+                          className={cn('h-4 w-4 shrink-0 rail:h-[18px] rail:w-[18px]', on ? 'text-white' : 'text-ink-faint')}
+                        />
+                        <span className="rail:hidden">{item.label}</span>
                         {badge(item, on)}
                       </Link>
                     )
@@ -209,12 +250,40 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
         </div>
-        <div className="border-t border-line px-3 py-2.5">
+        {/* Footer, open: who's signed in, sign out, theme. */}
+        <div className="border-t border-line px-3 py-2.5 rail:hidden">
           {userBlock(false)}
           <div className="mt-2 flex items-center justify-between">
             <span className="text-2xs uppercase tracking-wider text-ink-faint">Theme</span>
             <ThemeToggle />
           </div>
+        </div>
+        {/* Footer, rail: the same three things as icons. */}
+        <div className="hidden flex-col items-center gap-2 border-t border-line py-2.5 rail:flex">
+          {me ? (
+            <>
+              <Link
+                href="/account"
+                title={`${me.email ?? ''} · ${ROLE_LABEL[me.role] ?? me.role} · Account`}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-maroon font-heading text-2xs font-semibold text-white transition hover:bg-maroon-700"
+              >
+                {initials}
+              </Link>
+              <button
+                onClick={signOut}
+                title="Sign out"
+                aria-label="Sign out"
+                className="flex h-8 w-8 items-center justify-center rounded border border-line text-ink-muted transition hover:border-maroon-200 hover:text-maroon"
+              >
+                <NavIcon name="signout" className="h-4 w-4" />
+              </button>
+            </>
+          ) : loaded ? (
+            <Link href="/login" title="Sign in" className="font-heading text-[13px] font-medium text-maroon hover:underline">
+              In
+            </Link>
+          ) : null}
+          <ThemeToggle variant="compact" />
         </div>
       </aside>
 

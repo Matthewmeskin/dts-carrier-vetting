@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss'
+import plugin from 'tailwindcss/plugin'
 
 // Shared DTS look: the same palette, type and neutrals as the Payables hub and
 // the other portals, so moving between them feels like one product.
@@ -71,7 +72,11 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `rail:` applies while the desktop sidebar is folded to its icon rail
+    // (the `sb-collapsed` class on <html>, see components/sidebarState.ts).
+    plugin(({ addVariant }) => addVariant('rail', '.sb-collapsed &')),
+  ],
 }
 
 export default config

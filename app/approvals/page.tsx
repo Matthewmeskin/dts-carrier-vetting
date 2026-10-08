@@ -303,8 +303,8 @@ export default function ApprovalsPage() {
               type="button"
               onClick={() => setTab(t)}
               className={cn(
-                'rounded px-3 py-1.5 transition',
-                tab === t ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+                'rounded-md px-3 py-1 font-heading text-[13px] font-medium transition',
+                tab === t ? 'bg-maroon text-white shadow-sm' : 'text-ink-muted hover:bg-white hover:text-ink'
               )}
             >
               {t === 'pending' ? 'Waiting' : 'Decided'}

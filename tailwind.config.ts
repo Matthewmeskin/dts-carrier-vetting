@@ -75,7 +75,7 @@ const config: Config = {
   plugins: [
     // `rail:` applies while the desktop sidebar is folded to its icon rail
     // (the `sb-collapsed` class on <html>, see components/sidebarState.ts).
-    plugin(({ addVariant }) => addVariant('rail', '.sb-collapsed &')),
+    plugin(({ addVariant }) => addVariant('rail', '@media (min-width: 1024px) { .sb-collapsed & }')),
   ],
 }
 

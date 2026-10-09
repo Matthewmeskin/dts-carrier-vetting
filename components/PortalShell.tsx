@@ -65,6 +65,19 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const bare = BARE.has(pathname)
   const collapsed = useSidebarCollapsed()
+  // Phones: the same sidebar, as a drawer from the left. Closes on navigation.
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    setOpen(false)
+  }, [pathname])
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
 
   // Re-apply the folded state after React's dev-mode remount resets <html>.
   useLayoutEffect(() => {
@@ -126,7 +139,6 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   }
 
   const groups = NAV_GROUPS.filter((g) => !g.directorOnly || me?.role === 'director')
-  const flat = groups.flatMap((g) => g.items)
 
   const badge = (item: NavItem, on: boolean) => {
     if (item.badge !== 'approvals' || pendingApprovals === 0 || !me) return null
@@ -191,9 +203,21 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       title={collapsed ? 'Open the menu' : 'Collapse the menu'}
       aria-label={collapsed ? 'Open the menu' : 'Collapse the menu'}
       aria-expanded={!collapsed}
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-ink-faint transition hover:bg-brandblue-50 hover:text-brandblue-700"
+      className="hidden h-7 w-7 shrink-0 items-center justify-center rounded text-ink-faint transition hover:bg-brandblue-50 hover:text-brandblue-700 lg:flex"
     >
       <NavIcon name={collapsed ? 'chevrons-right' : 'chevrons-left'} className="h-4 w-4" />
+    </button>
+  )
+
+  const closeButton = (
+    <button
+      type="button"
+      onClick={() => setOpen(false)}
+      title="Close the menu"
+      aria-label="Close the menu"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-ink-muted transition hover:bg-brandblue-50 hover:text-brandblue-700 lg:hidden"
+    >
+      <NavIcon name="close" className="h-4 w-4" />
     </button>
   )
 
@@ -201,11 +225,25 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen lg:flex">
-      {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-52 shrink-0 flex-col border-r border-line bg-white transition-[width] duration-150 lg:flex rail:w-14">
+      {/* Phones: a backdrop behind the open drawer */}
+      <div
+        className={cn('fixed inset-0 z-30 bg-black/40 lg:hidden', open ? '' : 'hidden')}
+        onClick={() => setOpen(false)}
+        aria-hidden
+      />
+      {/* The sidebar: a drawer from the left on phones, a sticky column on desktop */}
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 flex h-screen w-64 shrink-0 flex-col border-r border-line bg-white transition-transform duration-200',
+          open ? 'translate-x-0' : '-translate-x-full',
+          'lg:sticky lg:top-0 lg:z-auto lg:w-52 lg:translate-x-0 lg:transition-[width] lg:duration-150 rail:w-14'
+        )}
+        aria-label="Menu"
+      >
         <div className="flex items-center justify-between gap-1 border-b border-line px-3 py-2.5 rail:flex-col rail:gap-1.5 rail:px-0">
           {brand('h-9')}
           {collapseButton}
+          {closeButton}
         </div>
         <div className="flex-1 overflow-y-auto px-1.5 py-3">
           <a
@@ -288,42 +326,27 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="min-w-0 flex-1">
-        {/* Phones and tablets: compact header with a swipeable menu row */}
+        {/* Phones and tablets: a compact header; the menu button opens the drawer */}
         <header className="sticky top-0 z-20 border-b border-line bg-white lg:hidden">
-          <div className="flex items-center gap-3 px-3 py-2">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              title="Menu"
+              aria-label="Open the menu"
+              aria-expanded={open}
+              className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded border border-line text-ink-muted transition hover:border-maroon-200 hover:text-maroon"
+            >
+              <NavIcon name="menu" className="h-5 w-5" />
+              {me && pendingApprovals > 0 ? (
+                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-maroon ring-2 ring-white" aria-hidden />
+              ) : null}
+            </button>
             {brand('h-8')}
             <div className="ml-auto flex items-center gap-2">
               <ThemeToggle variant="compact" />
               {userBlock(true)}
             </div>
-          </div>
-          <div className="overflow-x-auto border-t border-line px-3 py-1.5 [-webkit-overflow-scrolling:touch]">
-            <nav className="flex w-max items-center gap-1">
-              <a
-                href={HUB_URL}
-                className="rounded px-2 py-1.5 font-heading text-[13px] font-medium text-ink-faint hover:bg-brandblue-50 hover:text-brandblue-700"
-              >
-                ← Portals
-              </a>
-              {flat.map((item) => {
-                const on = isActive(pathname, item.href)
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={on ? 'page' : undefined}
-                    className={cn(
-                      'relative flex items-center gap-1.5 whitespace-nowrap rounded px-2.5 py-1.5 font-heading text-[13px] font-medium transition',
-                      on ? 'bg-maroon text-white' : 'text-ink-muted hover:bg-brandblue-50 hover:text-brandblue-700'
-                    )}
-                  >
-                    <NavIcon name={item.icon} className={cn('h-4 w-4 shrink-0', on ? 'text-white' : 'text-ink-faint')} />
-                    {item.label}
-                    {badge(item, on)}
-                  </Link>
-                )
-              })}
-            </nav>
           </div>
         </header>
 

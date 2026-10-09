@@ -226,6 +226,29 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // A one-time password (new account, or a reset from the Operations Users
+  // page) is flagged on the login by the user-admin function. Until they set
+  // their own, the account page is the only page; it clears the flag. After
+  // MFA on purpose, so the code is still asked for first.
+  if (
+    user &&
+    !isLogin &&
+    !isAuthFlow &&
+    !isApi &&
+    !isMfaFlow &&
+    !isNoAccess &&
+    path !== '/account' &&
+    user.user_metadata?.must_change_password === true
+  ) {
+    const redirect = request.nextUrl.clone()
+    redirect.pathname = '/account'
+    redirect.search = ''
+    redirect.searchParams.set('required', '1')
+    const res = NextResponse.redirect(redirect)
+    response.cookies.getAll().forEach((c) => res.cookies.set(c))
+    return res
+  }
+
   return response
 }
 

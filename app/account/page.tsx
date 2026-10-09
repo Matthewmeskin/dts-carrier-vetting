@@ -18,6 +18,12 @@ type Me = { email: string | null; role: Role; fullName: string | null }
 export default function AccountPage() {
   const [me, setMe] = useState<Me | null>(null)
   const [hasPassword, setHasPassword] = useState<boolean | null>(null)
+  // ?required=1: a temporary password has to be replaced before the portal
+  // opens (middleware.ts sends them here).
+  const [required, setRequired] = useState(false)
+  useEffect(() => {
+    setRequired(new URLSearchParams(window.location.search).get('required') === '1')
+  }, [])
   const [loading, setLoading] = useState(true)
 
   const [current, setCurrent] = useState('')
@@ -71,7 +77,10 @@ export default function AccountPage() {
       const supabase = createSupabaseBrowserClient()
       // The project requires the current password inside the same request
       // (Supabase "require current password" setting); the server checks it.
-      const attrs = hasPassword ? { password, current_password: current } : { password }
+      // `data` clears the one-time-password flag the user-admin function set.
+      const attrs = hasPassword
+        ? { password, current_password: current, data: { must_change_password: false } }
+        : { password, data: { must_change_password: false } }
       const { error } = await supabase.auth.updateUser(attrs as { password: string })
       if (error) {
         throw new Error(
@@ -85,6 +94,7 @@ export default function AccountPage() {
       setCurrent('')
       setPassword('')
       setConfirm('')
+      if (required) window.location.assign('/carriers')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update the password')
     } finally {
@@ -123,9 +133,18 @@ export default function AccountPage() {
         </p>
       </div>
 
+      {required && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+          <div className="font-heading font-semibold">Welcome — set your own password to continue.</div>
+          <div className="mt-0.5 text-[13px]">
+            You signed in with a temporary password. Enter it as the current password below, then
+            choose one only you know. It works on every DTS portal.
+          </div>
+        </div>
+      )}
       <Card>
         <CardHeader
-          title={hasPassword ? 'Change password' : 'Set a password'}
+          title={required ? 'Set your password' : hasPassword ? 'Change password' : 'Set a password'}
           subtitle={
             hasPassword
               ? 'Pick a new password for signing in with email.'

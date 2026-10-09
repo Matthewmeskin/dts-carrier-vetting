@@ -1082,9 +1082,9 @@ export function CarrierTable({
             value={status}
             onChange={(e) => setStatus(e.target.value as StatusFilter)}
           >
-            <option value="BrokerwareActive">Active in Brokerware</option>
+            <option value="BrokerwareActive">Active in Brokerware (TMS)</option>
             <option value="All">All</option>
-            <option value="Active">Active (vetting status)</option>
+            <option value="Active">Approved — usable now (not DNU or disabled)</option>
             <option value="Approved">Approved</option>
             <option value="NeedsReview">Needs Review</option>
             <option value="DueForRevet">Due for Re-vet</option>
@@ -1368,6 +1368,21 @@ export function CarrierTable({
                         )}
                         <div className="text-xs text-gray-400">
                           {[c.city, c.state].filter(Boolean).join(', ')}
+                          {hyperionCarrierUrl(c.brokerware_carrier_id) && (
+                            <>
+                              {[c.city, c.state].some(Boolean) ? ' · ' : ''}
+                              <a
+                                href={hyperionCarrierUrl(c.brokerware_carrier_id)!}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                title={`Open carrier ${c.brokerware_carrier_id} in Hyperion (Brokerware)`}
+                                className="text-dts-blue hover:underline"
+                              >
+                                TMS ↗
+                              </a>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className={cn(COL.dot, 'text-gray-600')}>

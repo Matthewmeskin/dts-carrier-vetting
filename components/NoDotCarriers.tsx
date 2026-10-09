@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { hyperionCarrierUrl } from '@/lib/utils'
 
 interface SkippedCarrier {
   id: string
@@ -58,7 +59,19 @@ export function NoDotCarriers() {
               {rows.map((c) => (
                 <tr key={c.id} className="text-gray-700">
                   <td className="px-4 py-2 font-medium text-gray-900">
-                    {c.carrier_name || '—'}
+                    {hyperionCarrierUrl(c.brokerware_carrier_id) ? (
+                      <a
+                        href={hyperionCarrierUrl(c.brokerware_carrier_id)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open the carrier profile in Hyperion (Brokerware)"
+                        className="hover:text-dts-blue hover:underline"
+                      >
+                        {c.carrier_name || '—'} ↗
+                      </a>
+                    ) : (
+                      c.carrier_name || '—'
+                    )}
                   </td>
                   <td className="px-3 py-2">{c.mc || '—'}</td>
                   <td className="px-3 py-2">{c.scac || '—'}</td>
@@ -68,7 +81,18 @@ export function NoDotCarriers() {
                   <td className="px-3 py-2">{c.phone || '—'}</td>
                   <td className="px-3 py-2">{c.email || '—'}</td>
                   <td className="px-3 py-2 text-gray-400">
-                    {c.brokerware_carrier_id ?? '—'}
+                    {hyperionCarrierUrl(c.brokerware_carrier_id) ? (
+                      <a
+                        href={hyperionCarrierUrl(c.brokerware_carrier_id)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-dts-blue hover:underline"
+                      >
+                        {c.brokerware_carrier_id}
+                      </a>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                 </tr>
               ))}

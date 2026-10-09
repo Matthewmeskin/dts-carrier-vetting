@@ -154,6 +154,7 @@ export default function CarrierDetailPage({
   const docSet = new Set((documentTypes ?? []).map((t: string) => (t || '').toLowerCase()))
   const hasAgreement = docSet.has('broker_carrier_agreement') || docSet.has('tariff')
   const hasW9 = docSet.has('w9')
+  const hasNoa = docSet.has('noa')
   const keepFlag = (f: string): boolean => {
     const low = f.toLowerCase()
     if (hasAgreement && low.includes('broker-carrier agreement')) return false
@@ -166,7 +167,15 @@ export default function CarrierDetailPage({
     if (carrier.is_intrastate && low.includes('operating authority')) return false
     return true
   }
-  const displayFlags = (insurance?.rmis_flags ?? []).filter(keepFlag)
+  // RMIS's factoring flag always says "verify the NOA is on file": it cannot
+  // see the portal's documents. When a Notice of Assignment IS on file (RMIS
+  // archive or a portal upload), the flag only asks for the pay-to check.
+  const softenFlag = (f: string): string => {
+    if (!hasNoa || !/notice of assignment/i.test(f)) return f
+    const payTo = f.match(/payments go to (.+?)\.\s/i)?.[1]
+    return `Carrier is factoring${payTo ? ` — payments go to ${payTo}` : ''}. NOA is on file; confirm the pay-to address on it matches RMIS.`
+  }
+  const displayFlags = (insurance?.rmis_flags ?? []).filter(keepFlag).map(softenFlag)
   const displayHardStops = (insurance?.hard_stops ?? []).filter(keepFlag)
   const displayInsurance = insurance
     ? { ...insurance, rmis_flags: displayFlags, hard_stops: displayHardStops }

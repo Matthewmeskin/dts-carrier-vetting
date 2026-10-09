@@ -325,7 +325,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="min-w-0 flex-1">
+      {/* The content column fills the viewport, so a page that is still loading
+          (or a short one) keeps the footer at the bottom instead of mid-screen. */}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         {/* Phones and tablets: a compact header; the menu button opens the drawer */}
         <header className="sticky top-0 z-20 border-b border-line bg-white lg:hidden">
           <div className="flex items-center gap-2 px-3 py-2">
@@ -350,7 +352,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="p-3 sm:p-4 lg:p-5">{children}</main>
+        <main className="flex-1 p-3 sm:p-4 lg:p-5">{children}</main>
         <footer className="px-4 py-4 text-2xs text-ink-faint lg:px-5">
           Diversified Transportation Services — Torrance, CA · Internal compliance tool
         </footer>

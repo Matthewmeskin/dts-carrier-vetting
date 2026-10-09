@@ -313,10 +313,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
                     href={item.href}
                     aria-current={on ? 'page' : undefined}
                     className={cn(
-                      'flex items-center gap-1.5 whitespace-nowrap rounded px-2.5 py-1.5 font-heading text-[13px] font-medium transition',
+                      'relative flex items-center gap-1.5 whitespace-nowrap rounded px-2.5 py-1.5 font-heading text-[13px] font-medium transition',
                       on ? 'bg-maroon text-white' : 'text-ink-muted hover:bg-brandblue-50 hover:text-brandblue-700'
                     )}
                   >
+                    <NavIcon name={item.icon} className={cn('h-4 w-4 shrink-0', on ? 'text-white' : 'text-ink-faint')} />
                     {item.label}
                     {badge(item, on)}
                   </Link>

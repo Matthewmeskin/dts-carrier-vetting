@@ -187,11 +187,13 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const brand = (logoClass: string) => (
     <Link
       href="/carriers"
-      className="flex items-center gap-2.5 whitespace-nowrap font-heading text-[15px] font-bold text-maroon rail:justify-center"
+      // min-w-0 lets the name wrap to two lines when the logo, the name and
+      // the collapse chevron do not fit on one; it never runs under the chevron.
+      className="flex min-w-0 items-center gap-2.5 font-heading text-[15px] font-bold leading-tight text-maroon rail:justify-center"
       title="Carrier Vetting"
     >
       <Logo className={cn(logoClass, 'w-auto shrink-0 rail:h-7')} />
-      <span className="leading-tight rail:hidden">Carrier Vetting</span>
+      <span className="min-w-0 rail:hidden">Carrier Vetting</span>
     </Link>
   )
 

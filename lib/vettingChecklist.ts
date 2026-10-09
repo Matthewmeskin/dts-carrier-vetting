@@ -533,7 +533,15 @@ function computeAutoEvaluations(
           : 'W-9 uploaded to portal'
       out.w9 = {
         status: on ? 'pass' : 'fail',
-        evidence: `${where}${ins?.is_factoring ? ' · factoring — verify NOA & pay-to' : ''}`,
+        // A factored carrier: say whether the Notice of Assignment is on file
+        // (RMIS archive or a portal upload) rather than always asking for it.
+        evidence: `${where}${
+          ins?.is_factoring
+            ? docTypes.has('noa')
+              ? ' · factoring — NOA on file, verify pay-to'
+              : ' · factoring — NOA not on file; get it and verify pay-to'
+            : ''
+        }`,
       }
     }
   }

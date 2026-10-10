@@ -197,8 +197,9 @@ export default function CarrierDetailPage({
       {/* Panel 1 — Header */}
       <Card>
         <CardBody>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
+          {/* Row 1: who and where they stand, and what you can do */}
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="font-heading text-xl font-semibold text-ink">
                   {carrier.legal_name || `DOT ${carrier.dot_number}`}
@@ -215,227 +216,12 @@ export default function CarrierDetailPage({
                   </Badge>
                 )}
                 {carrier.do_not_use && <Badge tone="red">Do Not Use</Badge>}
-              </div>
-              {(carrier as any).status_note &&
-                (carrier.carrier_status === 'On Hold' ||
-                  carrier.carrier_status === 'Declined') && (
-                  <p className="mt-1.5 max-w-2xl text-sm text-gray-600">
-                    <span className="font-medium text-gray-700">
-                      {carrier.carrier_status === 'On Hold'
-                        ? 'On hold'
-                        : 'Declined'}
-                      :
-                    </span>{' '}
-                    {(carrier as any).status_note}
-                  </p>
-                )}
-              {carrier.dba_name &&
-                carrier.dba_name !== carrier.legal_name && (
-                  <p className="text-sm text-gray-500">dba {carrier.dba_name}</p>
-                )}
-              <div className="mt-2">
-                <AssignOwner
-                  dot={carrier.dot_number}
-                  assigneeId={detail.assignment?.assignee_id ?? null}
-                  assigneeName={detail.assignment?.assignee_name ?? null}
-                  onChanged={load}
-                />
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
-                <span>DOT {carrier.dot_number}</span>
-                {hyperionCarrierUrl(carrier.brokerware_carrier_id) && (
-                  <a
-                    href={hyperionCarrierUrl(carrier.brokerware_carrier_id)!}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={`Open carrier ${carrier.brokerware_carrier_id} in Hyperion (Brokerware)`}
-                    className="text-dts-blue hover:underline"
-                  >
-                    Open in Hyperion ↗
-                  </a>
-                )}
-                {rmisCarrierUrl(carrier.rmis_insured_id) && (
-                  <a
-                    href={rmisCarrierUrl(carrier.rmis_insured_id)!}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={`Open carrier ${carrier.rmis_insured_id} in RMIS`}
-                    className="text-dts-blue hover:underline"
-                  >
-                    Open in RMIS ↗
-                  </a>
-                )}
-                {carrier.mc_number &&
-                  (() => {
-                    const mc = String(carrier.mc_number).replace(/\D/g, '')
-                    return mc ? (
-                      <a
-                        href={
-                          'https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY' +
-                          '&query_type=queryCarrierSnapshot&query_param=MC_MX' +
-                          `&query_string=${mc}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Look up on FMCSA SAFER"
-                        className="text-dts-blue hover:underline"
-                      >
-                        MC {carrier.mc_number}
-                      </a>
-                    ) : (
-                      <span>MC {carrier.mc_number}</span>
-                    )
-                  })()}
-                {(() => {
-                  // City/state of the carrier's PHYSICAL location. Prefer the
-                  // RMIS/DOT address; the Brokerware/TMS record often holds the
-                  // factor's remit-to (e.g. a PO Box in another state).
-                  const physCity = insurance?.rmis_carrier_city || null
-                  const physState =
-                    insurance?.rmis_carrier_state ||
-                    stateFromZip(insurance?.rmis_carrier_zip)
-                  const city = physCity || carrier.city
-                  const state = physCity ? physState : carrier.state
-                  return (
-                    <span
-                      title={
-                        physCity
-                          ? 'Physical location — RMIS/DOT'
-                          : 'Address on file in Brokerware/TMS (may be a mailing / remit-to address)'
-                      }
-                    >
-                      {[city, state].filter(Boolean).join(', ') || '—'}
-                    </span>
-                  )
-                })()}
-                <span>{carrier.power_units ?? '—'} power units</span>
-                <span>
-                  Safety rating:{' '}
-                  <span className="font-medium">
-                    {carrier.safety_rating || 'Unrated'}
-                  </span>
-                </span>
-              </div>
-              {(() => {
-                const join = (
-                  street: string | null | undefined,
-                  city: string | null | undefined,
-                  state: string | null | undefined,
-                  zip: string | null | undefined
-                ) =>
-                  [street, [city, state, zip].filter(Boolean).join(' ')]
-                    .filter((p) => p && p.trim())
-                    .join(', ')
-                // Prefer the RMIS/DOT physical address; fall back to the
-                // carrier's own address (Brokerware/TMS) when RMIS has none.
-                const rmisAddr = join(
-                  insurance?.rmis_carrier_street,
-                  insurance?.rmis_carrier_city,
-                  insurance?.rmis_carrier_state,
-                  insurance?.rmis_carrier_zip
-                )
-                const carrierAddr = join(
-                  carrier.street,
-                  carrier.city,
-                  carrier.state,
-                  carrier.zip
-                )
-                const addr = rmisAddr || carrierAddr
-                const addrSource = rmisAddr
-                  ? 'Physical address (RMIS/DOT)'
-                  : 'Address on file in Brokerware/TMS'
-                // If Brokerware/TMS holds a different address than the RMIS
-                // physical one (commonly the factor's remit-to PO Box), show it
-                // too, labeled, so it's clear where each address comes from.
-                const nrmAddr = (s: string) =>
-                  s.toLowerCase().replace(/[^a-z0-9]/g, '')
-                const tmsDiffers =
-                  !!rmisAddr && !!carrierAddr && nrmAddr(rmisAddr) !== nrmAddr(carrierAddr)
-                // Prefer the carrier's real contact from RMIS over the
-                // Brokerware/TMS value (which is often a placeholder like
-                // na@na.com); fall back to TMS when RMIS has none.
-                const rmisEmail = insurance?.rmis_email || null
-                const rmisPhone = insurance?.rmis_phone || null
-                const email = rmisEmail || carrier.email
-                const phone = rmisPhone || carrier.phone
-                const contactName = insurance?.rmis_contact_name || null
-                const contactTitle = insurance?.rmis_contact_title || null
-                const emailTitle = rmisEmail
-                  ? `Carrier contact (RMIS)${
-                      contactName
-                        ? ` — ${contactName}${contactTitle ? `, ${contactTitle}` : ''}`
-                        : ''
-                    }`
-                  : 'Contact email (Brokerware/TMS)'
-                if (!addr && !phone && !email) return null
-                return (
-                  <>
-                  <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
-                    {addr && (
-                      <span title={addrSource}>
-                        {addr}{' '}
-                        <span className="text-xs text-gray-400">
-                          ({rmisAddr ? 'RMIS/DOT' : 'Brokerware/TMS'})
-                        </span>
-                      </span>
-                    )}
-                    {phone && (
-                      <a
-                        href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
-                        className="text-dts-blue hover:underline"
-                        title={rmisPhone ? 'Carrier phone (RMIS)' : 'Phone (Brokerware/TMS)'}
-                      >
-                        {formatPhone(phone)}
-                      </a>
-                    )}
-                    {email && (
-                      <a
-                        href={`mailto:${email}`}
-                        className="break-all text-dts-blue hover:underline"
-                        title={emailTitle}
-                      >
-                        {email}
-                      </a>
-                    )}
-                  </div>
-                  {tmsDiffers && (
-                    <div className="mt-0.5 text-xs text-gray-400">
-                      Brokerware/TMS address on file: {carrierAddr} — usually
-                      the mailing / remit-to address
-                    </div>
-                  )}
-                  </>
-                )
-              })()}
-            </div>
-            <div className="text-right text-sm text-gray-500">
-              <div className="flex flex-col items-end gap-2">
-                <RmisRefreshButton dot={dot} onRefreshed={load} />
-                <RmisMonitoring
-                  variant="inline"
-                  dot={dot}
-                  disabledInTms={disabled}
-                  brokerwareStatus={carrier.brokerware_status}
-                  onChanged={load}
-                />
-                <InsuranceRequestButton
-                  dot={dot}
-                  autoStatus={insurance?.auto_status}
-                  cargoStatus={insurance?.cargo_status}
-                  generalStatus={insurance?.general_status}
-                  onSent={load}
-                />
                 {disabled ? (
-                  <span>Disabled — re-vetting not required</span>
+                  <Badge tone="gray">Re-vet not required</Badge>
                 ) : (
-                  <>
+                  <span title={revet.dueDate ? `Re-vet due ${revet.dueDate.toLocaleDateString()}` : undefined}>
                     <Badge tone={REVET_TONE[revet.state]}>{revet.label}</Badge>
-                    {revet.dueDate && (
-                      <span className="text-xs">
-                        due {revet.dueDate.toLocaleDateString()}
-                      </span>
-                    )}
-                  </>
+                  </span>
                 )}
                 {(() => {
                   const haul = computeHaulActivity(carrier.last_hauled_at)
@@ -456,8 +242,220 @@ export default function CarrierDetailPage({
                   )
                 })()}
               </div>
+              {carrier.dba_name &&
+                carrier.dba_name !== carrier.legal_name && (
+                  <p className="mt-0.5 text-sm text-gray-500">dba {carrier.dba_name}</p>
+                )}
+              {(carrier as any).status_note &&
+                (carrier.carrier_status === 'On Hold' ||
+                  carrier.carrier_status === 'Declined') && (
+                  <p className="mt-1.5 max-w-2xl text-sm text-gray-600">
+                    <span className="font-medium text-gray-700">
+                      {carrier.carrier_status === 'On Hold'
+                        ? 'On hold'
+                        : 'Declined'}
+                      :
+                    </span>{' '}
+                    {(carrier as any).status_note}
+                  </p>
+                )}
+            </div>
+            <div className="flex flex-wrap items-start justify-end gap-2">
+              <RmisRefreshButton dot={dot} onRefreshed={load} />
+              <InsuranceRequestButton
+                dot={dot}
+                autoStatus={insurance?.auto_status}
+                cargoStatus={insurance?.cargo_status}
+                generalStatus={insurance?.general_status}
+                onSent={load}
+              />
+              <RmisMonitoring
+                variant="inline"
+                dot={dot}
+                disabledInTms={disabled}
+                brokerwareStatus={carrier.brokerware_status}
+                onChanged={load}
+              />
             </div>
           </div>
+
+          {/* Row 2: owner and the key facts */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-gray-600">
+            <AssignOwner
+              dot={carrier.dot_number}
+              assigneeId={detail.assignment?.assignee_id ?? null}
+              assigneeName={detail.assignment?.assignee_name ?? null}
+              onChanged={load}
+            />
+            <span>DOT {carrier.dot_number}</span>
+            {carrier.mc_number &&
+              (() => {
+                const mc = String(carrier.mc_number).replace(/\D/g, '')
+                return mc ? (
+                  <a
+                    href={
+                      'https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY' +
+                      '&query_type=queryCarrierSnapshot&query_param=MC_MX' +
+                      `&query_string=${mc}`
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Look up on FMCSA SAFER"
+                    className="text-dts-blue hover:underline"
+                  >
+                    MC {carrier.mc_number}
+                  </a>
+                ) : (
+                  <span>MC {carrier.mc_number}</span>
+                )
+              })()}
+            {(() => {
+              // City/state of the carrier's PHYSICAL location. Prefer the
+              // RMIS/DOT address; the Brokerware/TMS record often holds the
+              // factor's remit-to (e.g. a PO Box in another state).
+              const physCity = insurance?.rmis_carrier_city || null
+              const physState =
+                insurance?.rmis_carrier_state ||
+                stateFromZip(insurance?.rmis_carrier_zip)
+              const city = physCity || carrier.city
+              const state = physCity ? physState : carrier.state
+              return (
+                <span
+                  title={
+                    physCity
+                      ? 'Physical location — RMIS/DOT'
+                      : 'Address on file in Brokerware/TMS (may be a mailing / remit-to address)'
+                  }
+                >
+                  {[city, state].filter(Boolean).join(', ') || '—'}
+                </span>
+              )
+            })()}
+            <span>{carrier.power_units ?? '—'} power units</span>
+            <span>
+              Safety rating:{' '}
+              <span className="font-medium">
+                {carrier.safety_rating || 'Unrated'}
+              </span>
+            </span>
+          </div>
+
+          {/* Row 3: how to reach them, and the carrier in the TMS and RMIS */}
+          {(() => {
+            const join = (
+              street: string | null | undefined,
+              city: string | null | undefined,
+              state: string | null | undefined,
+              zip: string | null | undefined
+            ) =>
+              [street, [city, state, zip].filter(Boolean).join(' ')]
+                .filter((p) => p && p.trim())
+                .join(', ')
+            // Prefer the RMIS/DOT physical address; fall back to the
+            // carrier's own address (Brokerware/TMS) when RMIS has none.
+            const rmisAddr = join(
+              insurance?.rmis_carrier_street,
+              insurance?.rmis_carrier_city,
+              insurance?.rmis_carrier_state,
+              insurance?.rmis_carrier_zip
+            )
+            const carrierAddr = join(
+              carrier.street,
+              carrier.city,
+              carrier.state,
+              carrier.zip
+            )
+            const addr = rmisAddr || carrierAddr
+            const addrSource = rmisAddr
+              ? 'Physical address (RMIS/DOT)'
+              : 'Address on file in Brokerware/TMS'
+            // If Brokerware/TMS holds a different address than the RMIS
+            // physical one (commonly the factor's remit-to PO Box), show it
+            // too, labeled, so it's clear where each address comes from.
+            const nrmAddr = (s: string) =>
+              s.toLowerCase().replace(/[^a-z0-9]/g, '')
+            const tmsDiffers =
+              !!rmisAddr && !!carrierAddr && nrmAddr(rmisAddr) !== nrmAddr(carrierAddr)
+            // Prefer the carrier's real contact from RMIS over the
+            // Brokerware/TMS value (which is often a placeholder like
+            // na@na.com); fall back to TMS when RMIS has none.
+            const rmisEmail = insurance?.rmis_email || null
+            const rmisPhone = insurance?.rmis_phone || null
+            const email = rmisEmail || carrier.email
+            const phone = rmisPhone || carrier.phone
+            const contactName = insurance?.rmis_contact_name || null
+            const contactTitle = insurance?.rmis_contact_title || null
+            const emailTitle = rmisEmail
+              ? `Carrier contact (RMIS)${
+                  contactName
+                    ? ` — ${contactName}${contactTitle ? `, ${contactTitle}` : ''}`
+                    : ''
+                }`
+              : 'Contact email (Brokerware/TMS)'
+            const hyperion = hyperionCarrierUrl(carrier.brokerware_carrier_id)
+            const rmisUrl = rmisCarrierUrl(carrier.rmis_insured_id)
+            if (!addr && !phone && !email && !hyperion && !rmisUrl) return null
+            return (
+              <>
+              <div className="mt-1 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-gray-600">
+                {addr && (
+                  <span title={addrSource}>
+                    {addr}{' '}
+                    <span className="text-xs text-gray-400">
+                      ({rmisAddr ? 'RMIS/DOT' : 'Brokerware/TMS'})
+                    </span>
+                  </span>
+                )}
+                {phone && (
+                  <a
+                    href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
+                    className="text-dts-blue hover:underline"
+                    title={rmisPhone ? 'Carrier phone (RMIS)' : 'Phone (Brokerware/TMS)'}
+                  >
+                    {formatPhone(phone)}
+                  </a>
+                )}
+                {email && (
+                  <a
+                    href={`mailto:${email}`}
+                    className="break-all text-dts-blue hover:underline"
+                    title={emailTitle}
+                  >
+                    {email}
+                  </a>
+                )}
+                {hyperionCarrierUrl(carrier.brokerware_carrier_id) && (
+                  <a
+                    href={hyperionCarrierUrl(carrier.brokerware_carrier_id)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Open carrier ${carrier.brokerware_carrier_id} in Hyperion (Brokerware)`}
+                    className="text-dts-blue hover:underline"
+                  >
+                    Open in Hyperion ↗
+                  </a>
+                )}
+                    {rmisCarrierUrl(carrier.rmis_insured_id) && (
+                  <a
+                    href={rmisCarrierUrl(carrier.rmis_insured_id)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Open carrier ${carrier.rmis_insured_id} in RMIS`}
+                    className="text-dts-blue hover:underline"
+                  >
+                    Open in RMIS ↗
+                  </a>
+                )}
+              </div>
+              {tmsDiffers && (
+                <div className="mt-0.5 text-xs text-gray-400">
+                  Brokerware/TMS address on file: {carrierAddr} — usually
+                  the mailing / remit-to address
+                </div>
+              )}
+              </>
+            )
+          })()}
 
           {/* Authority & Identity, in the same tile as the carrier header */}
           <AuthorityPanel

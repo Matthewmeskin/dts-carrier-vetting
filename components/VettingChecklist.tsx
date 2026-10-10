@@ -442,6 +442,11 @@ export function VettingChecklist({
   const hasSafetyLetter =
     (documentTypes ?? []).includes('safety_plan') ||
     (!!attachFile && attachType === 'safety_plan')
+  // When a safety letter is what's missing, point the attachment picker at it.
+  const needsLetter = scoreDriven && !checklist.otherMode && !hasSafetyLetter && !meetsBaseline
+  useEffect(() => {
+    if (needsLetter && !attachFile) setAttachType('safety_plan')
+  }, [needsLetter, attachFile])
   const exceptionMissing: string[] = []
   if (!noteIsFilled(exceptionNote))
     exceptionMissing.push(checklist.otherMode ? 'Onboarding note saying what was confirmed' : 'Exception note saying why')

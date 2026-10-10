@@ -41,8 +41,8 @@ export function ExceptionNoteComposer({
             Exception note
           </h4>
           <p className="text-xs text-amber-700">
-            Required when any baseline preference is not satisfied. Document the
-            issue, review performed, mitigating factors, controls, and approver.
+            Required when the carrier doesn’t meet the baseline. In plain words,
+            say why the carrier was approved anyway. The template is optional.
           </p>
         </div>
         <Button

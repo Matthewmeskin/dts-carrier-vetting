@@ -424,8 +424,8 @@ export function VettingChecklist({
   }, [checklist])
 
   // A carrier "meets baseline" only when every required check is completed AND
-  // none of them is a policy failure that was manually overridden. Overriding a
-  // failed policy is, by definition, an exception — so it can't be plain
+  // none of them is below its threshold and manually checked. Accepting a
+  // below-threshold item is, by definition, an exception — so it can't be plain
   // Approved. When baseline isn't met, the Approved option is disabled and the
   // reviewer must choose Exception Approved or Declined.
   const meetsBaseline = useMemo(
@@ -878,8 +878,16 @@ export function VettingChecklist({
                 {summary.autoVerified} auto-verified
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-red-500" />
-                {summary.failed} failed policy
+                <span
+                  className={cn(
+                    'h-2 w-2 rounded-full',
+                    carrierStatus === 'Exception Approved' ? 'bg-amber-500' : 'bg-red-500'
+                  )}
+                />
+                {summary.failed} below threshold
+                {carrierStatus === 'Exception Approved' && summary.failed > 0
+                  ? ' (exception approved)'
+                  : ''}
               </span>
               <span className="inline-flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full bg-gray-300" />
@@ -962,10 +970,18 @@ export function VettingChecklist({
                               </Badge>
                             )}
                             {s.autoStatus === 'fail' && (
-                              <Badge tone={s.completed ? 'amber' : 'red'}>
-                                {s.completed
-                                  ? 'Override — accepted despite policy'
-                                  : 'Failed policy'}
+                              <Badge
+                                tone={
+                                  s.completed || carrierStatus === 'Exception Approved'
+                                    ? 'amber'
+                                    : 'red'
+                                }
+                              >
+                                {carrierStatus === 'Exception Approved'
+                                  ? 'Below threshold · exception approved'
+                                  : s.completed
+                                    ? 'Below threshold · reviewed'
+                                    : 'Below threshold'}
                               </Badge>
                             )}
                             {s.autoWarn && <Badge tone="amber">{s.autoWarn}</Badge>}

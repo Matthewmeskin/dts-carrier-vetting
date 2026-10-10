@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { SosRecord, FactorRecord } from '@/lib/types'
+import { SosRecord } from '@/lib/types'
 import { Badge, type BadgeTone } from './ui/Badge'
 import { Button } from './ui/Button'
 import { Spinner } from './ui/Spinner'
@@ -20,17 +20,6 @@ function statusTone(norm: string | null | undefined): BadgeTone {
       return 'red'
     default:
       return 'gray'
-  }
-}
-
-function factorTone(status: string | null | undefined): BadgeTone {
-  switch (status) {
-    case 'approved':
-      return 'green'
-    case 'rejected':
-      return 'red'
-    default:
-      return 'amber'
   }
 }
 
@@ -72,13 +61,11 @@ function FieldInput({
 export function SosPanel({
   dot,
   sos,
-  factor,
   carrierState,
   onRefreshed,
 }: {
   dot: string
   sos: SosRecord | null
-  factor: FactorRecord | null
   /** Carrier's domicile state, so we can offer a state SOS search link even
    *  before any record is pulled. */
   carrierState?: string | null
@@ -638,50 +625,6 @@ export function SosPanel({
         </>
       )}
 
-      {/* Factor (payment recipient) — deduped across carriers */}
-      {factor && (
-        <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Factor
-              </span>
-              <span className="text-sm font-medium text-gray-900">{factor.name}</span>
-              <Badge tone={factorTone(factor.approval_status)}>
-                {factor.approval_status === 'approved'
-                  ? 'Approved factor'
-                  : factor.approval_status === 'rejected'
-                    ? 'Rejected'
-                    : 'Needs review'}
-              </Badge>
-              {factor.sos_status && (
-                <Badge tone={statusTone(factor.sos_status_normalized)}>
-                  SOS: {factor.sos_status}
-                </Badge>
-              )}
-            </div>
-            <a
-              href={`https://dts-ap-portal.vercel.app/factors/${factor.id ?? ''}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-dts-blue hover:underline"
-              title="Factor registry lives in the Payables portal"
-            >
-              View factor in Payables ↗
-            </a>
-          </div>
-          {factor.sos_summary && (
-            <p className="mt-1.5 text-xs text-gray-500">{factor.sos_summary}</p>
-          )}
-          <p className="mt-1 text-xs text-gray-400">
-            {factor.sos_checked_at
-              ? `SOS pulled ${formatDateTime(factor.sos_checked_at)}${
-                  factor.sos_state ? ` · ${factor.sos_state}` : ''
-                } · shared across carriers (not re-pulled)`
-              : 'SOS not pulled yet'}
-          </p>
-        </div>
-      )}
     </div>
   )
 }

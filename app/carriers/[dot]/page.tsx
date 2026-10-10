@@ -22,11 +22,9 @@ import { RmisRefreshButton } from '@/components/RmisRefreshButton'
 import { daysSince, exceptionState } from '@/lib/exceptions'
 import { InsuranceRequestButton } from '@/components/InsuranceRequestButton'
 import { EldPanel } from '@/components/EldPanel'
-import { NoaPanel } from '@/components/NoaPanel'
 import { ScorePanel } from '@/components/ScorePanel'
 import { VettingChecklist } from '@/components/VettingChecklist'
 import { CarrierDocuments } from '@/components/CarrierDocuments'
-import { PaymentVetting } from '@/components/PaymentVetting'
 import { RmisMonitoring } from '@/components/RmisMonitoring'
 import { CarrierActivity } from '@/components/CarrierActivity'
 import { AddressCheck } from '@/components/AddressCheck'
@@ -143,7 +141,7 @@ export default function CarrierDetailPage({
     )
   }
 
-  const { carrier, scores, insurance, vettingRecords, deltaLog, sos, factor, events, documentTypes } =
+  const { carrier, scores, insurance, vettingRecords, deltaLog, sos, events, documentTypes } =
     detail
 
   // RMIS flags are computed from RMIS data only, so the "no broker-carrier
@@ -154,9 +152,11 @@ export default function CarrierDetailPage({
   const docSet = new Set((documentTypes ?? []).map((t: string) => (t || '').toLowerCase()))
   const hasAgreement = docSet.has('broker_carrier_agreement') || docSet.has('tariff')
   const hasW9 = docSet.has('w9')
-  const hasNoa = docSet.has('noa')
   const keepFlag = (f: string): boolean => {
     const low = f.toLowerCase()
+    // Factoring, the NOA and the pay-to are checked by AP in the Payables
+    // portal now, so RMIS's factoring reminder is not repeated here.
+    if (low.includes('factoring') || low.includes('notice of assignment')) return false
     if (hasAgreement && low.includes('broker-carrier agreement')) return false
     if (hasW9 && low.includes('w-9')) return false
     // Crash counts are informational only — severity is already captured by the
@@ -167,15 +167,7 @@ export default function CarrierDetailPage({
     if (carrier.is_intrastate && low.includes('operating authority')) return false
     return true
   }
-  // RMIS's factoring flag always says "verify the NOA is on file": it cannot
-  // see the portal's documents. When a Notice of Assignment IS on file (RMIS
-  // archive or a portal upload), the flag only asks for the pay-to check.
-  const softenFlag = (f: string): string => {
-    if (!hasNoa || !/notice of assignment/i.test(f)) return f
-    const payTo = f.match(/payments go to (.+?)\.\s/i)?.[1]
-    return `Carrier is factoring${payTo ? ` — payments go to ${payTo}` : ''}. NOA is on file; confirm the pay-to address on it matches RMIS.`
-  }
-  const displayFlags = (insurance?.rmis_flags ?? []).filter(keepFlag).map(softenFlag)
+  const displayFlags = (insurance?.rmis_flags ?? []).filter(keepFlag)
   const displayHardStops = (insurance?.hard_stops ?? []).filter(keepFlag)
   const displayInsurance = insurance
     ? { ...insurance, rmis_flags: displayFlags, hard_stops: displayHardStops }
@@ -419,6 +411,13 @@ export default function CarrierDetailPage({
             <div className="text-right text-sm text-gray-500">
               <div className="flex flex-col items-end gap-2">
                 <RmisRefreshButton dot={dot} onRefreshed={load} />
+                <RmisMonitoring
+                  variant="inline"
+                  dot={dot}
+                  disabledInTms={disabled}
+                  brokerwareStatus={carrier.brokerware_status}
+                  onChanged={load}
+                />
                 <InsuranceRequestButton
                   dot={dot}
                   autoStatus={insurance?.auto_status}
@@ -480,11 +479,10 @@ export default function CarrierDetailPage({
             })()}
           />
 
-          {/* Business registration (Secretary of State) + factor */}
+          {/* Business registration (Secretary of State) */}
           <SosPanel
             dot={dot}
             sos={sos}
-            factor={factor}
             carrierState={
               insurance?.rmis_carrier_state ||
               stateFromZip(insurance?.rmis_carrier_zip) ||
@@ -532,14 +530,6 @@ export default function CarrierDetailPage({
       {/* ELD — live fleet location */}
       <EldPanel dot={dot} eldEnrolled={insurance?.rmis_eld_enrolled ?? null} />
 
-      {/* RMIS monitoring — detach + disabled-in-TMS prompt. */}
-      <RmisMonitoring
-        dot={dot}
-        disabledInTms={disabled}
-        brokerwareStatus={carrier.brokerware_status}
-        onChanged={load}
-      />
-
       {/* Safety Scores */}
       <ScorePanel scores={scores} />
 
@@ -575,13 +565,6 @@ export default function CarrierDetailPage({
 
       {/* Documents */}
       <CarrierDocuments dot={dot} reloadKey={docReload} onChanged={load} />
-
-      {/* Accounts-payable section — NOA + invoice payment vetting together. */}
-      {/* Notice of Assignment — factoring carriers only */}
-      {insurance?.is_factoring && <NoaPanel dot={dot} />}
-
-      {/* Accounts-payable: upload load docs to vet a carrier invoice for payment */}
-      <PaymentVetting dot={dot} />
 
       {/* Unified activity timeline (RMIS changes + event log) */}
       <CarrierActivity deltaLog={deltaLog} events={events ?? []} />

@@ -14,8 +14,11 @@ export function RmisMonitoring({
   disabledInTms,
   brokerwareStatus,
   onChanged,
+  variant = 'card',
 }: {
   dot: string
+  /** 'inline': a button beside Refresh from RMIS at the top of the page. */
+  variant?: 'card' | 'inline'
   disabledInTms?: boolean
   brokerwareStatus?: string | null
   onChanged?: () => void | Promise<void>
@@ -65,6 +68,37 @@ export function RmisMonitoring({
   // Only worth showing when it's actionable: either the carrier is disabled in
   // the TMS (prompt to detach) or a Manager/Director wants to do it manually.
   if (!disabledInTms && !canEdit) return null
+
+  if (variant === 'inline') {
+    return (
+      <div className="flex max-w-[16rem] flex-col items-end gap-1">
+        {done ? (
+          <span className="text-xs font-medium text-green-700">Detached from RMIS</span>
+        ) : (
+          <Button
+            size="sm"
+            variant={disabledInTms ? 'primary' : 'outline'}
+            onClick={detach}
+            disabled={!canEdit || saving}
+            title={
+              canEdit
+                ? 'Stops RMIS tracking (and billing) for a carrier you no longer work with'
+                : 'Manager or Director only'
+            }
+          >
+            {saving ? <Spinner size={14} /> : null}
+            {saving ? 'Detaching…' : 'Detach from RMIS'}
+          </Button>
+        )}
+        {disabledInTms && !done ? (
+          <span className="text-right text-xs text-amber-700">
+            Disabled in TMS{brokerwareStatus ? ` (${brokerwareStatus})` : ''}: detach to stop RMIS billing.
+          </span>
+        ) : null}
+        {error && <p className="text-right text-xs text-red-600">{error}</p>}
+      </div>
+    )
+  }
 
   return (
     <Card>

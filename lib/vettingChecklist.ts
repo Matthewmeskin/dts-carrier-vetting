@@ -213,7 +213,7 @@ export function createDefaultChecklist(): VettingChecklist {
         id: 'w9',
         category: 'verification',
         label: 'W-9 on file and payment information verified',
-        description: 'W-9 must be on file. If carrier is factoring, NOA must be on file and pay-to entity must be verified against the NOA.',
+        description: 'W-9 must be on file. (Factoring, the NOA and the pay-to are checked by AP in the Payables portal.)',
         policyRef: 'Section 6, 17',
         required: true,
         completed: false,
@@ -533,15 +533,8 @@ function computeAutoEvaluations(
           : 'W-9 uploaded to portal'
       out.w9 = {
         status: on ? 'pass' : 'fail',
-        // A factored carrier: say whether the Notice of Assignment is on file
-        // (RMIS archive or a portal upload) rather than always asking for it.
-        evidence: `${where}${
-          ins?.is_factoring
-            ? docTypes.has('noa')
-              ? ' · factoring — NOA on file, verify pay-to'
-              : ' · factoring — NOA not on file; get it and verify pay-to'
-            : ''
-        }`,
+        // Factoring, the NOA and the pay-to are AP's check in the Payables portal.
+        evidence: where,
       }
     }
   }

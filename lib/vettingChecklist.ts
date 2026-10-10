@@ -145,7 +145,7 @@ export function createDefaultChecklist(): VettingChecklist {
         id: 'gap_score',
         category: 'assessment',
         label: 'Confirmed overall Bluewire GAP Score ≥ 60',
-        description: 'Review the GAP score from the most recent monthly Bluewire upload. Score must be 60.00 or higher to clear automatically. No Bluewire score is treated as below 60.00.',
+        description: 'Review the GAP score from the most recent monthly Bluewire upload. Score must be 60.00 or higher to clear automatically. If there is no Bluewire score (for example, an intrastate carrier), check the box and note why.',
         policyRef: 'Section 3, 4',
         required: true,
         completed: false,
@@ -424,12 +424,12 @@ function computeAutoEvaluations(
     }
   }
 
-  // Overall Bluewire GAP ≥ GAP_THRESHOLD (60). Policy Section 4: no Bluewire
-  // score returned is treated as GAP below 60.
+  // Overall Bluewire GAP ≥ GAP_THRESHOLD (60). No score (e.g. intrastate) is
+  // left to the reviewer: check the box and note why.
   if ((!score || score.gap_score == null) && ins) {
     out.gap_score = {
-      status: 'fail',
-      evidence: 'No Bluewire score returned — treated as GAP below 60 (exception with safety letter)',
+      status: null,
+      evidence: 'No Bluewire score on file. Check the box and note why (for example, intrastate).',
     }
   }
   if (score && score.gap_score != null) {

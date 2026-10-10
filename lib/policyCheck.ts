@@ -120,9 +120,6 @@ export async function runPolicyCheck(days = 30): Promise<PolicyCheckResult> {
       if (!APPROVED.has(f.carrier_status ?? '') && !/Declined|On Hold|Do Not Use|Suspended/.test(f.carrier_status ?? '')) {
         issues.push(`Not approved in the portal (status: ${f.carrier_status ?? 'none'})`)
       }
-      if (anyTruckload && f.gap_score == null && f.carrier_status !== 'Exception Approved') {
-        issues.push('No Bluewire score — needs an exception with a safety letter')
-      }
     }
     if (issues.length === 0) continue
     rows.push({

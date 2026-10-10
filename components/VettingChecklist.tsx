@@ -436,8 +436,6 @@ export function VettingChecklist({
   // the same thing): a note saying why, and for a score exception a signed
   // safety letter, unless this is a Section 9 carrier.
   const scoreDriven =
-    !score ||
-    (score as any)?.gap_score == null ||
     ['owner_exception', 'additional_vetting', 'manager_exception'].includes(
       (score as any)?.approval_level ?? ''
     )

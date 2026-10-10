@@ -9,7 +9,7 @@ export { noteIsFilled }
 // Exception Approved (Sections 4 and 6):
 //  1. a short note saying why, and
 //  2. when the exception is score driven (GAP below 60, a category below its
-//     threshold, or no Bluewire score at all), a signed safety letter from the
+//     threshold), a signed safety letter from the
 //     carrier uploaded within the last 12 months.
 // Section 9 carriers (LTL, expedited, forwarder, air, co-brokered) are
 // confirmed by an approver with an onboarding note; no safety letter.
@@ -20,7 +20,6 @@ const SCORE_EXCEPTION_LEVELS = new Set(['owner_exception', 'additional_vetting',
 
 interface CarrierPolicyFacts {
   scoreLevel: string | null
-  hasScore: boolean
   safetyRating: string | null
   note: string | null
   otherMode: boolean
@@ -56,7 +55,6 @@ async function loadFacts(
   ])
   return {
     scoreLevel: scoreRow?.approval_level ?? null,
-    hasScore: scoreRow?.gap_score != null,
     safetyRating: (carrier as any)?.safety_rating ?? null,
     note: note ?? null,
     otherMode: !!checklist?.otherMode,
@@ -71,9 +69,8 @@ export async function requiredLevelFor(
 ): Promise<ApprovalLevel> {
   const f = await loadFacts(dot, { exceptionNote: null, checklist: opts.checklist })
   let level = requiredApprovalLevel(f.scoreLevel, f.safetyRating)
-  // Section 9 carriers are always confirmed by an approver. A truckload carrier
-  // with no Bluewire score is treated as GAP below 60 (Section 4).
-  if (f.otherMode || !f.hasScore) level = 'director'
+  // Section 9 carriers are always confirmed by an approver.
+  if (f.otherMode) level = 'director'
   return levelForStatus(status, level)
 }
 
@@ -95,7 +92,7 @@ export async function exceptionReadiness(
 ): Promise<ExceptionReadiness> {
   const f = await loadFacts(dot, opts)
   const status = opts.status ?? 'Exception Approved'
-  const scoreDriven = !f.hasScore || SCORE_EXCEPTION_LEVELS.has(f.scoreLevel ?? '')
+  const scoreDriven = SCORE_EXCEPTION_LEVELS.has(f.scoreLevel ?? '')
   const missing: string[] = []
   const applies = status === 'Exception Approved' || f.otherMode
   if (!applies) return { ok: true, missing, scoreDriven, otherMode: f.otherMode }

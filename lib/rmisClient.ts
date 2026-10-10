@@ -48,6 +48,8 @@ export async function fetchExpandedCarrierXML(params: {
   dotNumber?: string
   mcNumber?: string
   credentials?: RMISCredentials
+  /** API version; 13 unless a caller is trying a newer one. */
+  version?: string
 }): Promise<string> {
   const { clientID, clientPassword } = resolveCreds(params.credentials)
 
@@ -73,7 +75,7 @@ export async function fetchExpandedCarrierXML(params: {
     pwd: clientPassword,
     querytype,
     queryid,
-    version: '13',
+    version: params.version || '13',
   })
 
   const xml = await withRmisLock(async () => {

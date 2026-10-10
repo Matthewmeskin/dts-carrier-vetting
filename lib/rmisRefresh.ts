@@ -166,7 +166,7 @@ export async function keepRawResponse(dot: string, xml: string, source: string) 
   try {
     await (supabaseAdmin as any)
       .from('rmis_raw_responses')
-      .upsert({ dot_number: dot, xml, source, fetched_at: new Date().toISOString() }, { onConflict: 'dot_number' })
+      .upsert({ dot_number: dot, xml, source, fetched_at: new Date().toISOString() }, { onConflict: 'dot_number,source' })
   } catch {
     /* keeping the copy is optional */
   }

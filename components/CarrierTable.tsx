@@ -1277,8 +1277,13 @@ export function CarrierTable({
       )}
 
       {/* Desktop / tablet: full wide table (horizontal scroll if needed) */}
+      {/* One horizontal scroller for header and rows together. The minimum
+          width is the columns' own sum (COL above plus the row padding), so
+          nothing overflows the rows box and the rows can never scroll
+          sideways on their own, out of line with the header. Update it when
+          a column is added. */}
       <div className="hidden overflow-x-auto md:block">
-        <div className="min-w-[1290px]">
+        <div className="min-w-[1540px]">
           {/* Header row */}
           <div className="flex items-center border-b border-line bg-slate-50/70 px-5 py-2 font-heading text-2xs font-semibold text-ink-faint">
             <div className={COL.select}>
@@ -1316,7 +1321,7 @@ export function CarrierTable({
               No carriers match the current filters.
             </div>
           ) : (
-            <div ref={scrollRef} className="max-h-[70vh] overflow-y-auto">
+            <div ref={scrollRef} className="max-h-[70vh] overflow-y-auto overflow-x-hidden">
               <div
                 style={{
                   height: rowVirtualizer.getTotalSize(),

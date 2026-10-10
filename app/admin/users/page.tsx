@@ -8,6 +8,7 @@ import { Input, Select } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
 import { ROLE_LABEL, type Role } from '@/lib/roles'
 import { formatDate } from '@/lib/utils'
+import { POLICY_VERSION } from '@/lib/policyVersion'
 
 interface UserRow {
   id: string
@@ -15,6 +16,8 @@ interface UserRow {
   full_name: string | null
   role: Role
   created_at: string
+  policy_ack_version?: string | null
+  policy_ack_at?: string | null
 }
 
 const ROLES: Role[] = ['staff', 'manager', 'director']
@@ -183,6 +186,7 @@ export default function AdminUsersPage() {
                   <th className="px-2 py-2">User</th>
                   <th className="px-2 py-2">Role</th>
                   <th className="px-2 py-2">Added</th>
+                  <th className="px-2 py-2">Policy acknowledged</th>
                   <th className="px-2 py-2"></th>
                 </tr>
               </thead>
@@ -210,6 +214,15 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-2 py-2 whitespace-nowrap text-gray-500">
                       {formatDate(u.created_at)}
+                    </td>
+                    <td className="px-2 py-2 whitespace-nowrap text-xs">
+                      {u.policy_ack_version ? (
+                        <span className={POLICY_VERSION && u.policy_ack_version !== POLICY_VERSION ? 'text-amber-700' : 'text-gray-700'}>
+                          v{u.policy_ack_version} · {u.policy_ack_at ? formatDate(u.policy_ack_at) : ''}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">Not yet</span>
+                      )}
                     </td>
                     <td className="px-2 py-2 text-right">
                       <button

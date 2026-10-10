@@ -4,7 +4,7 @@ import { driveConfigured, getOrCreateCarrierFolder } from '@/lib/googleDrive'
 import { getSessionUser } from '@/lib/authServer'
 import { logCarrierEvent } from '@/lib/auditLog'
 import { ROLE_LABEL, roleCanApprove } from '@/lib/roles'
-import { exceptionReadiness, readinessMessage } from '@/lib/exceptionGate'
+import { exceptionReadiness, readinessMessage, requiredLevelFor } from '@/lib/exceptionGate'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -80,24 +80,28 @@ export async function POST(request: Request) {
       STATUS_MAP[vettingStatus] ?? (vettingStatus ? String(vettingStatus) : null)
     const isComplete = !!resolvedStatus && !IN_PROGRESS_STATUSES.has(resolvedStatus)
 
-    // Policy: only a director grants Exception Approved, and only once the
-    // exception note (and, for a score exception, the safety letter) is in.
-    // Re-saving a carrier that is already Exception Approved is not a new grant.
-    if (
-      resolvedStatus === 'Exception Approved' &&
-      (carrier as any).carrier_status !== 'Exception Approved'
-    ) {
+    // Policy gate, enforced here whoever saves. Approving needs the level the
+    // policy sets (approver for any exception or Section 9 carrier), and every
+    // Exception Approved save, including a re-vet that renews one, needs the
+    // note and, for a score exception, the safety letter (Sections 4, 6, 8, 9).
+    if (resolvedStatus === 'Approved' || resolvedStatus === 'Exception Approved') {
       const authOn = process.env.AUTH_ENABLED !== 'false'
       const gateUser = await getSessionUser()
-      if (authOn && !roleCanApprove(gateUser?.role, 'director')) {
+      const level = await requiredLevelFor(String(dotNumber), resolvedStatus, {
+        checklist: checklist ?? null,
+      })
+      if (authOn && !roleCanApprove(gateUser?.role, level)) {
         return NextResponse.json(
-          { error: 'Only a Director can set Exception Approved. Submit it to the approval queue instead.' },
+          {
+            error: `This carrier needs an approver (Director access) to be ${resolvedStatus}. Submit it to the approval queue instead.`,
+          },
           { status: 403 }
         )
       }
       const ready = await exceptionReadiness(String(dotNumber), {
         exceptionNote: exceptionNote ?? null,
         checklist: checklist ?? null,
+        status: resolvedStatus,
       })
       if (!ready.ok) {
         return NextResponse.json({ error: readinessMessage(ready), missing: ready.missing }, { status: 400 })

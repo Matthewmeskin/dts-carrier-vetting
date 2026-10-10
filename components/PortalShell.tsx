@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Logo } from './Logo'
 import { ThemeToggle } from './ThemeToggle'
+import { POLICY_VERSION, POLICY_URL } from '@/lib/policyVersion'
 import { NavIcon, type NavIconName } from './NavIcons'
 import { applySidebarCollapsed, setSidebarCollapsed, useSidebarCollapsed } from './sidebarState'
 import { memberInitials } from '@/lib/assignments'
@@ -35,6 +36,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/assignments', label: 'Assignments', icon: 'assignments' },
       { href: '/approvals', label: 'Approvals', icon: 'approvals', badge: 'approvals' },
+      { href: '/exception-review', label: 'Exception Review', icon: 'approvals' },
+      { href: '/policy-check', label: 'Policy Check', icon: 'grid' },
     ],
   },
   {
@@ -60,7 +63,7 @@ function isActive(pathname: string, href: string): boolean {
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [me, setMe] = useState<{ email: string | null; role: Role } | null>(null)
+  const [me, setMe] = useState<{ email: string | null; role: Role; policyAckVersion?: string | null } | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const bare = BARE.has(pathname)
@@ -93,7 +96,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (cancelled) return
-        if (d?.user) setMe({ email: d.user.email, role: d.user.role })
+        if (d?.user) setMe({ email: d.user.email, role: d.user.role, policyAckVersion: d.user.policyAckVersion ?? null })
         setLoaded(true)
       })
       .catch(() => {
@@ -354,11 +357,58 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 p-3 sm:p-4 lg:p-5">{children}</main>
+        <main className="flex-1 p-3 sm:p-4 lg:p-5">
+          {me && POLICY_VERSION && me.policyAckVersion !== POLICY_VERSION && (
+            <PolicyAckBanner onDone={() => setMe({ ...me, policyAckVersion: POLICY_VERSION })} />
+          )}
+          {children}
+        </main>
         <footer className="px-4 py-4 text-2xs text-ink-faint lg:px-5">
           Diversified Transportation Services — Torrance, CA · Internal compliance tool
         </footer>
       </div>
+    </div>
+  )
+}
+
+// Policy Section 11: everyone who selects, tenders, tracks, or pays carriers
+// acknowledges the current policy. Shown until they do.
+function PolicyAckBanner({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  async function ack() {
+    setBusy(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/me/policy-ack', { method: 'POST' })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(d.error || 'Could not save')
+      onDone()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not save')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <span>
+        The Carrier Vetting Policy v{POLICY_VERSION} is in effect.{' '}
+        {POLICY_URL && (
+          <a href={POLICY_URL} target="_blank" rel="noreferrer" className="font-semibold underline">
+            Read it
+          </a>
+        )}{' '}
+        and confirm you have read it and will follow it.
+      </span>
+      <button
+        onClick={ack}
+        disabled={busy}
+        className="rounded bg-maroon px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
+      >
+        {busy ? 'Saving…' : 'I have read and will follow it'}
+      </button>
+      {err && <span className="text-xs text-red-700">{err}</span>}
     </div>
   )
 }

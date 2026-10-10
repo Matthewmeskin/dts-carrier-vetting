@@ -4,7 +4,7 @@ import { TablesUpdate } from '@/lib/database.types'
 import { REVET_INTERVAL_OPTIONS } from '@/lib/revet'
 import { logCarrierEvent } from '@/lib/auditLog'
 import { getSessionUser } from '@/lib/authServer'
-import { exceptionReadiness, readinessMessage } from '@/lib/exceptionGate'
+import { exceptionReadiness, readinessMessage, requiredLevelFor } from '@/lib/exceptionGate'
 import {
   APPROVING_STATUSES,
   requiredApprovalLevel,
@@ -84,26 +84,7 @@ export async function PATCH(
     }
     let requiredLevel: ApprovalLevel = 'none'
     if (user && carrier_status !== undefined && APPROVING_STATUSES.includes(carrier_status)) {
-      const { data: carrierRow } = await supabaseAdmin
-        .from('carriers')
-        .select('safety_rating')
-        .eq('dot_number', dot)
-        .maybeSingle()
-      const { data: scoreRow } = await (supabaseAdmin as any)
-        .from('carrier_scores')
-        .select('approval_level')
-        .eq('dot_number', dot)
-        .order('release_month', { ascending: false })
-        .order('upload_date', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      requiredLevel = levelForStatus(
-        carrier_status,
-        requiredApprovalLevel(
-          scoreRow?.approval_level,
-          (carrierRow as any)?.safety_rating
-        )
-      )
+      requiredLevel = await requiredLevelFor(dot, carrier_status)
       if (!roleCanSetStatus(user.role, carrier_status, requiredLevel)) {
         return NextResponse.json(
           {
@@ -115,14 +96,14 @@ export async function PATCH(
       }
     }
 
-    if (carrier_status === 'Exception Approved') {
+    if (carrier_status === 'Exception Approved' || carrier_status === 'Approved') {
       const { data: cur } = await supabaseAdmin
         .from('carriers')
         .select('carrier_status')
         .eq('dot_number', dot)
         .maybeSingle()
-      if ((cur as any)?.carrier_status !== 'Exception Approved') {
-        const ready = await exceptionReadiness(dot)
+      if ((cur as any)?.carrier_status !== carrier_status) {
+        const ready = await exceptionReadiness(dot, { status: carrier_status })
         if (!ready.ok) {
           return NextResponse.json({ error: readinessMessage(ready), missing: ready.missing }, { status: 400 })
         }

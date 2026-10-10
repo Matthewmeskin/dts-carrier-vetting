@@ -29,6 +29,8 @@ export type CarrierEventType =
   | 'osint_check'
   | 'auto_decision'
   | 'assignment'
+  | 'exception_review'
+  | 'policy_ack'
 
 export interface CarrierEventInput {
   dot: string

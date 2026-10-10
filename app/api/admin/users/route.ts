@@ -22,7 +22,7 @@ export async function GET() {
   if (gate.error) return NextResponse.json({ error: gate.error }, { status: gate.status })
   const { data } = await (supabaseAdmin as any)
     .from('profiles')
-    .select('id, email, full_name, role, created_at')
+    .select('id, email, full_name, role, created_at, policy_ack_version, policy_ack_at')
     .order('created_at', { ascending: true })
   return NextResponse.json({ users: data ?? [] })
 }

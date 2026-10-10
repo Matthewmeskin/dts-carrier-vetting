@@ -106,7 +106,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'verification',
         label: 'Verified active FMCSA operating authority',
         description: 'Confirm no out-of-service order and contract authority is active (A) in FMCSA SAFER. Check RMIS DOT section.',
-        policyRef: 'Section 5, 6',
+        policyRef: 'Section 2',
         required: true,
         completed: false,
         notes: '',
@@ -116,7 +116,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'assessment',
         label: 'Confirmed no Conditional or Unsatisfactory safety rating',
         description: 'Safety rating must not be Conditional or Unsatisfactory. Satisfactory or Unrated are eligible with full review.',
-        policyRef: 'Section 5, 9',
+        policyRef: 'Section 2, 3',
         required: true,
         completed: false,
         notes: '',
@@ -126,7 +126,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'verification',
         label: 'Verified auto liability insurance via RMIS ($1M+ minimum)',
         description: 'Auto coverage status must be Valid in RMIS with Combined Single Limit of at least $1,000,000. Confidence should be High.',
-        policyRef: 'Section 5, 8',
+        policyRef: 'Section 2, 3',
         required: true,
         completed: false,
         notes: '',
@@ -136,7 +136,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'verification',
         label: 'Verified cargo coverage via RMIS ($100K+ minimum)',
         description: 'Cargo status must be Valid in RMIS with at least $100,000 in coverage.',
-        policyRef: 'Section 5, 8',
+        policyRef: 'Section 2, 3',
         required: true,
         completed: false,
         notes: '',
@@ -145,8 +145,8 @@ export function createDefaultChecklist(): VettingChecklist {
         id: 'gap_score',
         category: 'assessment',
         label: 'Confirmed overall Bluewire GAP Score ≥ 60',
-        description: 'Review the GAP score from the most recent monthly Bluewire upload. Score must be 60.00 or higher to clear automatically.',
-        policyRef: 'Section 9.2',
+        description: 'Review the GAP score from the most recent monthly Bluewire upload. Score must be 60.00 or higher to clear automatically. No Bluewire score is treated as below 60.00.',
+        policyRef: 'Section 3, 4',
         required: true,
         completed: false,
         notes: '',
@@ -156,7 +156,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'assessment',
         label: 'Confirmed safety category scores meet thresholds',
         description: 'Crash, Violation, CSA Basics, and Driver OOS must be at or above 30. Critical/Acute Violation, New Entrant, MCS-150, and Safety Rating must be 100. Judicial Hellholes is not considered. Any failing score requires additional vetting.',
-        policyRef: 'Section 9.3',
+        policyRef: 'Section 3, 4',
         required: true,
         completed: false,
         notes: '',
@@ -166,7 +166,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'risk',
         label: 'Confirmed continuous authority age (365 days minimum or documented exception)',
         description: 'Check OriginalAuthorityGrantDate in RMIS. Less than 365 days requires a documented exception. Less than 90 days is an exception only for low-risk freight, with verified identity, insurance confirmed with the agent, pickup verification, live tracking, and a one-load limit.',
-        policyRef: 'Section 7',
+        policyRef: 'Section 3, 4',
         required: true,
         completed: false,
         notes: '',
@@ -176,7 +176,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'assessment',
         label: 'Reviewed roadside inspection history',
         description: 'Confirm the carrier has roadside inspections on record. Zero inspections requires exception review. (Out-of-service performance is already captured by the Bluewire safety scores.)',
-        policyRef: 'Section 10',
+        policyRef: 'Section 3, 4',
         required: true,
         completed: false,
         notes: '',
@@ -186,7 +186,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'verification',
         label: 'Verified carrier identity via FMCSA',
         description: 'Confirm contact information matches FMCSA-reported data. No mismatched ownership, phone numbers, email domains, or documents.',
-        policyRef: 'Section 11',
+        policyRef: 'Section 2, 5',
         required: true,
         completed: false,
         notes: '',
@@ -196,7 +196,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'risk',
         label: 'No unresolved fraud, double-brokering, or identity concerns',
         description: 'No chameleon carrier signals, no cargo theft flags, no shared principals with DNU carriers, no suspicious contact changes.',
-        policyRef: 'Section 11, 12',
+        policyRef: 'Section 2, 7',
         required: true,
         completed: false,
         notes: '',
@@ -206,7 +206,7 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'verification',
         label: 'Executed broker-carrier agreement — or carrier tariff / alternate agreement — on file',
         description: 'An executed broker-carrier agreement (RMIS Agree = Yes or a signed copy in the portal) OR, for carriers that operate under their own terms (e.g. LTL carriers like ABF), their carrier tariff / alternate agreement uploaded to the portal.',
-        policyRef: 'Section 6',
+        policyRef: 'Section 3',
         required: true,
         completed: false,
         notes: '',
@@ -216,27 +216,17 @@ export function createDefaultChecklist(): VettingChecklist {
         category: 'verification',
         label: 'W-9 on file and payment information verified',
         description: 'W-9 must be on file. (Factoring, the NOA and the pay-to are checked by AP in the Payables portal.)',
-        policyRef: 'Section 6, 17',
+        policyRef: 'Section 3',
         required: true,
-        completed: false,
-        notes: '',
-      },
-      {
-        id: 'general_liability',
-        category: 'verification',
-        label: 'Reviewed general liability status (preferred: $1M/$2M)',
-        description: '$1M per occurrence and $2M aggregate preferred. Not a hard stop if missing but should be noted if absent.',
-        policyRef: 'Section 6, 8',
-        required: false,
         completed: false,
         notes: '',
       },
       {
         id: 'exception_note',
         category: 'accountability',
-        label: 'Exception note documented (if any non-hard-stop issue exists)',
-        description: 'Complete the exception note below if any baseline preference is not satisfied. Identify the issue, review performed, mitigating factors, controls required, and approver.',
-        policyRef: 'Section 16',
+        label: 'Exception note recorded (if the carrier does not meet the baseline)',
+        description: 'If the carrier does not meet a baseline requirement, record a short note saying in plain words why it was approved anyway. An approver signs off before the carrier is activated.',
+        policyRef: 'Section 6',
         required: false,
         completed: false,
         notes: '',
@@ -434,7 +424,14 @@ function computeAutoEvaluations(
     }
   }
 
-  // Overall Bluewire GAP ≥ GAP_THRESHOLD (60)
+  // Overall Bluewire GAP ≥ GAP_THRESHOLD (60). Policy Section 4: no Bluewire
+  // score returned is treated as GAP below 60.
+  if ((!score || score.gap_score == null) && ins) {
+    out.gap_score = {
+      status: 'fail',
+      evidence: 'No Bluewire score returned — treated as GAP below 60 (exception with safety letter)',
+    }
+  }
   if (score && score.gap_score != null) {
     out.gap_score = {
       status: score.gap_score >= GAP_THRESHOLD ? 'pass' : 'fail',
@@ -631,12 +628,21 @@ function computeAutoEvaluations(
   return out
 }
 
+export const SECTION9_NOT_APPLICABLE = ['gap_score', 'category_scores', 'authority_age', 'inspection_history']
+
 /** Attach autoStatus + evidence to each step from the supplied data. */
 export function attachAutoEvidence(
   checklist: VettingChecklist,
   inputs: ChecklistAutoInputs
 ): VettingChecklist {
   const evals = computeAutoEvaluations(inputs)
+  // Policy Section 9: authority age, Bluewire, and inspections do not apply to
+  // LTL, expedited, forwarder, air, or co-brokered carriers.
+  if (checklist.otherMode) {
+    for (const id of SECTION9_NOT_APPLICABLE) {
+      evals[id] = { status: 'pass', evidence: 'Not applicable — Section 9 carrier (LTL, expedited, forwarder, air, or co-brokered)' }
+    }
+  }
   return {
     ...checklist,
     steps: checklist.steps.map((s) => {
@@ -645,6 +651,26 @@ export function attachAutoEvidence(
         ? { ...s, autoStatus: e.status, evidence: e.evidence, autoWarn: e.warn ?? null }
         : s
     }),
+  }
+}
+
+/** Re-evaluate against fresh data, keeping any box a human set by hand. */
+export function reevaluate(
+  checklist: VettingChecklist,
+  inputs: ChecklistAutoInputs
+): VettingChecklist {
+  const evaluated = attachAutoEvidence(checklist, inputs)
+  return {
+    ...evaluated,
+    steps: evaluated.steps.map((s) =>
+      s.source === 'manual'
+        ? s
+        : s.autoStatus === 'pass'
+          ? { ...s, completed: true, source: 'auto' }
+          : s.autoStatus === 'fail'
+            ? { ...s, completed: false, source: 'auto' }
+            : s
+    ),
   }
 }
 

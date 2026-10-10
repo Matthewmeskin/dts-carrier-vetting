@@ -291,7 +291,7 @@ export default function ApprovalsPage() {
         <div>
           <h1 className="font-heading text-xl font-semibold text-ink">Approvals</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Carriers that tripped an approval gate and are waiting on a Manager or Director. Approving
+            Carriers waiting on an approver (Director access). Approving
             applies the status and completes the vetting; sending back returns it to the reviewer with a note.
           </p>
         </div>

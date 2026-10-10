@@ -54,8 +54,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       .eq('dot_number', dot)
       .maybeSingle()
 
-    if (decision === 'approved' && req.requested_status === 'Exception Approved') {
-      const ready = await exceptionReadiness(dot)
+    if (decision === 'approved') {
+      const ready = await exceptionReadiness(dot, { status: req.requested_status })
       if (!ready.ok) {
         return NextResponse.json({ error: readinessMessage(ready), missing: ready.missing }, { status: 400 })
       }

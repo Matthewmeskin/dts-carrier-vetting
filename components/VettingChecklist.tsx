@@ -9,6 +9,7 @@ import {
   checklistCompletionPercent,
   CHECKLIST_CATEGORIES,
   attachAutoEvidence,
+  reevaluate,
   applyAutoCompletion,
   autoSummary,
   type ChecklistAutoInputs,
@@ -231,21 +232,7 @@ export function VettingChecklist({
   // is uploaded to the portal after the page loaded): refresh each step's
   // evidence and re-check the ones a human hasn't manually overridden.
   useEffect(() => {
-    setChecklist((prev) => {
-      const evaluated = attachAutoEvidence(prev, autoInputs)
-      return {
-        ...evaluated,
-        steps: evaluated.steps.map((s) =>
-          s.source === 'manual'
-            ? s
-            : s.autoStatus === 'pass'
-              ? { ...s, completed: true, source: 'auto' }
-              : s.autoStatus === 'fail'
-                ? { ...s, completed: false, source: 'auto' }
-                : s
-        ),
-      }
-    })
+    setChecklist((prev) => reevaluate(prev, autoInputs))
   }, [autoInputs])
   const [internalNotes, setInternalNotes] = useState(
     latest?.internal_notes || ''
@@ -419,7 +406,7 @@ export function VettingChecklist({
     const exceptionStepChecked = checklist.steps.find(
       (s) => s.id === 'exception_note'
     )?.completed
-    return anyRequiredIncomplete || !!exceptionStepChecked || pendingStatus === 'Exception Approved'
+    return anyRequiredIncomplete || !!exceptionStepChecked || pendingStatus === 'Exception Approved' || !!checklist.otherMode
   }, [checklist, pendingStatus])
 
   // A carrier "meets baseline" only when every required check is completed AND
@@ -438,7 +425,9 @@ export function VettingChecklist({
   // Policy: only a director approves an exception. When the baseline isn't met
   // the only approving option is Exception Approved, so a director is needed
   // whatever the scores say.
-  const requiredLevel: ApprovalLevel = meetsBaseline ? scoreLevel : 'director'
+  // Section 9 carriers are confirmed by an approver even when nothing fails.
+  const requiredLevel: ApprovalLevel =
+    checklist.otherMode || !meetsBaseline ? 'director' : scoreLevel
   // Only block when we actually know the role (auth on); null role = auth off.
   const blockedApproval =
     !!role && requiredLevel !== 'none' && !roleCanApprove(role, requiredLevel)
@@ -446,14 +435,18 @@ export function VettingChecklist({
   // What the policy still needs before Exception Approved (the server checks
   // the same thing): a note saying why, and for a score exception a signed
   // safety letter, unless this is a Section 9 carrier.
-  const scoreDriven = ['owner_exception', 'additional_vetting', 'manager_exception'].includes(
-    (score as any)?.approval_level ?? ''
-  )
+  const scoreDriven =
+    !score ||
+    (score as any)?.gap_score == null ||
+    ['owner_exception', 'additional_vetting', 'manager_exception'].includes(
+      (score as any)?.approval_level ?? ''
+    )
   const hasSafetyLetter =
     (documentTypes ?? []).includes('safety_plan') ||
     (!!attachFile && attachType === 'safety_plan')
   const exceptionMissing: string[] = []
-  if (!noteIsFilled(exceptionNote)) exceptionMissing.push('Exception note saying why')
+  if (!noteIsFilled(exceptionNote))
+    exceptionMissing.push(checklist.otherMode ? 'Onboarding note saying what was confirmed' : 'Exception note saying why')
   if (scoreDriven && !checklist.otherMode && !hasSafetyLetter)
     exceptionMissing.push('Signed safety letter (attach below as Safety Letter)')
 
@@ -709,7 +702,7 @@ export function VettingChecklist({
                       <span className="font-semibold">Declined</span>.
                     </p>
                   )}
-                  {(pendingStatus === 'Exception Approved' || !meetsBaseline) && (
+                  {(pendingStatus === 'Exception Approved' || !meetsBaseline || checklist.otherMode) && (
                     <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
                       <label className="flex items-start gap-2">
                         <input
@@ -718,17 +711,20 @@ export function VettingChecklist({
                           checked={!!checklist.otherMode}
                           onChange={(e) => {
                             setDirty(true)
-                            setChecklist((c) => ({ ...c, otherMode: e.target.checked }))
+                            const on = e.target.checked
+                            setChecklist((c) => reevaluate({ ...c, otherMode: on }, autoInputs))
                           }}
                         />
                         <span>
                           LTL, expedited, forwarder, air, or co-brokered carrier
-                          (Policy Section 9). Note only, no safety letter.
+                          (Policy Section 9). An approver confirms it with an
+                          onboarding note; Bluewire, authority age, and
+                          inspections don’t apply.
                         </span>
                       </label>
                       {exceptionMissing.length > 0 ? (
                         <div className="mt-2">
-                          <span className="font-semibold">Still needed before Exception Approved:</span>
+                          <span className="font-semibold">Still needed before an approver signs off:</span>
                           <ul className="ml-4 list-disc">
                             {exceptionMissing.map((m) => (
                               <li key={m}>{m}</li>

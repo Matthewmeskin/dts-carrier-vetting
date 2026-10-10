@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { exceptionReadiness, readinessMessage } from '@/lib/exceptionGate'
+import { exceptionReadiness, readinessMessage, requiredLevelFor } from '@/lib/exceptionGate'
 import { getSessionUser } from '@/lib/authServer'
 import { logCarrierEvent } from '@/lib/auditLog'
 import { requiredApprovalLevel, levelForStatus, ROLE_LABEL, type ApprovalLevel } from '@/lib/roles'
@@ -140,19 +140,8 @@ export async function POST(request: Request) {
       .maybeSingle()
     if (!carrier) return NextResponse.json({ error: 'Carrier not found' }, { status: 404 })
 
-    // The level this carrier actually needs, from its current score + rating.
-    const { data: scoreRow } = await (supabaseAdmin as any)
-      .from('carrier_scores')
-      .select('approval_level')
-      .eq('dot_number', dot)
-      .order('release_month', { ascending: false })
-      .order('upload_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    const level: ApprovalLevel = levelForStatus(
-      requestedStatus,
-      requiredApprovalLevel(scoreRow?.approval_level, (carrier as any).safety_rating)
-    )
+    // The level this carrier actually needs under the policy.
+    const level: ApprovalLevel = await requiredLevelFor(dot, requestedStatus)
     if (level === 'none') {
       return NextResponse.json(
         { error: 'This carrier does not need Manager or Director approval — it can be approved directly.' },
@@ -160,8 +149,8 @@ export async function POST(request: Request) {
       )
     }
 
-    if (requestedStatus === 'Exception Approved') {
-      const ready = await exceptionReadiness(dot)
+    {
+      const ready = await exceptionReadiness(dot, { status: requestedStatus })
       if (!ready.ok) {
         return NextResponse.json({ error: readinessMessage(ready), missing: ready.missing }, { status: 400 })
       }

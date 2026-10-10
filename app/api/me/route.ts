@@ -9,6 +9,12 @@ export async function GET() {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ user: null }, { status: 401 })
   return NextResponse.json({
-    user: { email: user.email, role: user.role, fullName: user.fullName },
+    user: {
+      email: user.email,
+      role: user.role,
+      fullName: user.fullName,
+      policyAckVersion: user.policyAckVersion,
+      policyAckAt: user.policyAckAt,
+    },
   })
 }

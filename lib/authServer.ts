@@ -7,6 +7,8 @@ export interface SessionUser {
   email: string | null
   role: Role
   fullName: string | null
+  policyAckVersion: string | null
+  policyAckAt: string | null
 }
 
 /**
@@ -23,7 +25,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const { data: profile } = await (supabaseAdmin as any)
     .from('profiles')
-    .select('role, full_name, email')
+    .select('role, full_name, email, policy_ack_version, policy_ack_at')
     .eq('id', user.id)
     .maybeSingle()
 
@@ -33,5 +35,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     email: profile?.email ?? user.email ?? null,
     role,
     fullName: profile?.full_name ?? null,
+    policyAckVersion: profile?.policy_ack_version ?? null,
+    policyAckAt: profile?.policy_ack_at ?? null,
   }
 }

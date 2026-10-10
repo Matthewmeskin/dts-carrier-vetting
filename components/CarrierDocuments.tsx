@@ -21,7 +21,7 @@ const DOC_TYPES = [
   { value: 'exception_note', label: 'Exception Note' },
   { value: 'osint_report', label: 'OSINT Report' },
   { value: 'fmcsa_screenshot', label: 'FMCSA Screenshot' },
-  { value: 'safety_plan', label: 'Safety Plan' },
+  { value: 'safety_plan', label: 'Safety Letter' },
   { value: 'payment_vetting_log', label: 'Payment Vetting Log' },
   { value: 'other', label: 'Other' },
 ]

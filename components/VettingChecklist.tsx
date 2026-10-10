@@ -21,6 +21,7 @@ import { Input, Select, Textarea } from './ui/Input'
 import { Badge, carrierStatusTone, type BadgeTone } from './ui/Badge'
 import { Spinner } from './ui/Spinner'
 import { ExceptionNoteComposer } from './ExceptionNoteComposer'
+import { noteIsFilled } from '@/lib/exceptionNote'
 import { cn, formatDateTime } from '@/lib/utils'
 import { uploadCarrierDocument } from '@/lib/uploadDocument'
 import { INACTIVE_CARRIER_HOLD_NOTE } from '@/lib/statusNotes'
@@ -80,7 +81,7 @@ const ATTACH_TYPES = [
   { value: 'noa', label: 'Notice of Assignment (NOA)' },
   { value: 'osint_report', label: 'OSINT Report' },
   { value: 'fmcsa_screenshot', label: 'FMCSA Screenshot' },
-  { value: 'safety_plan', label: 'Safety Plan' },
+  { value: 'safety_plan', label: 'Safety Letter' },
   { value: 'other', label: 'Other' },
 ]
 
@@ -110,6 +111,7 @@ function hydrateChecklist(
       : s
   })
   base.exceptionNote = saved.exceptionNote ?? record.exception_note ?? ''
+  base.otherMode = !!saved.otherMode
   return base
 }
 
@@ -417,8 +419,8 @@ export function VettingChecklist({
     const exceptionStepChecked = checklist.steps.find(
       (s) => s.id === 'exception_note'
     )?.completed
-    return anyRequiredIncomplete || !!exceptionStepChecked
-  }, [checklist])
+    return anyRequiredIncomplete || !!exceptionStepChecked || pendingStatus === 'Exception Approved'
+  }, [checklist, pendingStatus])
 
   // A carrier "meets baseline" only when every required check is completed AND
   // none of them is below its threshold and manually checked. Accepting a
@@ -440,6 +442,20 @@ export function VettingChecklist({
   // Only block when we actually know the role (auth on); null role = auth off.
   const blockedApproval =
     !!role && requiredLevel !== 'none' && !roleCanApprove(role, requiredLevel)
+
+  // What the policy still needs before Exception Approved (the server checks
+  // the same thing): a note saying why, and for a score exception a signed
+  // safety letter, unless this is a Section 9 carrier.
+  const scoreDriven = ['owner_exception', 'additional_vetting', 'manager_exception'].includes(
+    (score as any)?.approval_level ?? ''
+  )
+  const hasSafetyLetter =
+    (documentTypes ?? []).includes('safety_plan') ||
+    (!!attachFile && attachType === 'safety_plan')
+  const exceptionMissing: string[] = []
+  if (!noteIsFilled(exceptionNote)) exceptionMissing.push('Exception note saying why')
+  if (scoreDriven && !checklist.otherMode && !hasSafetyLetter)
+    exceptionMissing.push('Signed safety letter (attach below as Safety Letter)')
 
   function updateStep(id: string, patch: Partial<ChecklistStep>) {
     // Any edit (check/uncheck OR a per-step note) is unsaved until the vetting
@@ -497,6 +513,27 @@ export function VettingChecklist({
       return
     }
 
+    // For Exception Approved the safety letter has to be on file before the
+    // decision is saved, so upload the attachment first.
+    let preUploaded = false
+    if (attachFile && pendingStatus === 'Exception Approved') {
+      try {
+        await uploadCarrierDocument({
+          dot,
+          file: attachFile,
+          documentType: attachType,
+          uploadedBy: reviewedBy,
+        })
+        preUploaded = true
+        setAttachFile(null)
+        if (fileRef.current) fileRef.current.value = ''
+      } catch (upErr) {
+        setMessage(`Document upload failed: ${upErr instanceof Error ? upErr.message : 'error'}`)
+        setSaving(false)
+        return
+      }
+    }
+
     try {
       const res = await fetch('/api/vetting', {
         method: 'POST',
@@ -547,7 +584,7 @@ export function VettingChecklist({
       setDirty(false)
 
       // Attach the selected document to this review, if any.
-      if (attachFile && data?.id) {
+      if (attachFile && data?.id && !preUploaded) {
         try {
           await uploadCarrierDocument({
             dot,
@@ -671,6 +708,39 @@ export function VettingChecklist({
                       (with a documented, scoped exception) or{' '}
                       <span className="font-semibold">Declined</span>.
                     </p>
+                  )}
+                  {(pendingStatus === 'Exception Approved' || !meetsBaseline) && (
+                    <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                      <label className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={!!checklist.otherMode}
+                          onChange={(e) => {
+                            setDirty(true)
+                            setChecklist((c) => ({ ...c, otherMode: e.target.checked }))
+                          }}
+                        />
+                        <span>
+                          LTL, expedited, forwarder, air, or co-brokered carrier
+                          (Policy Section 9). Note only, no safety letter.
+                        </span>
+                      </label>
+                      {exceptionMissing.length > 0 ? (
+                        <div className="mt-2">
+                          <span className="font-semibold">Still needed before Exception Approved:</span>
+                          <ul className="ml-4 list-disc">
+                            {exceptionMissing.map((m) => (
+                              <li key={m}>{m}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : (
+                        <p className="mt-2 font-semibold text-green-700">
+                          Note{scoreDriven && !checklist.otherMode ? ' and safety letter' : ''} in. Ready for a Director.
+                        </p>
+                      )}
+                    </div>
                   )}
                   {pendingStatus === 'On Hold' && (
                     <p className="mt-1 text-xs text-gray-600">

@@ -70,6 +70,8 @@ export interface VettingChecklist {
   steps: ChecklistStep[]
   exceptionNoteRequired: boolean
   exceptionNote: string
+  /** Policy Section 9 carrier (LTL, expedited, forwarder, air, co-brokered). */
+  otherMode?: boolean
   finalStatus: string | null
   reviewedBy: string | null
   reviewedAt: string | null

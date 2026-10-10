@@ -19,7 +19,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   exception_note: 'Exception Note',
   osint_report: 'OSINT Report',
   fmcsa_screenshot: 'FMCSA Screenshot',
-  safety_plan: 'Safety Plan',
+  safety_plan: 'Safety Letter',
   payment_vetting_log: 'Payment Vetting Log',
   other: 'Document',
 }

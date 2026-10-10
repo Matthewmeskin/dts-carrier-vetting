@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { exceptionReadiness, readinessMessage } from '@/lib/exceptionGate'
 import { getSessionUser } from '@/lib/authServer'
 import { logCarrierEvent } from '@/lib/auditLog'
 import { requiredApprovalLevel, levelForStatus, ROLE_LABEL, type ApprovalLevel } from '@/lib/roles'
@@ -157,6 +158,13 @@ export async function POST(request: Request) {
         { error: 'This carrier does not need Manager or Director approval — it can be approved directly.' },
         { status: 400 }
       )
+    }
+
+    if (requestedStatus === 'Exception Approved') {
+      const ready = await exceptionReadiness(dot)
+      if (!ready.ok) {
+        return NextResponse.json({ error: readinessMessage(ready), missing: ready.missing }, { status: 400 })
+      }
     }
 
     const { data: rec } = await supabaseAdmin

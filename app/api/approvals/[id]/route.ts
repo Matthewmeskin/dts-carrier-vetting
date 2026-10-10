@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getSessionUser } from '@/lib/authServer'
 import { logCarrierEvent } from '@/lib/auditLog'
+import { exceptionReadiness, readinessMessage } from '@/lib/exceptionGate'
 import { roleCanApprove, ROLE_LABEL, type ApprovalLevel } from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
@@ -52,6 +53,13 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       .select('id')
       .eq('dot_number', dot)
       .maybeSingle()
+
+    if (decision === 'approved' && req.requested_status === 'Exception Approved') {
+      const ready = await exceptionReadiness(dot)
+      if (!ready.ok) {
+        return NextResponse.json({ error: readinessMessage(ready), missing: ready.missing }, { status: 400 })
+      }
+    }
 
     if (decision === 'approved') {
       const { error: cErr } = await supabaseAdmin

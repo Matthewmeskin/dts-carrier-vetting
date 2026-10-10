@@ -4,6 +4,7 @@ import { TablesUpdate } from '@/lib/database.types'
 import { REVET_INTERVAL_OPTIONS } from '@/lib/revet'
 import { logCarrierEvent } from '@/lib/auditLog'
 import { getSessionUser } from '@/lib/authServer'
+import { exceptionReadiness, readinessMessage } from '@/lib/exceptionGate'
 import {
   APPROVING_STATUSES,
   requiredApprovalLevel,
@@ -111,6 +112,20 @@ export async function PATCH(
           },
           { status: 403 }
         )
+      }
+    }
+
+    if (carrier_status === 'Exception Approved') {
+      const { data: cur } = await supabaseAdmin
+        .from('carriers')
+        .select('carrier_status')
+        .eq('dot_number', dot)
+        .maybeSingle()
+      if ((cur as any)?.carrier_status !== 'Exception Approved') {
+        const ready = await exceptionReadiness(dot)
+        if (!ready.ok) {
+          return NextResponse.json({ error: readinessMessage(ready), missing: ready.missing }, { status: 400 })
+        }
       }
     }
 

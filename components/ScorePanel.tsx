@@ -52,9 +52,6 @@ const SHORT_LABEL: Record<string, string> = {
   judicial_hellholes_score: 'Judicial Hellholes',
 }
 
-// Any score under this reads red, whatever its own pass line.
-const LOW_SCORE = 60
-
 function requirementNote(req: string): string {
   if (req === 'min30') return `≥ ${MIN_30_THRESHOLD}`
   if (req === 'perfect') return `= ${PERFECT_SCORE}`
@@ -202,14 +199,14 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
                   ? (prev[f.key as keyof ScoreRecord] as number | null)
                   : null
                 const d = val != null && prevVal != null ? val - prevVal : null
-                // Policy: any score under 60 is marked red, even where the
-                // category's own pass line is lower (the 30s).
-                const below60 = !ignored && val != null && val < LOW_SCORE
+                // Policy: a category reads red only when it fails its own
+                // threshold (Crash, Violation, CSA Basics and Driver OOS at 30).
+                const failing = !ignored && pass === false
                 const tone = ignored
                   ? 'border-gray-200 bg-gray-50'
-                  : pass && !below60
-                    ? 'border-green-200 bg-green-50'
-                    : 'border-red-200 bg-red-50'
+                  : failing
+                    ? 'border-red-200 bg-red-50'
+                    : 'border-green-200 bg-green-50'
                 return (
                   <div
                     key={f.key}
@@ -226,7 +223,7 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
                         </span>
                       </div>
                       <div className="flex items-baseline gap-1.5">
-                        <span className={cn('text-lg font-bold', below60 ? 'text-red-700' : 'text-gray-900')}>
+                        <span className={cn('text-lg font-bold', failing ? 'text-red-700' : 'text-gray-900')}>
                           {formatScore(val)}
                         </span>
                         {d !== null && Math.abs(d) >= 0.01 && (
@@ -248,7 +245,7 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
                           'text-lg font-bold',
                           pass ? 'text-green-600' : 'text-red-600'
                         )}
-                        title={pass ? (below60 ? 'Passes its threshold, but under 60' : 'Passes') : 'Below its threshold'}
+                        title={pass ? 'Passes' : 'Below its threshold'}
                       >
                         {pass ? '✓' : '✕'}
                       </span>
@@ -262,8 +259,8 @@ export function ScorePanel({ scores: rawScores }: { scores: ScoreRecord[] }) {
               {MIN_30_THRESHOLD}. Critical/Acute Violation, New Entrant, MCS-150,
               and Safety Rating must be {PERFECT_SCORE}. Judicial Hellholes is not
               considered. A carrier clears automatically at GAP ≥ {GAP_THRESHOLD}
-              with every category meeting its threshold. Any score under {LOW_SCORE} is
-              shown in red.
+              with every category meeting its threshold. A category is shown in red
+              only when it fails its threshold.
             </p>
 
             <div className="mt-4">

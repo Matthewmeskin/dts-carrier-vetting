@@ -92,6 +92,14 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     )
   }
 
+  // HARD STOP — FMCSA out of service order (Policy Section 2). RMIS reports it
+  // in OperatingStatus; a past OutOfServiceDate alone is a lifted order.
+  if (/out.of.service/i.test(data.operatingStatus || '')) {
+    hardStops.push(
+      `FMCSA out of service order in effect — operating status "${data.operatingStatus}"`
+    )
+  }
+
   if (data.saferActiveStatus !== 'ACTIVE') {
     hardStops.push(
       `Carrier is not active in SAFER — status: "${data.saferActiveStatus}"`
@@ -171,7 +179,8 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
     )
   }
 
-  // HARD STOP — Authority age (Policy Section 7, <90 days)
+  // Authority under 90 days. Kept in hard_stops so it blocks tendering until an
+  // approver grants Exception Approved, which is the policy's exception path.
   const authorityDate = data.authorityOriginalDate
     ? parseISO(data.authorityOriginalDate)
     : null
@@ -182,8 +191,8 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
   if (authorityDays !== null && authorityDays < AUTHORITY_NEW_CARRIER_DAYS) {
     hardStops.push(
       `Authority is only ${authorityDays} days old (under 90 days) — ` +
-      `requires senior approval, direct insurance verification, pickup verification, ` +
-      `live tracking, and one-load limitation`
+      `exception only (Policy Section 4): low-risk freight, verified identity, insurance ` +
+      `confirmed with the agent, pickup verification, live tracking, one-load limit`
     )
   }
 

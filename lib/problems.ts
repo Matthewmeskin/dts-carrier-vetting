@@ -54,6 +54,7 @@ const HARD_STOP_CATEGORIES: {
   label: string
   test: RegExp
 }[] = [
+  { key: 'hs:oos', label: 'FMCSA out of service order', test: /out of service order/i },
   { key: 'hs:authority', label: 'No active operating authority', test: /operating authority/i },
   { key: 'hs:safer', label: 'Not active in SAFER', test: /SAFER/i },
   { key: 'hs:rating', label: 'Unsatisfactory / Conditional safety rating', test: /safety rating/i },

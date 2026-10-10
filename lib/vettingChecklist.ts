@@ -165,7 +165,7 @@ export function createDefaultChecklist(): VettingChecklist {
         id: 'authority_age',
         category: 'risk',
         label: 'Confirmed continuous authority age (365 days minimum or documented exception)',
-        description: 'Check OriginalAuthorityGrantDate in RMIS. Less than 365 days requires documented exception. Less than 90 days requires senior approval and enhanced controls.',
+        description: 'Check OriginalAuthorityGrantDate in RMIS. Less than 365 days requires a documented exception. Less than 90 days is an exception only for low-risk freight, with verified identity, insurance confirmed with the agent, pickup verification, live tracking, and a one-load limit.',
         policyRef: 'Section 7',
         required: true,
         completed: false,

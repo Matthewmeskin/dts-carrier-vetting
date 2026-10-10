@@ -17,6 +17,8 @@ import { exceptionState } from './exceptions'
 /** GAP below this is the owner/director exception band (§9.4). */
 export const GAP_DEVIATION_THRESHOLD = 60
 
+const NEVER_COVERED = [/out of service order/i, /operating authority/i, /not active in SAFER/i, /safety rating/i]
+
 const DO_NOT_USE_STATUSES = new Set(['Declined', 'On Hold', 'Do Not Use', 'Suspended'])
 
 export interface EligibilityInput {
@@ -58,8 +60,14 @@ export function evaluateEligibility(c: EligibilityInput, now: number = Date.now(
   const status = c.carrier_status ?? ''
   if (DO_NOT_USE_STATUSES.has(status)) reasons.push(`Carrier is ${status}`)
 
-  if (hs.length > 0 && !covered) {
-    for (const h of hs) reasons.push(`Open hard stop: ${h}`)
+  // Policy Section 2: true hard stops are never covered by an exception. Only
+  // new authority (a Section 4 exception) and insurance not yet showing in RMIS
+  // (Section 9 carriers onboarded on a certificate) can be.
+  const absolute = hs.filter((h) => NEVER_COVERED.some((re) => re.test(h)))
+  for (const h of absolute) reasons.push(`Open hard stop: ${h}`)
+  const coverable = hs.filter((h) => !absolute.includes(h))
+  if (coverable.length > 0 && !covered) {
+    for (const h of coverable) reasons.push(`Open hard stop: ${h}`)
     if (exception === 'aged') reasons.push('Exception expired — re-vet overdue with RMIS still not updated')
   }
   const rating = (c.safety_rating ?? '').trim().toLowerCase()

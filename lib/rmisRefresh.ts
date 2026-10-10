@@ -92,6 +92,7 @@ export function buildInsuranceRow(
     general_expiration_date: nullIfEmpty(parsed.generalExpirationDate),
     rmis_is_certified: parsed.rmisIsCertified,
     rmis_certification_notes: parsed.certificationNotes,
+    rmis_scheduled_vehicles: parsed.scheduledVehicles,
     broker_carrier_agreement_on_file: parsed.brokerCarrierAgreementOnFile,
     broker_carrier_agreement_date: nullIfEmpty(parsed.brokerCarrierAgreementDate),
     broker_carrier_agreement_title: parsed.brokerCarrierAgreementTitle,

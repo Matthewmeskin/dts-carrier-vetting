@@ -9,6 +9,7 @@ import { Spinner } from './ui/Spinner'
 import { cn, formatDateTime, formatRelative } from '@/lib/utils'
 import type { MapVehicle } from './FleetMap'
 import type { EldFleetAnalysis, EldFlag } from '@/lib/eldAnalysis'
+import { normVin } from './ScheduledVehicles'
 
 // Leaflet touches `window` on import, so load the map only on the client.
 const FleetMap = dynamic(() => import('./FleetMap').then((m) => m.FleetMap), {
@@ -95,9 +96,12 @@ type EldSortKey = 'vehicle' | 'vin' | 'speed' | 'report'
 function LocationTable({
   rows,
   footer,
+  scheduled,
 }: {
   rows: EldLocation[]
   footer?: React.ReactNode
+  // Normalized VINs on the auto policy schedule; empty = no schedule to compare
+  scheduled: Set<string>
 }) {
   const [sortKey, setSortKey] = useState<EldSortKey>('report')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -189,6 +193,15 @@ function LocationTable({
                   <div className="font-mono text-xs">
                     {v.vehicle?.vin || '—'}
                   </div>
+                  {scheduled.size > 0 && v.vehicle?.vin && (
+                    scheduled.has(normVin(v.vehicle.vin)) ? (
+                      <div className="text-[11px] text-green-700">On policy schedule</div>
+                    ) : (
+                      <div className="text-[11px] font-medium text-amber-700">
+                        Not on policy schedule
+                      </div>
+                    )
+                  )}
                   {v.vehicle?.licensePlateNumber && (
                     <div className="text-xs text-gray-400">
                       {[
@@ -251,10 +264,14 @@ function LocationTable({
 export function EldPanel({
   dot,
   eldEnrolled,
+  scheduledVins,
 }: {
   dot: string
   eldEnrolled?: boolean | null
+  // VINs scheduled on the carrier's auto policy (RMIS), to cross-check trucks
+  scheduledVins?: string[]
 }) {
+  const scheduled = new Set((scheduledVins ?? []).map(normVin).filter(Boolean))
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -430,6 +447,27 @@ export function EldPanel({
                 see the updated status.
               </div>
             )}
+            {(() => {
+              // Tracked trucks whose VIN isn't on the insurer's vehicle schedule.
+              if (scheduled.size === 0) return null
+              const vins = vehicles.map((v) => normVin(v.vehicle?.vin)).filter(Boolean)
+              if (vins.length === 0) return null
+              const off = vins.filter((v) => !scheduled.has(v)).length
+              return (
+                <p
+                  className={cn(
+                    'mt-3 rounded-md border px-2.5 py-1.5 text-xs',
+                    off > 0
+                      ? 'border-amber-200 bg-amber-50 text-amber-800'
+                      : 'border-green-200 bg-green-50 text-green-700'
+                  )}
+                >
+                  {off > 0
+                    ? `${off} of ${vins.length} tracked vehicle${vins.length === 1 ? '' : 's'} not on the insurance vehicle schedule (${scheduled.size} VINs scheduled) — confirm the truck is covered before dispatch.`
+                    : `All ${vins.length} tracked vehicle${vins.length === 1 ? ' is' : 's are'} on the insurance vehicle schedule.`}
+                </p>
+              )
+            })()}
             {analysis.flags.length > 0 ? (
               <ul className="mt-3 space-y-1.5">
                 {analysis.flags.map((f, i) => (
@@ -503,6 +541,7 @@ export function EldPanel({
             })()}
             <LocationTable
               rows={vehicles}
+              scheduled={scheduled}
               footer={
                 <p className="mt-2 text-xs text-gray-400">
                   {vehicles.length} vehicle{vehicles.length === 1 ? '' : 's'}{' '}
@@ -563,7 +602,7 @@ export function EldPanel({
             )}
             {vinResult && (
               <div className="mt-3">
-                <LocationTable rows={[vinResult]} />
+                <LocationTable rows={[vinResult]} scheduled={scheduled} />
               </div>
             )}
             {vinSearched && !vinResult && !vinMessage && !vinError && (

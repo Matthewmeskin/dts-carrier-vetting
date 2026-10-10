@@ -127,6 +127,10 @@ export interface InsuranceRecord {
   general_expiration_date: string | null
   rmis_is_certified: boolean | null
   rmis_certification_notes: string[] | null
+  // Vehicles on the auto policy, from RMIS <ScheduleOfVehicles>
+  rmis_scheduled_vehicles:
+    | { vin: string; year?: string; make?: string; model?: string; type?: string; gvwr?: string }[]
+    | null
   broker_carrier_agreement_on_file: boolean | null
   broker_carrier_agreement_date: string | null
   broker_carrier_agreement_title: string | null

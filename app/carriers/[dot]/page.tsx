@@ -526,7 +526,11 @@ export default function CarrierDetailPage({
       <InsurancePanel insurance={displayInsurance} />
 
       {/* ELD — live fleet location */}
-      <EldPanel dot={dot} eldEnrolled={insurance?.rmis_eld_enrolled ?? null} />
+      <EldPanel
+        dot={dot}
+        eldEnrolled={insurance?.rmis_eld_enrolled ?? null}
+        scheduledVins={(insurance?.rmis_scheduled_vehicles ?? []).map((v) => v.vin)}
+      />
 
       {/* Safety Scores */}
       <ScorePanel scores={scores} />

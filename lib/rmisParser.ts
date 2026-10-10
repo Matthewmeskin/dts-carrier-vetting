@@ -93,6 +93,17 @@ export interface ParsedRMISData {
   usTotalCrashes: number
   // Fleet
   totalPowerUnits: number
+  // Vehicles scheduled on the carrier's auto policy (RMIS <ScheduleOfVehicles>)
+  scheduledVehicles: ScheduledVehicle[]
+}
+
+export type ScheduledVehicle = {
+  vin: string
+  year?: string
+  make?: string
+  model?: string
+  type?: string
+  gvwr?: string
 }
 
 // Pull a tag's text value straight from the XML string (robust to nesting).
@@ -162,6 +173,24 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     const limArray = Array.isArray(limits) ? limits : [limits]
     const match = limArray.find((l: any) => l?.LimitDescription === description)
     return Number(match?.LimitAmount) ?? 0
+  }
+
+  // Scheduled auto VINs — read from the raw text so a VIN or year is never
+  // coerced to a number by the XML parser.
+  const schedule = /<ScheduleOfVehicles>([\s\S]*?)<\/ScheduleOfVehicles>/i.exec(xmlString)?.[1] ?? ''
+  const scheduledVehicles: ScheduledVehicle[] = []
+  for (const m of Array.from(schedule.matchAll(/<VIN>([\s\S]*?)<\/VIN>/gi))) {
+    const vin = rawTag(m[1], 'VINNumber')
+    if (!vin) continue
+    const opt = (name: string) => rawTag(m[1], name) || undefined
+    scheduledVehicles.push({
+      vin,
+      year: opt('Year'),
+      make: opt('Make'),
+      model: opt('Model'),
+      type: opt('VehicleType'),
+      gvwr: opt('GVWR'),
+    })
   }
 
   // Certification notes
@@ -289,5 +318,7 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     usTotalCrashes: Number(crashes.US_Total ?? 0),
 
     totalPowerUnits: Number(dotTesting.Tot_Pwr ?? 0),
+
+    scheduledVehicles,
   }
 }

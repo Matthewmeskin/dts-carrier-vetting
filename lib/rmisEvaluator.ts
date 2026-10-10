@@ -322,7 +322,24 @@ export function evaluateRMIS(data: ParsedRMISData): RMISEvaluation {
       lower.includes('empliability') ||
       lower.includes('employers liability') ||
       lower.includes("employer's liability")
+    // Newer RMIS certification alerts: identity verification (IDV), recently
+    // changed DOT contact details, and RMIS risk-factor alerts are fraud
+    // signals and get flagged; a pending (not yet lapsed) insurance expiration
+    // stays informational — the coverage dates already drive the hard stops.
+    const isIdv = /\bidv\b|identity verif/.test(lower)
+    const idvOk = isIdv && /\b(pass(ed)?|verified|complete(d)?)\b/.test(lower) &&
+      !/\b(not|un|fail|pending|incomplete)/.test(lower)
+    const isContactAge = /contact (info(rmation)? )?age|dot contact/.test(lower)
+    const isRiskFactor = /risk ?factor/.test(lower)
+    const isPendingExpiry = /pending/.test(lower) && /expir/.test(lower)
     if (isWorkersComp) {
+      info.push(`RMIS note: ${note}`)
+    } else if (isIdv) {
+      if (idvOk) info.push(`RMIS identity verification: ${note}`)
+      else flags.push(`RMIS identity verification: ${note}`)
+    } else if (isContactAge || isRiskFactor) {
+      flags.push(`RMIS ${isRiskFactor ? 'risk factor' : 'DOT contact'} alert: ${note}`)
+    } else if (isPendingExpiry) {
       info.push(`RMIS note: ${note}`)
     } else if (lower.includes('expired') || lower.includes('no active')) {
       flags.push(`RMIS certification note: ${note}`)

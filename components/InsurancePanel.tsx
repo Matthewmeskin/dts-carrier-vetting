@@ -3,6 +3,7 @@
 import { InsuranceRecord } from '@/lib/types'
 import { Card, CardHeader, CardBody } from './ui/Card'
 import { Badge, coverageStatusTone } from './ui/Badge'
+import { ScheduledVehicles } from './ScheduledVehicles'
 import {
   cn,
   formatCurrency,
@@ -177,11 +178,14 @@ export function InsurancePanel({
             carrier.
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {coverages.map((c) => (
-              <CoverageCard key={c.title} c={c} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {coverages.map((c) => (
+                <CoverageCard key={c.title} c={c} />
+              ))}
+            </div>
+            <ScheduledVehicles vehicles={insurance.rmis_scheduled_vehicles} />
+          </>
         )}
       </CardBody>
     </Card>

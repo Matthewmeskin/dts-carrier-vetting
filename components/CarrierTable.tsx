@@ -460,6 +460,38 @@ const COL = {
 
 // Persisted list view (filters + scroll) so returning from a carrier detail
 // page lands the user back exactly where they were instead of resetting.
+// Vetting work: why a carrier needs a vetting pass, to drill into one reason.
+type VetFilter = '' | 'any' | 'new' | 'pending' | 'scores' | 'overdue' | 'due14' | 'due30'
+const VET_OPTIONS: { value: Exclude<VetFilter, ''>; label: string }[] = [
+  { value: 'any', label: 'Needs vetting or re-vetting (any reason)' },
+  { value: 'new', label: 'Never vetted' },
+  { value: 'pending', label: 'Pending review' },
+  { value: 'scores', label: 'Scores flagged for re-vet' },
+  { value: 'overdue', label: 'Re-vet overdue' },
+  { value: 'due14', label: 'Re-vet due within 14 days' },
+  { value: 'due30', label: 'Re-vet due within 30 days' },
+]
+const VET_VALUES = new Set<string>(VET_OPTIONS.map((o) => o.value))
+
+function vetMatches(c: CarrierSummary, f: VetFilter): boolean {
+  if (!f) return true
+  const pending = c.carrier_status === 'Pending Review'
+  if (f === 'new') return pending && !c.last_reviewed
+  if (f === 'pending') return pending
+  if (f === 'scores') return !!c.requires_revetting
+  // Re-vet clocks don't run for carriers disabled in Brokerware.
+  const r = isBrokerwareDisabled(c.brokerware_status)
+    ? null
+    : computeRevetStatus(c.last_reviewed, c.created_at, c.revet_interval_days, c.revet_due_override)
+  const days = r?.daysUntil ?? null
+  const overdue = r?.state === 'overdue'
+  if (f === 'overdue') return overdue
+  if (f === 'due14') return days !== null && days >= 0 && days <= 14
+  if (f === 'due30') return days !== null && days >= 0 && days <= 30
+  // any: every reason a carrier needs a vetting pass now or within two weeks
+  return pending || !!c.requires_revetting || overdue || (days !== null && days >= 0 && days <= 14)
+}
+
 const VIEW_KEY = 'dts.carrierTable.view.v1'
 
 // The last-used "put on hold" note is remembered so the canned text is one edit
@@ -474,7 +506,9 @@ interface PersistedView {
   status: StatusFilter
   sortKey: SortKey
   sortDir: SortDir
-  revettingOnly: boolean
+  vetting?: string
+  /** Older saved views: the checkbox the Vetting work filter replaced. */
+  revettingOnly?: boolean
   problems: string[]
   businessTypes: string[]
   missingDocs: string[]
@@ -518,7 +552,7 @@ export function CarrierTable({
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StatusFilter>('BrokerwareActive')
-  const [revettingOnly, setRevettingOnly] = useState(false)
+  const [vetting, setVetting] = useState<VetFilter>('')
   const [problems, setProblems] = useState<string[]>([])
   const [businessTypes, setBusinessTypes] = useState<string[]>([])
   const [missingDocs, setMissingDocs] = useState<string[]>([])
@@ -552,7 +586,8 @@ export function CarrierTable({
     const v = saved
     if (typeof v.search === 'string') setSearch(v.search)
     if (v.status && STATUS_VALUES.has(v.status)) setStatus(v.status)
-    if (typeof v.revettingOnly === 'boolean') setRevettingOnly(v.revettingOnly)
+    if (typeof v.vetting === 'string' && VET_VALUES.has(v.vetting)) setVetting(v.vetting as VetFilter)
+    else if (v.revettingOnly === true) setVetting('scores')
     if (Array.isArray(v.problems)) setProblems(v.problems.filter((x) => typeof x === 'string'))
     if (Array.isArray(v.businessTypes))
       setBusinessTypes(v.businessTypes.filter((x) => typeof x === 'string'))
@@ -621,7 +656,6 @@ export function CarrierTable({
         const hay = `${c.legal_name ?? ''} ${c.dba_name ?? ''} ${c.dot_number}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
-      if (revettingOnly && !c.requires_revetting) return false
       if (assignee === 'me') {
         if (!me || c.assignee_id !== me.id) return false
       } else if (assignee === 'none') {
@@ -705,7 +739,7 @@ export function CarrierTable({
       }
     })
     return rows
-  }, [carriers, search, status, revettingOnly, hasBrokerwareData, assignee, me])
+  }, [carriers, search, status, hasBrokerwareData, assignee, me])
 
   // Per-problem carrier counts for the multi-select, over the base set.
   const facets = useMemo(() => problemFacets(base), [base])
@@ -737,7 +771,8 @@ export function CarrierTable({
 
   // Apply the selected problems (ANY match) and business types (membership),
   // then sort by the active column/direction.
-  const filtered = useMemo(() => {
+  // Every filter but Vetting work, so its options can show their counts.
+  const beforeVet = useMemo(() => {
     let rows = base
     if (problems.length > 0) {
       rows = rows.filter((c) => {
@@ -759,6 +794,18 @@ export function CarrierTable({
         passesHaul(c.last_hauled_at, haulPreset, haulFrom, haulTo)
       )
     }
+    return rows
+  }, [base, problems, businessTypes, missingDocs, haulPreset, haulFrom, haulTo])
+
+  const vetCounts = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const o of VET_OPTIONS) out[o.value] = 0
+    for (const c of beforeVet) for (const o of VET_OPTIONS) if (vetMatches(c, o.value)) out[o.value]++
+    return out
+  }, [beforeVet])
+
+  const filtered = useMemo(() => {
+    let rows = vetting ? beforeVet.filter((c) => vetMatches(c, vetting)) : beforeVet
 
     const def = SORT_COLS[sortKey]
     const dir = sortDir === 'asc' ? 1 : -1
@@ -778,7 +825,7 @@ export function CarrierTable({
     })
 
     return rows
-  }, [base, problems, businessTypes, missingDocs, haulPreset, haulFrom, haulTo, sortKey, sortDir])
+  }, [beforeVet, vetting, sortKey, sortDir])
 
   // Virtualize the rows so only what's on screen is rendered — smooth scrolling
   // even with the full 700+ carrier roster.
@@ -812,7 +859,7 @@ export function CarrierTable({
           status,
           sortKey,
           sortDir,
-          revettingOnly,
+          vetting,
           problems,
           businessTypes,
           missingDocs,
@@ -831,7 +878,7 @@ export function CarrierTable({
     status,
     sortKey,
     sortDir,
-    revettingOnly,
+    vetting,
     problems,
     businessTypes,
     missingDocs,
@@ -871,7 +918,7 @@ export function CarrierTable({
   const hasActiveFilters =
     search.trim() !== '' ||
     status !== 'BrokerwareActive' ||
-    revettingOnly ||
+    vetting !== '' ||
     problems.length > 0 ||
     businessTypes.length > 0 ||
     missingDocs.length > 0 ||
@@ -884,7 +931,7 @@ export function CarrierTable({
   const clearFilters = useCallback(() => {
     setSearch('')
     setStatus('BrokerwareActive')
-    setRevettingOnly(false)
+    setVetting('')
     setProblems([])
     setBusinessTypes([])
     setMissingDocs([])
@@ -1176,15 +1223,21 @@ export function CarrierTable({
             />
           </div>
         </div>
-        <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={revettingOnly}
-            onChange={(e) => setRevettingOnly(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-dts-blue focus:ring-dts-blue"
-          />
-          Requires revetting
-        </label>
+        <div className="w-64">
+          <Select
+            label="Vetting work"
+            value={vetting}
+            onChange={(e) => setVetting(e.target.value as VetFilter)}
+            title="Carriers that need a vetting pass, and why. Counts reflect the other filters."
+          >
+            <option value="">Any</option>
+            {VET_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label} ({vetCounts[o.value] ?? 0})
+              </option>
+            ))}
+          </Select>
+        </div>
         <div className="ml-auto flex items-end gap-3 pb-2">
           <div className="flex items-center gap-2">
             {hasActiveFilters && (

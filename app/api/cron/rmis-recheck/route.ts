@@ -43,7 +43,8 @@ export async function POST(request: Request) {
           .limit(20000)
         for (const r of data ?? []) {
           const d = String(r.dot_number)
-          if (!latest.has(d)) latest.set(d, { cert: !!r.rmis_is_certified, at: Date.parse(r.fetched_at ?? '') || 0 })
+          // null = non monitored (not attached to our RMIS); a recheck can't certify it.
+          if (!latest.has(d)) latest.set(d, { cert: r.rmis_is_certified !== false, at: Date.parse(r.fetched_at ?? '') || 0 })
         }
       }
       dots = Array.from(latest.entries())

@@ -185,10 +185,14 @@ export async function GET(request: NextRequest) {
       const v: any = latestVetting[dot]
       // Distinguish "not in RMIS" (we looked and RMIS had no record) from
       // "pending" (not pulled yet) so the dashboard isn't ambiguously blank.
+      // A non monitored lookup (carrier not attached to our RMIS client)
+      // stores rmis_is_certified = null: that carrier is not in our RMIS.
       const rmisStatus: CarrierSummary['rmis_status'] = ins
-        ? ins.rmis_is_certified
-          ? 'certified'
-          : 'not_certified'
+        ? ins.rmis_is_certified === null
+          ? 'not_in_rmis'
+          : ins.rmis_is_certified
+            ? 'certified'
+            : 'not_certified'
         : c.rmis_attempted_at && !c.rmis_insured_id
           ? 'not_in_rmis'
           : 'pending'

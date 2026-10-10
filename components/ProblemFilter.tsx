@@ -52,7 +52,7 @@ export function ProblemFilter({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex h-[38px] w-56 items-center justify-between rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50"
+        className="flex h-[34px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50"
       >
         <span className={cn(selected.length === 0 && 'text-gray-400')}>
           {selected.length > 0

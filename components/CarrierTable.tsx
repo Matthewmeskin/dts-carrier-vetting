@@ -1116,8 +1116,35 @@ export function CarrierTable({
 
   return (
     <Card>
-      <div className="flex flex-wrap items-end gap-3 border-b border-gray-100 px-5 py-4">
-        <div className="w-64">
+      <div className="border-b border-gray-100 px-5 py-4">
+        {/* What the filters leave, and what to do with it */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm text-gray-500">
+            <span className="font-semibold text-ink">{filtered.length}</span> carrier
+            {filtered.length === 1 ? '' : 's'} shown
+            <span className="mx-1.5 text-gray-300">·</span>
+            scores last uploaded {lastUpload ? formatDate(lastUpload) : '—'}
+          </div>
+          <div className="flex items-center gap-2">
+            {hasActiveFilters && (
+              <Button size="sm" variant="ghost" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+            >
+              Export to Excel
+            </Button>
+          </div>
+        </div>
+
+        {/* The filters, in an even grid: two rows on a wide screen */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="sm:col-span-2">
           <Input
             label="Search"
             placeholder="Carrier name or DOT number"
@@ -1125,7 +1152,22 @@ export function CarrierTable({
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="w-48">
+        <div>
+          <Select
+            label="Vetting work"
+            value={vetting}
+            onChange={(e) => setVetting(e.target.value as VetFilter)}
+            title="Carriers that need a vetting pass, and why. Counts reflect the other filters."
+          >
+            <option value="">Any (all carriers)</option>
+            {VET_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label} ({vetCounts[o.value] ?? 0})
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
           <Select
             label="Status"
             value={status}
@@ -1146,7 +1188,7 @@ export function CarrierTable({
             <option value="Disabled">Inactive / Disabled (Brokerware)</option>
           </Select>
         </div>
-        <div className="w-44">
+        <div>
           <Select
             label="Assigned to"
             value={assignee}
@@ -1162,24 +1204,14 @@ export function CarrierTable({
             ))}
           </Select>
         </div>
-        <div className="pb-[1px]">
+        <div>
           <ProblemFilter
             facets={facets}
             selected={problems}
             onChange={setProblems}
           />
         </div>
-        <div className="pb-[1px]">
-          <FacetFilter
-            label="Business Type"
-            emptyText="Any business type"
-            noun="business type"
-            options={businessTypeFacets}
-            selected={businessTypes}
-            onChange={setBusinessTypes}
-          />
-        </div>
-        <div className="pb-[1px]">
+        <div>
           <FacetFilter
             label="Missing Documents"
             emptyText="Any documents"
@@ -1187,9 +1219,21 @@ export function CarrierTable({
             options={missingDocFacets}
             selected={missingDocs}
             onChange={setMissingDocs}
+            width="w-full"
           />
         </div>
-        <div className="w-48">
+        <div>
+          <FacetFilter
+            label="Business Type"
+            emptyText="Any business type"
+            noun="business type"
+            options={businessTypeFacets}
+            selected={businessTypes}
+            onChange={setBusinessTypes}
+            width="w-full"
+          />
+        </div>
+        <div>
           <Select
             label="Last hauled"
             value={haulPreset}
@@ -1203,7 +1247,7 @@ export function CarrierTable({
             ))}
           </Select>
         </div>
-        <div className="pb-[1px]">
+        <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">
             Last hauled range
           </label>
@@ -1213,7 +1257,7 @@ export function CarrierTable({
               value={haulFrom}
               onChange={(e) => setHaulFrom(e.target.value)}
               aria-label="Last hauled from"
-              className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
             />
             <span className="text-xs text-gray-400">–</span>
             <input
@@ -1221,50 +1265,10 @@ export function CarrierTable({
               value={haulTo}
               onChange={(e) => setHaulTo(e.target.value)}
               aria-label="Last hauled to"
-              className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm"
             />
           </div>
         </div>
-        <div className="w-64">
-          <Select
-            label="Vetting work"
-            value={vetting}
-            onChange={(e) => setVetting(e.target.value as VetFilter)}
-            title="Carriers that need a vetting pass, and why. Counts reflect the other filters."
-          >
-            <option value="">Any (all carriers)</option>
-            {VET_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label} ({vetCounts[o.value] ?? 0})
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="ml-auto flex items-end gap-3 pb-2">
-          <div className="flex items-center gap-2">
-            {hasActiveFilters && (
-              <Button size="sm" variant="ghost" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={exportCsv}
-              disabled={filtered.length === 0}
-            >
-              Export to Excel
-            </Button>
-          </div>
-          <div className="text-right text-xs text-gray-500">
-            <div>
-              Last upload:{' '}
-              <span className="font-medium text-gray-700">
-                {lastUpload ? formatDate(lastUpload) : '—'}
-              </span>
-            </div>
-            <div>{filtered.length} carrier(s) shown</div>
-          </div>
         </div>
       </div>
 

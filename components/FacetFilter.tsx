@@ -56,7 +56,7 @@ export function FacetFilter({
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex h-[38px] items-center justify-between rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50',
+          'flex h-[34px] items-center justify-between rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50',
           width
         )}
       >

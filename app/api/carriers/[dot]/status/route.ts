@@ -7,6 +7,7 @@ import { getSessionUser } from '@/lib/authServer'
 import {
   APPROVING_STATUSES,
   requiredApprovalLevel,
+  levelForStatus,
   roleCanSetStatus,
   ROLE_LABEL,
   ROLE_RANK,
@@ -95,9 +96,12 @@ export async function PATCH(
         .order('upload_date', { ascending: false })
         .limit(1)
         .maybeSingle()
-      requiredLevel = requiredApprovalLevel(
-        scoreRow?.approval_level,
-        (carrierRow as any)?.safety_rating
+      requiredLevel = levelForStatus(
+        carrier_status,
+        requiredApprovalLevel(
+          scoreRow?.approval_level,
+          (carrierRow as any)?.safety_rating
+        )
       )
       if (!roleCanSetStatus(user.role, carrier_status, requiredLevel)) {
         return NextResponse.json(

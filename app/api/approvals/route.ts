@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getSessionUser } from '@/lib/authServer'
 import { logCarrierEvent } from '@/lib/auditLog'
-import { requiredApprovalLevel, ROLE_LABEL, type ApprovalLevel } from '@/lib/roles'
+import { requiredApprovalLevel, levelForStatus, ROLE_LABEL, type ApprovalLevel } from '@/lib/roles'
 import type { ApprovalRequestRow } from '@/lib/approvals'
 
 export const dynamic = 'force-dynamic'
@@ -148,9 +148,9 @@ export async function POST(request: Request) {
       .order('upload_date', { ascending: false })
       .limit(1)
       .maybeSingle()
-    const level: ApprovalLevel = requiredApprovalLevel(
-      scoreRow?.approval_level,
-      (carrier as any).safety_rating
+    const level: ApprovalLevel = levelForStatus(
+      requestedStatus,
+      requiredApprovalLevel(scoreRow?.approval_level, (carrier as any).safety_rating)
     )
     if (level === 'none') {
       return NextResponse.json(

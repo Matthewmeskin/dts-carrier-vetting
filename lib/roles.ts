@@ -27,12 +27,12 @@ export const APPROVING_STATUSES = ['Approved', 'Exception Approved']
 
 /**
  * The minimum approval role a carrier needs, from its score-derived approval
- * level and safety rating. Per the §9.4 decision summary:
- *  - Unsatisfactory / Conditional rating → Director (owner-level)
+ * level and safety rating. Policy (Oct 2026): only a director approves an
+ * exception, so every non-clean score needs a director.
+ *  - Unsatisfactory / Conditional rating → Director
  *  - GAP < 60 (owner_exception)           → Director
- *  - GAP 60–64.99 (manager_exception)     → Manager (rows scored before
- *    Oct 2026; that band now clears automatically)
- *  - Any category < 30 (additional_vetting) → Manager
+ *  - Any category below its threshold (additional_vetting) → Director
+ *  - Legacy manager_exception rows        → Director
  *  - Clean (auto_clear)                   → none
  */
 export function requiredApprovalLevel(
@@ -43,10 +43,9 @@ export function requiredApprovalLevel(
   if (r === 'unsatisfactory' || r === 'conditional') return 'director'
   switch (scoreApprovalLevel) {
     case 'owner_exception':
-      return 'director'
     case 'manager_exception':
     case 'additional_vetting':
-      return 'manager'
+      return 'director'
     default:
       return 'none'
   }
@@ -62,6 +61,15 @@ export function roleCanApprove(
   return ROLE_RANK[role] >= APPROVAL_RANK[level]
 }
 
+/**
+ * The level a status change actually needs. Exception Approved always needs a
+ * director, whatever triggered the exception (scores, authority age,
+ * inspections, or anything else outside the baseline).
+ */
+export function levelForStatus(status: string, level: ApprovalLevel): ApprovalLevel {
+  return status === 'Exception Approved' ? 'director' : level
+}
+
 /** Whether `role` may set `status` on a carrier requiring `level`. */
 export function roleCanSetStatus(
   role: Role | null | undefined,
@@ -71,5 +79,5 @@ export function roleCanSetStatus(
   if (!role) return false
   // Declines / suspensions / holds are restrictive — any signed-in user may set.
   if (!APPROVING_STATUSES.includes(status)) return true
-  return roleCanApprove(role, level)
+  return roleCanApprove(role, levelForStatus(status, level))
 }

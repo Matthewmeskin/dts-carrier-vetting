@@ -197,8 +197,8 @@ function RequestCard({
             ) : (
               <div className="mt-0.5 text-gray-600">
                 {row.required_level === 'director'
-                  ? 'GAP below 60 or a Conditional / Unsatisfactory safety rating.'
-                  : 'GAP in the 60–64.99 exception band or a category at or below 30.'}
+                  ? 'Exception: a score below its threshold, a Conditional / Unsatisfactory rating, or another baseline requirement not met.'
+                  : 'Requested before exceptions moved to directors only.'}
               </div>
             )}
           </div>

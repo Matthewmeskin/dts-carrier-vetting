@@ -175,13 +175,10 @@ export function VettingChecklist({
       })
       .catch(() => {})
   }, [])
-  const requiredLevel: ApprovalLevel = requiredApprovalLevel(
+  const scoreLevel: ApprovalLevel = requiredApprovalLevel(
     (score as any)?.approval_level,
     safetyRating
   )
-  // Only block when we actually know the role (auth on); null role = auth off.
-  const blockedApproval =
-    !!role && requiredLevel !== 'none' && !roleCanApprove(role, requiredLevel)
 
   // Submit-for-approval: saves the vetting as-is (Pending Review) and opens a
   // request in the approval queue for the required role.
@@ -436,6 +433,14 @@ export function VettingChecklist({
     [checklist]
   )
 
+  // Policy: only a director approves an exception. When the baseline isn't met
+  // the only approving option is Exception Approved, so a director is needed
+  // whatever the scores say.
+  const requiredLevel: ApprovalLevel = meetsBaseline ? scoreLevel : 'director'
+  // Only block when we actually know the role (auth on); null role = auth off.
+  const blockedApproval =
+    !!role && requiredLevel !== 'none' && !roleCanApprove(role, requiredLevel)
+
   function updateStep(id: string, patch: Partial<ChecklistStep>) {
     // Any edit (check/uncheck OR a per-step note) is unsaved until the vetting
     // record is saved — flag it so the "Unsaved changes" indicator shows.
@@ -633,15 +638,22 @@ export function VettingChecklist({
                     }}
                   >
                     {CARRIER_STATUSES.map((s) => {
+                      // Exception Approved is director-only under the policy,
+                      // even when the scores themselves are clean.
+                      const exceptionGated =
+                        s === 'Exception Approved' &&
+                        !!role &&
+                        !roleCanApprove(role, 'director')
                       const roleGated =
-                        blockedApproval && APPROVING_STATUSES.includes(s)
+                        (blockedApproval && APPROVING_STATUSES.includes(s)) ||
+                        exceptionGated
                       // Can't pick plain Approved unless baseline is satisfied.
                       const baselineGated = s === APPROVED_STATUS && !meetsBaseline
                       const gated = roleGated || baselineGated
                       const suffix = baselineGated
                         ? ' — baseline not met (use Exception Approved)'
                         : roleGated
-                          ? ` — needs ${ROLE_LABEL[requiredLevel as 'manager' | 'director']}`
+                          ? ` — needs ${exceptionGated ? 'Director' : ROLE_LABEL[requiredLevel as 'manager' | 'director']}`
                           : ''
                       return (
                         <option key={s} value={s} disabled={gated}>

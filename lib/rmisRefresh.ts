@@ -156,6 +156,22 @@ export interface RmisRefreshResult {
  * rating, archive documents, and log events. Throws 'Carrier not found' when the
  * carriers row is missing and rethrows any RMIS error that isn't "not attached".
  */
+/**
+ * Keep the latest full Expanded Carrier response per carrier, so sections
+ * the parser does not read yet (scheduled VINs, new certification note
+ * types) can be inspected and parsed against the real structure. Best
+ * effort: a failure here never fails the refresh.
+ */
+export async function keepRawResponse(dot: string, xml: string, source: string) {
+  try {
+    await (supabaseAdmin as any)
+      .from('rmis_raw_responses')
+      .upsert({ dot_number: dot, xml, source, fetched_at: new Date().toISOString() }, { onConflict: 'dot_number' })
+  } catch {
+    /* keeping the copy is optional */
+  }
+}
+
 export async function refreshCarrierRmis(
   dot: string,
   opts: { actor?: string; sourceLabel?: string } = {}
@@ -177,6 +193,7 @@ export async function refreshCarrierRmis(
       insdID: c.rmis_insured_id || undefined,
       dotNumber: c.dot_number,
     })
+    await keepRawResponse(dot, xml, sourceLabel)
   } catch (expandedErr: any) {
     if (!isNotAttachedError(expandedErr)) throw expandedErr
 
@@ -199,6 +216,7 @@ export async function refreshCarrierRmis(
         .eq('dot_number', dot)
       try {
         fullXml = await fetchExpandedCarrierXML({ insdID: basics.rmisCarrierId })
+        await keepRawResponse(dot, fullXml, sourceLabel)
       } catch (retryErr: any) {
         if (!isNotAttachedError(retryErr)) throw retryErr
       }

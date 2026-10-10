@@ -471,7 +471,8 @@ const VET_OPTIONS: { value: Exclude<VetFilter, ''>; label: string }[] = [
   { value: 'due14', label: 'Re-vet due within 14 days' },
   { value: 'due30', label: 'Re-vet due within 30 days' },
 ]
-const VET_VALUES = new Set<string>(VET_OPTIONS.map((o) => o.value))
+const VET_VALUES = new Set<string>(['', ...VET_OPTIONS.map((o) => o.value)])
+const DEFAULT_VET: VetFilter = 'any'
 
 function vetMatches(c: CarrierSummary, f: VetFilter): boolean {
   if (!f) return true
@@ -552,7 +553,8 @@ export function CarrierTable({
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StatusFilter>('BrokerwareActive')
-  const [vetting, setVetting] = useState<VetFilter>('')
+  // Opens on the work queue: everything that needs a vetting pass.
+  const [vetting, setVetting] = useState<VetFilter>(DEFAULT_VET)
   const [problems, setProblems] = useState<string[]>([])
   const [businessTypes, setBusinessTypes] = useState<string[]>([])
   const [missingDocs, setMissingDocs] = useState<string[]>([])
@@ -918,7 +920,7 @@ export function CarrierTable({
   const hasActiveFilters =
     search.trim() !== '' ||
     status !== 'BrokerwareActive' ||
-    vetting !== '' ||
+    vetting !== DEFAULT_VET ||
     problems.length > 0 ||
     businessTypes.length > 0 ||
     missingDocs.length > 0 ||
@@ -931,7 +933,7 @@ export function CarrierTable({
   const clearFilters = useCallback(() => {
     setSearch('')
     setStatus('BrokerwareActive')
-    setVetting('')
+    setVetting(DEFAULT_VET)
     setProblems([])
     setBusinessTypes([])
     setMissingDocs([])
@@ -1230,7 +1232,7 @@ export function CarrierTable({
             onChange={(e) => setVetting(e.target.value as VetFilter)}
             title="Carriers that need a vetting pass, and why. Counts reflect the other filters."
           >
-            <option value="">Any</option>
+            <option value="">Any (all carriers)</option>
             {VET_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label} ({vetCounts[o.value] ?? 0})

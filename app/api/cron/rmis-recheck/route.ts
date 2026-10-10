@@ -37,9 +37,9 @@ export async function POST(request: Request) {
       for (let i = 0; i < activeDots.length; i += 200) {
         const { data } = await (supabaseAdmin as any)
           .from('carrier_insurance')
-          .select('dot_number, rmis_is_certified, fetched_at, id')
+          .select('dot_number, rmis_is_certified, fetched_at')
           .in('dot_number', activeDots.slice(i, i + 200))
-          .order('id', { ascending: false })
+          .order('fetched_at', { ascending: false })
           .limit(20000)
         for (const r of data ?? []) {
           const d = String(r.dot_number)

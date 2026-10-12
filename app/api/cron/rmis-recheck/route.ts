@@ -11,11 +11,15 @@ export const maxDuration = 300
 // The Delta API does not always report a carrier finishing its packet (a
 // renewed GL or a new workers comp certificate), so without this a carrier
 // that is now certified keeps showing as not certified. Oldest snapshot first.
-// Body: { days?: number, batchSize?: number, dots?: string[] }. CRON_SECRET.
+// Body: { days?: number, batchSize?: number, dots?: string[] }. CRON_SECRET or
+// PORTAL_LINK_SECRET (n8n).
 export async function POST(request: Request) {
   try {
-    const auth = request.headers.get('authorization')
-    if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    const auth = request.headers.get('authorization') ?? ''
+    const ok = [process.env.CRON_SECRET, process.env.PORTAL_LINK_SECRET]
+      .filter(Boolean)
+      .some((secret) => auth === `Bearer ${secret}`)
+    if (!ok) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const body = await request.json().catch(() => ({}))

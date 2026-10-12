@@ -3,6 +3,7 @@ import { propertyLookupConfigured, runPropertyCheck } from '@/lib/propertyCheck'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 300
 
 // POST { dot, force? } — county property lookup for a carrier's FMCSA address,
 // for n8n. Bearer PORTAL_LINK_SECRET or CRON_SECRET. Same code path as the
@@ -17,6 +18,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Property lookup is not configured' }, { status: 503 })
 
   const body = await request.json().catch(() => ({}))
+  // Batch: { dots: string[] } (up to 40), for sweeps. Non-residential results
+  // are stored without an activity-log entry.
+  if (Array.isArray(body?.dots)) {
+    const dots = body.dots.map((d: unknown) => String(d ?? '').replace(/\D/g, '')).filter(Boolean).slice(0, 40)
+    const out: any[] = []
+    for (const dot of dots) {
+      try {
+        const r = await runPropertyCheck(dot, {
+          actor: 'Automated check',
+          force: body?.force === true,
+          quietUnlessResidential: true,
+        })
+        const rec = r.check?.record ?? null
+        out.push({
+          dot,
+          reused: r.reused,
+          found: !!r.check?.found,
+          source: rec?.source ?? null,
+          propertyType: rec?.propertyType ?? null,
+          error: r.error ?? null,
+        })
+      } catch (e: any) {
+        out.push({ dot, error: e?.message ?? String(e) })
+      }
+    }
+    return NextResponse.json({ results: out })
+  }
+
   const dot = String(body?.dot ?? '').replace(/\D/g, '')
   if (!dot) return NextResponse.json({ error: 'dot is required' }, { status: 400 })
   try {

@@ -1,6 +1,6 @@
 import { supabaseAdmin } from './supabase'
 import { logCarrierEvent } from './auditLog'
-import { propertySignals, type PropertyRecord } from './propertySignals'
+import { isResidential, propertySignals, type PropertyRecord } from './propertySignals'
 
 // County property record for a carrier's FMCSA address: owner, property type
 // and sale history. Smarty is tried first because its owner comes from the
@@ -210,7 +210,13 @@ async function carrierAddress(dot: string) {
 
 export async function runPropertyCheck(
   dot: string,
-  opts: { actor: string; force?: boolean }
+  opts: {
+    actor: string
+    force?: boolean
+    /** Bulk sweeps: skip the activity-log entry for a non-residential
+     *  address with nothing to flag. */
+    quietUnlessResidential?: boolean
+  }
 ): Promise<{ check: PropertyCheckRow | null; reused: boolean; error?: string }> {
   const info = await carrierAddress(dot)
   if (!info.address || !info.parts) return { check: null, reused: false, error: 'No physical address on file' }
@@ -255,8 +261,12 @@ export async function runPropertyCheck(
     .single()
   if (insErr) throw insErr
 
-  if (!error) {
-    const signals = propertySignals(record, { names: info.names, authorityDate: info.authorityDate })
+  const signals = propertySignals(record, { names: info.names, authorityDate: info.authorityDate })
+  const quiet =
+    opts.quietUnlessResidential &&
+    !isResidential(record) &&
+    !signals.some((x) => x.level !== 'info')
+  if (!error && !quiet) {
     const top = signals.find((s) => s.level === 'high') ?? signals.find((s) => s.level === 'warn')
     await logCarrierEvent({
       dot,

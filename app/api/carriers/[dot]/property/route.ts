@@ -20,26 +20,17 @@ export async function GET(_req: Request, { params }: { params: { dot: string } }
   })
 }
 
-// A machine caller (n8n) authenticates with the portal link / cron secret.
-function isMachine(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  return [process.env.PORTAL_LINK_SECRET, process.env.CRON_SECRET]
-    .filter(Boolean)
-    .some((s) => auth === `Bearer ${s}`)
-}
-
 // POST — look the address up now. Body: { force?: boolean } (skip the 30-day reuse).
 export async function POST(req: Request, { params }: { params: { dot: string } }) {
-  const machine = isMachine(req)
-  const user = machine ? null : await getSessionUser()
-  if (!machine && !user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  const user = await getSessionUser()
+  if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
   if (!propertyLookupConfigured())
     return NextResponse.json({ error: 'Property lookup is not configured' }, { status: 503 })
   const dot = params.dot.replace(/\D/g, '')
   const body = await req.json().catch(() => ({}))
   try {
     const r = await runPropertyCheck(dot, {
-      actor: user ? user.fullName || user.email || 'staff' : 'Automated check',
+      actor: user.fullName || user.email || 'staff',
       force: body?.force === true,
     })
     if (!r.check) return NextResponse.json({ error: r.error }, { status: 400 })

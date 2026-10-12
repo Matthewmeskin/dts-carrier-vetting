@@ -323,13 +323,12 @@ export async function POST(request: Request) {
         const state = exceptionState(c?.carrier_status, rv.dueDate, now.getTime())
         if (state === 'accepted') {
           if (rv.daysUntil !== null && rv.daysUntil >= 0) {
-            entry.note = `Exception runs until the re-vet is due in ${rv.daysUntil}d.`
+            entry.note = `Re-vet due in ${rv.daysUntil}d.`
           }
           acceptedExceptions.push(entry)
         } else {
           if (state === 'aged') {
-            const overdue = rv.daysUntil !== null ? Math.abs(rv.daysUntil) : null
-            entry.note = `Exception expired — re-vet overdue${overdue !== null ? ` by ${overdue}d` : ''}, RMIS still not updated.`
+            entry.note = `Exception period ended — re-vet due.`
           }
           openHardStops.push(entry)
         }

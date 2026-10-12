@@ -14,6 +14,12 @@ export interface PropertyRecord {
   sales: { date: string; price: number | null }[]
   yearBuilt: number | null
   squareFootage: number | null
+  /** Where the record came from. */
+  source?: 'smarty' | 'rentcast'
+  /** True when the owner names come from the latest recorded deed (current
+   *  within weeks), false when they come from the yearly tax roll. */
+  ownerFromDeed?: boolean
+  deedDocumentNumber?: string | null
 }
 
 export interface PropertySignal {
@@ -21,7 +27,7 @@ export interface PropertySignal {
   text: string
 }
 
-const RESIDENTIAL = /single family|condo|townhouse|manufactured|multi.?family|apartment|mobile/i
+const RESIDENTIAL = /residential|residence|single family|condo|townhouse|manufactured|multi.?family|apartment|mobile/i
 
 const STOP = new Set([
   'LLC', 'INC', 'CORP', 'CORPORATION', 'CO', 'COMPANY', 'LTD', 'LP', 'THE', 'AND',
@@ -81,10 +87,11 @@ export function propertySignals(
     const daysAgo = Math.floor((now - saleMs) / 86400e3)
     const recent = daysAgo >= 0 && daysAgo <= 365
     if (match === true) {
-      // County owner names often lag a sale by months, so a recent sale with
+      // Tax-roll owner names often lag a sale by months, so a recent sale with
       // the carrier's name still on the record can't tell us whether the
-      // carrier bought the house or sold it and moved.
-      if (recent) {
+      // carrier bought the house or sold it and moved. A deed-sourced owner
+      // is current, so a match there means the carrier bought it.
+      if (recent && !r.ownerFromDeed) {
         out.push({
           level: 'warn',
           text:

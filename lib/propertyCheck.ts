@@ -2,13 +2,24 @@ import { supabaseAdmin } from './supabase'
 import { logCarrierEvent } from './auditLog'
 import { propertySignals, type PropertyRecord } from './propertySignals'
 
-// County property record for a carrier's FMCSA address, from RentCast
-// (owner, property type, sale history). The plan has a small monthly request
-// allowance, so a lookup is reused for 30 days unless forced.
+// County property record for a carrier's FMCSA address: owner, property type
+// and sale history. Smarty is tried first because its owner comes from the
+// latest recorded deed; RentCast's owner comes from the yearly tax roll and
+// can lag a sale by months. RentCast is the fallback when Smarty has no match
+// or its subscription has lapsed. Lookups are reused for 30 days unless forced.
 
 const REUSE_DAYS = 30
 
-export const propertyLookupConfigured = () => !!process.env.RENTCAST_API_KEY
+const smartyConfigured = () => !!(process.env.SMARTY_AUTH_ID && process.env.SMARTY_AUTH_TOKEN)
+const rentcastConfigured = () => !!process.env.RENTCAST_API_KEY
+export const propertyLookupConfigured = () => smartyConfigured() || rentcastConfigured()
+
+interface AddressParts {
+  street: string
+  city: string | null
+  state: string | null
+  zip: string | null
+}
 
 const str = (v: unknown) => (v == null ? null : String(v).trim() || null)
 
@@ -31,7 +42,98 @@ export function normalizeRentcast(p: any): PropertyRecord {
     sales,
     yearBuilt: p?.yearBuilt != null ? Number(p.yearBuilt) : null,
     squareFootage: p?.squareFootage != null ? Number(p.squareFootage) : null,
+    source: 'rentcast',
+    ownerFromDeed: false,
+    deedDocumentNumber: null,
   }
+}
+
+const titleCase = (v: string) =>
+  v.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+
+export function normalizeSmarty(a: any): PropertyRecord {
+  const person = (first: unknown, middle: unknown, last: unknown, full: unknown) => {
+    const f = str(first)
+    const l = str(last)
+    return f && l ? [f, str(middle), l].filter(Boolean).join(' ') : str(full)
+  }
+  const fromDeed = !!str(a?.deed_owner_full_name)
+  const ownerNames = (
+    fromDeed
+      ? [
+          person(a.deed_owner_first_name, a.deed_owner_middle_name, a.deed_owner_last_name, a.deed_owner_full_name),
+          person(a.deed_owner_first_name2, a.deed_owner_middle_name2, a.deed_owner_last_name2, a.deed_owner_full_name2),
+        ]
+      : [
+          person(a?.first_name, a?.middle_name, a?.last_name, a?.owner_full_name),
+          person(a?.first_name_2, a?.middle_name_2, a?.last_name_2, a?.owner_full_name_2),
+        ]
+  ).filter((n): n is string => !!n)
+  const num = (v: unknown) => (str(v) && Number.isFinite(Number(v)) ? Number(v) : null)
+  const sales: { date: string; price: number | null }[] = []
+  for (const [d, p] of [
+    [a?.deed_sale_date, a?.deed_sale_price],
+    [a?.sale_date, a?.sale_amount],
+    [a?.prior_sale_date, a?.prior_sale_amount],
+  ]) {
+    const date = str(d)
+    if (date && !sales.some((x) => x.date === date)) sales.push({ date, price: num(p) })
+  }
+  sales.sort((x, y) => Date.parse(y.date) - Date.parse(x.date))
+  const flag = String(a?.company_flag ?? '')
+  const occ = String(a?.owner_occupancy_status ?? '')
+  const mailing = [
+    str(a?.contact_full_address),
+    [str(a?.contact_city), [str(a?.contact_state), str(a?.contact_zip)].filter(Boolean).join(' ')]
+      .filter(Boolean)
+      .join(', '),
+  ].filter(Boolean).join(', ')
+  return {
+    formattedAddress: [str(a?.property_address_full), str(a?.property_address_city), str(a?.property_address_state)]
+      .filter(Boolean)
+      .join(', ') || null,
+    propertyType: str(a?.land_use_standard)
+      ? titleCase(String(a.land_use_standard))
+      : str(a?.land_use_group)
+        ? titleCase(String(a.land_use_group))
+        : null,
+    ownerNames,
+    ownerType: flag ? (/not/.test(flag) ? 'Individual' : 'Organization') : null,
+    ownerOccupied: occ ? /^owner_occupied/.test(occ) : null,
+    ownerMailingAddress: mailing || null,
+    lastSaleDate: str(a?.deed_sale_date) ?? str(a?.sale_date) ?? sales[0]?.date ?? null,
+    lastSalePrice: num(a?.deed_sale_price) ?? num(a?.sale_amount) ?? sales[0]?.price ?? null,
+    sales,
+    yearBuilt: num(a?.year_built),
+    squareFootage: num(a?.building_sqft),
+    source: 'smarty',
+    ownerFromDeed: fromDeed,
+    deedDocumentNumber: str(a?.deed_document_number),
+  }
+}
+
+async function fetchSmarty(parts: AddressParts): Promise<{ found: boolean; raw: any; record: PropertyRecord | null }> {
+  const q = new URLSearchParams({
+    street: parts.street,
+    ...(parts.city ? { city: parts.city } : {}),
+    ...(parts.state ? { state: parts.state } : {}),
+    ...(parts.zip ? { zipcode: parts.zip } : {}),
+    'auth-id': process.env.SMARTY_AUTH_ID ?? '',
+    'auth-token': process.env.SMARTY_AUTH_TOKEN ?? '',
+  })
+  const res = await fetch(`https://us-enrichment.api.smarty.com/lookup/search/property/principal?${q}`, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  })
+  if (res.status === 404) return { found: false, raw: null, record: null }
+  const body = await res.json().catch(() => null)
+  if (!res.ok) {
+    const msg = (body as any)?.errors?.[0]?.message || `HTTP ${res.status}`
+    throw new Error(`Smarty: ${msg}`)
+  }
+  const first = Array.isArray(body) ? body[0] : null
+  if (!first?.attributes) return { found: false, raw: body, record: null }
+  return { found: true, raw: first, record: normalizeSmarty(first.attributes) }
 }
 
 async function fetchRentcast(address: string): Promise<{ found: boolean; raw: any; record: PropertyRecord | null }> {
@@ -99,6 +201,7 @@ async function carrierAddress(dot: string) {
     : null
   return {
     address,
+    parts: street ? ({ street, city, state, zip: zip ? zip.slice(0, 5) : null } as AddressParts) : null,
     carrierId: (c.id as string) ?? null,
     names: [c.legal_name, c.dba_name, i.rmis_legal_name, i.rmis_dba_name, i.rmis_contact_name],
     authorityDate: str(i.authority_original_date),
@@ -110,7 +213,7 @@ export async function runPropertyCheck(
   opts: { actor: string; force?: boolean }
 ): Promise<{ check: PropertyCheckRow | null; reused: boolean; error?: string }> {
   const info = await carrierAddress(dot)
-  if (!info.address) return { check: null, reused: false, error: 'No physical address on file' }
+  if (!info.address || !info.parts) return { check: null, reused: false, error: 'No physical address on file' }
 
   const prev = await latestPropertyCheck(dot)
   if (
@@ -127,11 +230,23 @@ export async function runPropertyCheck(
   let raw: any = null
   let record: PropertyRecord | null = null
   let error: string | null = null
-  try {
-    ;({ found, raw, record } = await fetchRentcast(info.address))
-  } catch (e: any) {
-    error = e?.message ?? String(e)
+  // Smarty first (deed owner); RentCast when Smarty has no match or fails.
+  const errors: string[] = []
+  if (smartyConfigured()) {
+    try {
+      ;({ found, raw, record } = await fetchSmarty(info.parts))
+    } catch (e: any) {
+      errors.push(e?.message ?? String(e))
+    }
   }
+  if (!found && rentcastConfigured()) {
+    try {
+      ;({ found, raw, record } = await fetchRentcast(info.address))
+    } catch (e: any) {
+      errors.push(e?.message ?? String(e))
+    }
+  }
+  if (!found && errors.length) error = errors.join('; ')
 
   const { data, error: insErr } = await (supabaseAdmin as any)
     .from('carrier_property_checks')
@@ -148,7 +263,7 @@ export async function runPropertyCheck(
       carrierId: info.carrierId,
       type: 'property_check',
       summary: found
-        ? `Property record: ${record?.propertyType ?? 'type unknown'}, owner ${record?.ownerNames.join(', ') || 'unknown'}` +
+        ? `Property record: ${record?.propertyType ?? 'type unknown'}, ${record?.ownerFromDeed ? 'deed owner' : 'owner'} ${record?.ownerNames.join(', ') || 'unknown'}` +
           `${record?.lastSaleDate ? `, last sold ${record.lastSaleDate.slice(0, 10)}` : ''}.` +
           (top ? ` ${top.text}` : '')
         : `No county property record found for ${info.address}.`,

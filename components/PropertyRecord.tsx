@@ -86,7 +86,10 @@ export function PropertyRecord({
         <div className="flex items-center gap-3 text-xs">
           {check && (
             <span className="text-gray-400">
-              County records · checked {formatRelative(check.checked_at)}
+              {check.record?.source === 'smarty'
+                ? 'County deed records'
+                : 'County tax records'}{' '}
+              · checked {formatRelative(check.checked_at)}
             </span>
           )}
           <button
@@ -133,7 +136,9 @@ export function PropertyRecord({
               <dd className="text-gray-900">{r.propertyType || '—'}</dd>
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <dt className="text-xs text-gray-500">Owner of record</dt>
+              <dt className="text-xs text-gray-500">
+                {r.ownerFromDeed ? 'Owner (latest deed)' : 'Owner of record'}
+              </dt>
               <dd className="text-gray-900">
                 {r.ownerNames.join(', ') || '—'}
                 {r.ownerType && <span className="text-xs text-gray-500"> ({r.ownerType})</span>}
@@ -155,6 +160,12 @@ export function PropertyRecord({
               </dd>
             </div>
           </dl>
+          {r.deedDocumentNumber && (
+            <p className="mt-2 text-xs text-gray-500">
+              Latest deed: document {r.deedDocumentNumber}
+              {r.lastSaleDate ? `, recorded ${day(r.lastSaleDate)}` : ''}
+            </p>
+          )}
           {r.ownerMailingAddress && r.ownerOccupied === false && (
             <p className="mt-2 text-xs text-gray-500">
               Owner’s mailing address: {r.ownerMailingAddress}

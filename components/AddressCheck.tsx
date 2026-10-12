@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardBody } from './ui/Card'
+import { PropertyRecord } from './PropertyRecord'
 
 // Client-side Maps key. When set, the panel renders an inline satellite map +
 // interactive Street View of the FMCSA-registered address (a quick way to spot
@@ -136,12 +137,19 @@ export function AddressCheck({
   state,
   zip,
   source,
+  property,
 }: {
   street?: string | null
   city?: string | null
   state?: string | null
   zip?: string | null
   source?: string
+  /** When set, shows the county property record for the address. */
+  property?: {
+    dot: string
+    names: (string | null | undefined)[]
+    authorityDate?: string | null
+  }
 }) {
   const address = buildAddress(street, city, state, zip)
   // Maps show by default (they're the reliable signal for judging the site); the
@@ -256,6 +264,8 @@ export function AddressCheck({
             </div>
           </div>
         )}
+
+        {property && <PropertyRecord {...property} />}
       </CardBody>
     </Card>
   )

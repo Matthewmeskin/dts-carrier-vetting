@@ -520,6 +520,17 @@ export default function CarrierDetailPage({
         state={insurance?.rmis_carrier_state}
         zip={insurance?.rmis_carrier_zip}
         source="FMCSA-registered physical address (RMIS)"
+        property={{
+          dot,
+          names: [
+            carrier.legal_name,
+            carrier.dba_name,
+            insurance?.rmis_legal_name,
+            insurance?.rmis_dba_name,
+            insurance?.rmis_contact_name,
+          ],
+          authorityDate: insurance?.authority_original_date,
+        }}
       />
 
       {/* Insurance — full width so the Auto / Cargo / GL cards aren't scrunched */}

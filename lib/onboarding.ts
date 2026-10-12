@@ -6,6 +6,8 @@ import { normalizeEntityName } from '@/lib/sosNormalize'
 import { requiredApprovalLevel, type ApprovalLevel } from '@/lib/roles'
 import { getCarrierContext, loadEvaluatedChecklist } from '@/lib/carrierContext'
 import type { VettingChecklist } from '@/lib/vettingChecklist'
+import { propertyLookupConfigured, propertySignalsFor, runPropertyCheck } from '@/lib/propertyCheck'
+import type { PropertySignal } from '@/lib/propertySignals'
 
 // ---------------------------------------------------------------------------
 // Automated carrier onboarding.
@@ -103,6 +105,8 @@ export function evaluateAutoDecision(args: {
   safetyRating: string | null
   osint: Record<string, any> | null
   rmisError?: string | null
+  /** Signals from the county property record for the FMCSA address. */
+  property?: PropertySignal[] | null
 }): DecisionResult {
   const { checklist, insurance, score, sos, safetyRating, osint } = args
   const reasons: string[] = []
@@ -162,6 +166,13 @@ export function evaluateAutoDecision(args: {
     if (complaints && !CLEAN_RE.test(complaints)) reasons.push(`Complaint search: ${complaints.slice(0, 160)}`)
     const loc = String(osint.location_type ?? osint.address_lookup ?? '').toLowerCase()
     if (/residential|house|apartment|po box|virtual/.test(loc)) reasons.push(`Address looks ${/po box|virtual/.test(loc) ? 'like a mailbox or virtual office' : 'residential'}: ${s(osint.address_lookup)?.slice(0, 120) ?? loc}`)
+  }
+
+  // County property record: an address that changed hands after the carrier
+  // got its authority means the carrier may not be there any more.
+  for (const p of args.property ?? []) {
+    if (p.level === 'high') holdReasons.push(p.text)
+    else if (p.level === 'warn') reasons.push(p.text)
   }
 
   const approvalLevel = requiredApprovalLevel(score?.approval_level, safetyRating)
@@ -505,6 +516,16 @@ export async function onboardCarrier(input: OnboardingInput): Promise<Onboarding
     }
   }
 
+  // ---- 4b. County property record for the FMCSA address (after the RMIS pull
+  // so the address and authority date are fresh)
+  if (propertyLookupConfigured()) {
+    try {
+      await runPropertyCheck(dot, { actor: AUTO_ACTOR })
+    } catch {
+      /* best-effort: a failed lookup leaves the decision to the other checks */
+    }
+  }
+
   // ---- 5. Evaluate and decide
   const { evaluated, scoreRecord, insurance, sos: sosRow } = await loadEvaluatedChecklist(dot)
   const { data: freshCarrier } = await supabaseAdmin.from('carriers').select('*').eq('dot_number', dot).single()
@@ -525,6 +546,7 @@ export async function onboardCarrier(input: OnboardingInput): Promise<Onboarding
     safetyRating: fc?.safety_rating ?? null,
     osint: osintRow,
     rmisError: rmis.ok ? null : rmis.error ?? 'unknown',
+    property: await propertySignalsFor(dot).catch(() => []),
   })
   const applied = await applyAutoDecision(dot, fc, decision, evaluated, { source: 'onboarding' })
 
@@ -587,6 +609,7 @@ export async function reevaluatePendingCarriers(limit = 200): Promise<{
         sos,
         safetyRating: r.safety_rating ?? null,
         osint: (osintRows?.[0] as any) ?? null,
+        property: await propertySignalsFor(dot).catch(() => []),
       })
       out.evaluated++
       // Only write when the outcome changed, so the activity log stays quiet.

@@ -27,6 +27,7 @@ export type CarrierEventType =
   | 'approval_decided'
   | 'onboarding'
   | 'osint_check'
+  | 'property_check'
   | 'auto_decision'
   | 'assignment'
   | 'exception_review'

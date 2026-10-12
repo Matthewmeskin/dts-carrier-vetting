@@ -100,12 +100,23 @@ export function propertySignals(
             `Confirm the carrier bought it rather than sold it and moved.`,
         })
       }
-    } else if (Number.isFinite(authMs) && saleMs > authMs) {
+    } else if (Number.isFinite(authMs) && saleMs > authMs && daysAgo <= 730) {
+      // A sale in the last two years to someone other than the carrier is the
+      // abandoned-address pattern (the carrier moved out, FMCSA never updated).
       out.push({
         level: 'high',
         text:
           `Address sold ${fmt(r.lastSaleDate!)}, after the carrier's authority was granted ` +
           `(${fmt(ctx.authorityDate!)}). The carrier may no longer be at its FMCSA address.`,
+      })
+    } else if (Number.isFinite(authMs) && saleMs > authMs && match === false) {
+      // Older sale: more often the carrier rents, or the house is in a
+      // relative's or holding company's name, than an abandoned address.
+      out.push({
+        level: 'warn',
+        text:
+          `Address last sold ${fmt(r.lastSaleDate!)} to ${r.ownerNames.join(', ')}, after the carrier's ` +
+          `authority was granted. Confirm the carrier rents or operates here.`,
       })
     } else if (recent) {
       out.push({
@@ -115,7 +126,7 @@ export function propertySignals(
     }
   }
 
-  if (match === false) {
+  if (match === false && !out.some((o) => o.text.includes(r.ownerNames.join(', ')))) {
     out.push({
       level: residential ? 'warn' : 'info',
       text: `Owner of record (${r.ownerNames.join(', ')}) doesn't match the carrier name or contact.`,

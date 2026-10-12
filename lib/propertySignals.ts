@@ -77,16 +77,30 @@ export function propertySignals(
   const saleMs = r.lastSaleDate ? Date.parse(r.lastSaleDate) : NaN
   const authMs = ctx.authorityDate ? Date.parse(ctx.authorityDate) : NaN
 
-  if (Number.isFinite(saleMs) && match !== true) {
+  if (Number.isFinite(saleMs)) {
     const daysAgo = Math.floor((now - saleMs) / 86400e3)
-    if (Number.isFinite(authMs) && saleMs > authMs) {
+    const recent = daysAgo >= 0 && daysAgo <= 365
+    if (match === true) {
+      // County owner names often lag a sale by months, so a recent sale with
+      // the carrier's name still on the record can't tell us whether the
+      // carrier bought the house or sold it and moved.
+      if (recent) {
+        out.push({
+          level: 'warn',
+          text:
+            `Address sold ${fmt(r.lastSaleDate!)} (${daysAgo} days ago). The owner on record ` +
+            `(${r.ownerNames.join(', ')}) matches the carrier, but owner records can lag a sale. ` +
+            `Confirm the carrier bought it rather than sold it and moved.`,
+        })
+      }
+    } else if (Number.isFinite(authMs) && saleMs > authMs) {
       out.push({
         level: 'high',
         text:
           `Address sold ${fmt(r.lastSaleDate!)}, after the carrier's authority was granted ` +
           `(${fmt(ctx.authorityDate!)}). The carrier may no longer be at its FMCSA address.`,
       })
-    } else if (daysAgo >= 0 && daysAgo <= 365) {
+    } else if (recent) {
       out.push({
         level: 'warn',
         text: `Address sold ${fmt(r.lastSaleDate!)} (${daysAgo} days ago). Confirm the carrier still operates here.`,

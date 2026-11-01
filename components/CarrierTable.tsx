@@ -1425,6 +1425,14 @@ export function CarrierTable({
                         >
                           {c.legal_name ?? `DOT ${c.dot_number}`}
                         </Link>
+                        {c.ltl_auto && (
+                          <span
+                            title="LTL carrier (≥90% of its loads in the last 12 months were LTL, air or parcel). Policy Section 9: no broker-carrier agreement expected."
+                            className="ml-1.5 inline-block rounded bg-blue-50 px-1 py-px align-middle text-[10px] font-semibold text-dts-blue"
+                          >
+                            LTL
+                          </span>
+                        )}
                         {c.dba_name && c.dba_name !== c.legal_name && (
                           <div className="text-xs text-gray-500">
                             dba {c.dba_name}

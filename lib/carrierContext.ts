@@ -1,3 +1,4 @@
+import { ltlFacts } from '@/lib/ltl'
 import { supabaseAdmin } from '@/lib/supabase'
 import { stateFromZip } from '@/lib/sosNormalize'
 import { refineBusinessType, businessTypeRisk } from '@/lib/businessType'
@@ -132,6 +133,7 @@ export async function loadEvaluatedChecklist(
       sos: (sos as any) ?? null,
       documentTypes: docTypes,
       isIntrastate: !!c?.is_intrastate,
+      ltl: ltlFacts(c),
     })
   )
   return { evaluated, scoreRecord, insurance: (i as any) ?? null, sos: (sos as any) ?? null, docTypes }

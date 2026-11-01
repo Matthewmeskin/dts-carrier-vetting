@@ -28,6 +28,7 @@ import { CarrierDocuments } from '@/components/CarrierDocuments'
 import { RmisMonitoring } from '@/components/RmisMonitoring'
 import { CarrierActivity } from '@/components/CarrierActivity'
 import { AddressCheck } from '@/components/AddressCheck'
+import { ltlFacts, ltlEvidence } from '@/lib/ltl'
 import { IntrastateToggle } from '@/components/IntrastateToggle'
 import { AssignOwner } from '@/components/AssignOwner'
 
@@ -150,7 +151,11 @@ export default function CarrierDetailPage({
   // mirroring the vetting checklist, which already accepts a portal BCA / tariff
   // / W-9. (Other flags are unaffected.)
   const docSet = new Set((documentTypes ?? []).map((t: string) => (t || '').toLowerCase()))
-  const hasAgreement = docSet.has('broker_carrier_agreement') || docSet.has('tariff')
+  // A recognised LTL carrier moves freight under its own tariff, so no
+  // agreement is expected either.
+  const ltl = ltlFacts(carrier)
+  const hasAgreement =
+    docSet.has('broker_carrier_agreement') || docSet.has('tariff') || !!ltl
   const hasW9 = docSet.has('w9')
   const keepFlag = (f: string): boolean => {
     const low = f.toLowerCase()
@@ -216,6 +221,11 @@ export default function CarrierDetailPage({
                   </Badge>
                 )}
                 {carrier.do_not_use && <Badge tone="red">Do Not Use</Badge>}
+                {ltl && (
+                  <span title={`${ltlEvidence(ltl)}. Policy Section 9 applies: no broker-carrier agreement expected.`}>
+                    <Badge tone="blue">LTL carrier</Badge>
+                  </span>
+                )}
                 {disabled ? (
                   <Badge tone="gray">Re-vet not required</Badge>
                 ) : (
@@ -556,6 +566,7 @@ export default function CarrierDetailPage({
         sos={sos}
         documentTypes={documentTypes}
         isIntrastate={carrier.is_intrastate}
+        ltl={ltl}
         vettingRecords={vettingRecords}
         onSaved={load}
         carrierStatus={carrier.carrier_status}

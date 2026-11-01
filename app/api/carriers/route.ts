@@ -48,6 +48,7 @@ interface CarrierSummary {
   eld_enrolled: boolean | null
   w9_on_file: boolean | null
   agreement_on_file: boolean | null
+  ltl_auto: boolean
   is_factoring: boolean | null
   noa_on_file: boolean
   assignee_id: string | null
@@ -261,7 +262,8 @@ export async function GET(request: NextRequest) {
         // evidence either way = not on file (so it shows in the missing filter).
         w9_on_file: ins?.w9_on_file === true || w9PortalDots.has(dot),
         agreement_on_file:
-          ins?.broker_carrier_agreement_on_file === true || bcaDots.has(dot),
+          ins?.broker_carrier_agreement_on_file === true || bcaDots.has(dot) || c.ltl_auto === true,
+        ltl_auto: c.ltl_auto === true,
         is_factoring: ins?.is_factoring ?? null,
         noa_on_file: noaDots.has(dot),
         assignee_id: assigneeByDot.get(dot) ?? null,

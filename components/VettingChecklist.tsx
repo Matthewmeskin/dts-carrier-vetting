@@ -26,6 +26,7 @@ import { noteIsFilled } from '@/lib/exceptionNote'
 import { cn, formatDateTime } from '@/lib/utils'
 import { uploadCarrierDocument } from '@/lib/uploadDocument'
 import { INACTIVE_CARRIER_HOLD_NOTE } from '@/lib/statusNotes'
+import type { LtlFacts } from '@/lib/ltl'
 import { REVET_INTERVAL_OPTIONS, type RevetStatus, type RevetState } from '@/lib/revet'
 import {
   APPROVING_STATUSES,
@@ -125,6 +126,7 @@ export function VettingChecklist({
   sos,
   documentTypes,
   isIntrastate,
+  ltl,
   vettingRecords,
   onSaved,
   carrierStatus,
@@ -147,6 +149,8 @@ export function VettingChecklist({
   sos?: SosRecord | null
   documentTypes?: string[] | null
   isIntrastate?: boolean | null
+  /** Recognised LTL carrier from Brokerware load history (Section 9). */
+  ltl?: LtlFacts | null
   vettingRecords: VettingRecord[]
   onSaved?: () => void | Promise<void>
   carrierStatus: string | null
@@ -217,8 +221,8 @@ export function VettingChecklist({
 
   const latest = vettingRecords[0]
   const autoInputs = useMemo<ChecklistAutoInputs>(
-    () => ({ safetyRating, insurance, score, sos, documentTypes, isIntrastate }),
-    [safetyRating, insurance, score, sos, documentTypes, isIntrastate]
+    () => ({ safetyRating, insurance, score, sos, documentTypes, isIntrastate, ltl }),
+    [safetyRating, insurance, score, sos, documentTypes, isIntrastate, ltl]
   )
   // Vetting type is no longer set in the UI (the field was removed) but is still
   // persisted so existing records and downstream logic keep working; it defaults

@@ -1,3 +1,4 @@
+import { ltlEvidence, type LtlFacts } from './ltl'
 import type { InsuranceRecord, ScoreRecord, SosRecord } from './types'
 import { formatCurrency, formatDate, formatScore, daysSince } from './utils'
 import {
@@ -272,6 +273,9 @@ export interface ChecklistAutoInputs {
   /** Manually designated intrastate-only carrier — interstate FMCSA operating
    *  authority is not required, so the "no active authority" check passes. */
   isIntrastate?: boolean | null
+  /** Recognised LTL carrier (Brokerware load history): policy Section 9
+   *  applies and no broker-carrier agreement is expected. */
+  ltl?: LtlFacts | null
 }
 
 interface StepEval {
@@ -507,9 +511,11 @@ function computeAutoEvaluations(
     if (rmisOn != null || portalOn) {
       const on = rmisOn === true || portalOn
       out.broker_carrier_agreement = {
-        status: on ? 'pass' : 'fail',
+        status: on || inputs.ltl ? 'pass' : 'fail',
         evidence: !on
-          ? 'No broker-carrier agreement or tariff on file (RMIS or portal)'
+          ? inputs.ltl
+            ? `Not required: ${ltlEvidence(inputs.ltl)}; it moves freight under its own published tariff`
+            : 'No broker-carrier agreement or tariff on file (RMIS or portal)'
           : rmisOn === true
             ? `Agreement on file in RMIS${ins?.broker_carrier_agreement_date ? ` (${formatDate(ins.broker_carrier_agreement_date)})` : ''}${portalOn ? ' · copy in portal' : ''}`
             : portalTariff
@@ -637,10 +643,14 @@ export function attachAutoEvidence(
 ): VettingChecklist {
   const evals = computeAutoEvaluations(inputs)
   // Policy Section 9: authority age, Bluewire, and inspections do not apply to
-  // LTL, expedited, forwarder, air, or co-brokered carriers.
-  if (checklist.otherMode) {
+  // LTL, expedited, forwarder, air, or co-brokered carriers — whether a
+  // reviewer marked it or the load history shows an LTL carrier.
+  if (checklist.otherMode || inputs.ltl) {
+    const why = checklist.otherMode
+      ? 'Section 9 carrier (LTL, expedited, forwarder, air, or co-brokered)'
+      : `Section 9 — ${ltlEvidence(inputs.ltl!)}`
     for (const id of SECTION9_NOT_APPLICABLE) {
-      evals[id] = { status: 'pass', evidence: 'Not applicable — Section 9 carrier (LTL, expedited, forwarder, air, or co-brokered)' }
+      evals[id] = { status: 'pass', evidence: `Not applicable — ${why}` }
     }
   }
   return {

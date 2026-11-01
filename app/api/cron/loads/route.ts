@@ -259,6 +259,13 @@ export async function POST(request: Request) {
       else console.error('loads upsert failed:', error.message)
     }
 
+    // 6. Recompute each carrier's 12-month mode mix so LTL carriers are
+    //    recognised (policy Section 9) as soon as their loads arrive.
+    if (loadsStored > 0) {
+      const { error: mixErr } = await (supabaseAdmin as any).rpc('refresh_carrier_mode_mix')
+      if (mixErr) console.error('refresh_carrier_mode_mix failed:', mixErr.message)
+    }
+
     return NextResponse.json({
       loadsReceived: loads.length,
       loadsWithoutMc,

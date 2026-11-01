@@ -41,6 +41,8 @@ export interface CarrierSummary {
   eld_enrolled: boolean | null
   w9_on_file: boolean | null
   agreement_on_file: boolean | null
+  /** Recognised LTL carrier (Brokerware load history, policy Section 9). */
+  ltl_auto?: boolean
   is_factoring: boolean | null
   noa_on_file: boolean
   /** Team member who owns this carrier's vetting (carrier_assignments). */
@@ -68,6 +70,10 @@ export interface CarrierRecord {
   revet_reset_at: string | null
   last_hauled_at: string | null
   is_intrastate: boolean | null
+  /** Recognised LTL carrier: ≥90% of its 12-month loads were LTL, air or parcel. */
+  ltl_auto?: boolean | null
+  loads_12m?: number | null
+  ltl_loads_12m?: number | null
   phone: string | null
   email: string | null
   brokerware_carrier_id: number | null

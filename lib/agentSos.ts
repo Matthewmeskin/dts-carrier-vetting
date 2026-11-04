@@ -8,7 +8,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from './supabase'
-import { lookupEntity } from './sosClient'
+import { lookupEntity, SosNotFoundError } from './sosClient'
 
 // The current Haiku: cheap and fast, per the "cheap AI to read the data" rule
 // the carrier matcher (lib/sosMatch.ts) follows.
@@ -143,15 +143,66 @@ function errorText(e: unknown): string {
   return s.slice(0, 400)
 }
 
+/** "Harbor Point Freight, LLC" -> "Harbor Point Freight": registries often file the name with a different suffix, or none. */
+export function withoutSuffix(name: string): string {
+  return name
+    .trim()
+    .replace(/[\s,]+(l\.?\s?l\.?\s?c\.?|l\.?\s?l\.?\s?p\.?|p\.?\s?l\.?\s?l\.?\s?c\.?|inc\.?|incorporated|corp\.?|corporation|co\.?|company|ltd\.?|limited|l\.?\s?p\.?|p\.?\s?c\.?)$/i, '')
+    .replace(/[\s,]+$/, '')
+}
+
+/** What the registry said when it had nothing under any name tried. */
+function notFound(job: AgentSosJob, tried: string[]): AgentSosMatch {
+  return {
+    matched: false,
+    match_confidence: 'none',
+    entity_name: null,
+    entity_id: null,
+    status: null,
+    status_normalized: 'unknown',
+    entity_type: null,
+    formation_date: null,
+    registered_agent: null,
+    principal_address: null,
+    officers: [],
+    people_listed: [],
+    name_match: false,
+    mismatches: [],
+    risk_flags: [],
+    summary: `The ${job.state} registry has no entity under ${tried.map((t) => `"${t}"`).join(' or ')}.`,
+  }
+}
+
 /** One queued lookup, start to finish. Never throws: failures are reported back for a retry. */
 export async function runAgentSosJob(job: AgentSosJob): Promise<'clear' | 'flag' | 'retry' | 'failed' | 'ignored' | 'error'> {
   const db = supabaseAdmin as any
   let match: AgentSosMatch
   let raw: unknown
   try {
-    const res = await lookupEntity({ entityName: job.entity_name, state: job.state, fresh: job.fresh, timeoutMs: 60_000 })
-    raw = res.raw
-    match = await matchAgentSos(job, raw)
+    // A name the registry does not have is an answer, not an outage: try it once without the suffix, then say so.
+    const tried = [job.entity_name.trim()]
+    let res: Awaited<ReturnType<typeof lookupEntity>> | null = null
+    try {
+      res = await lookupEntity({ entityName: tried[0], state: job.state, fresh: job.fresh, timeoutMs: 60_000 })
+    } catch (e) {
+      if (!(e instanceof SosNotFoundError)) throw e
+      const bare = withoutSuffix(tried[0])
+      if (bare && bare.toLowerCase() !== tried[0].toLowerCase()) {
+        tried.push(bare)
+        try {
+          res = await lookupEntity({ entityName: bare, state: job.state, fresh: job.fresh, timeoutMs: 60_000 })
+        } catch (e2) {
+          if (!(e2 instanceof SosNotFoundError)) throw e2
+        }
+      }
+    }
+    if (res) {
+      raw = res.raw
+      match = await matchAgentSos(job, raw)
+    } else {
+      raw = { result: 'not found', searched: tried, state: job.state }
+      match = notFound(job, tried)
+    }
   } catch (e) {
     const { data, error } = await db.rpc('ag_sos_record', { p_id: job.id, p_match: null, p_raw: null, p_error: errorText(e) })
     if (error) console.error('agent-sos: could not report a failure', error.code)

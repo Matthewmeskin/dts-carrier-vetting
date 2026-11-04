@@ -16,6 +16,17 @@ export interface SosLookupResult {
   status: number
 }
 
+/**
+ * The registry has no entity under that name in that state (OpenSOS 404).
+ * An answer, not an outage: callers can say so instead of retrying.
+ */
+export class SosNotFoundError extends Error {
+  constructor(entityName: string, state: string) {
+    super(`No ${state.trim().toUpperCase()} entity found under "${entityName.trim()}"`)
+    this.name = 'SosNotFoundError'
+  }
+}
+
 export function sosConfigured(): boolean {
   return Boolean(API_KEY)
 }
@@ -75,12 +86,14 @@ export async function lookupEntity(params: {
     raw = { rawText: text }
   }
 
+  if (res.status === 404) throw new SosNotFoundError(params.entityName, params.state)
   if (!res.ok) {
-    const detail =
-      raw && typeof raw === 'object' && 'message' in (raw as any)
-        ? (raw as any).message
-        : text.slice(0, 200)
-    throw new Error(`OpenSOS API returned ${res.status}: ${detail || res.statusText}`)
+    // Only OpenSOS's own one line reason: the body also carries account
+    // details (wallet balance, lookups left) that must not end up in a log
+    // or on an agent's checklist.
+    const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+    const detail = typeof r?.message === 'string' ? r.message : typeof r?.error === 'string' ? r.error : ''
+    throw new Error(`OpenSOS API returned ${res.status}${detail ? `: ${detail.slice(0, 200)}` : res.statusText ? `: ${res.statusText}` : ''}`)
   }
 
   return { raw, status: res.status }

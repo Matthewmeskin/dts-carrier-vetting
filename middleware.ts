@@ -304,8 +304,12 @@ a{display:inline-block;margin-top:1rem;padding:.5rem 1rem;border-radius:.5rem;ba
   })
 }
 
+// api/loads is the payment-vetting workflow's TMS load lookup. Like
+// api/upload-scores it checks the CRON_SECRET bearer (or a session) itself;
+// gated here, n8n's call was redirected to the sign-in page and every vetting
+// log said "TMS lookup did not answer".
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/cron|api/webhooks|api/carriers/sync|api/upload-scores|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/cron|api/webhooks|api/carriers/sync|api/upload-scores|api/loads|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }

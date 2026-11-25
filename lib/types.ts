@@ -155,6 +155,11 @@ export interface InsuranceRecord {
   rmis_carrier_city: string | null
   rmis_carrier_state: string | null
   rmis_carrier_zip: string | null
+  /** Mailing address (RMIS packet, else FMCSA) — often a P.O. Box / remit-to. */
+  rmis_mailing_street?: string | null
+  rmis_mailing_city?: string | null
+  rmis_mailing_state?: string | null
+  rmis_mailing_zip?: string | null
   rmis_email: string | null
   rmis_phone: string | null
   rmis_contact_name: string | null

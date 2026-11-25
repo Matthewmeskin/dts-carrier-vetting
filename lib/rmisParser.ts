@@ -74,6 +74,11 @@ export interface ParsedRMISData {
   rmisCarrierCity: string
   rmisCarrierState: string
   rmisCarrierZip: string
+  // Mailing address (RMIS packet, else FMCSA) — often a P.O. Box / remit-to.
+  rmisMailingStreet: string
+  rmisMailingCity: string
+  rmisMailingState: string
+  rmisMailingZip: string
   // Carrier's primary contact from the RMIS packet (real email/phone the carrier
   // filed with RMIS — preferred over the Brokerware/TMS placeholder).
   rmisEmail: string
@@ -124,12 +129,27 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
   const parsed = parser.parse(xmlString)
   const root = parsed.RMISCarrierStatusExpanded
 
-  // Carrier's real address: prefer the FMCSA mailing block, then the business
-  // address; derive the state from the ZIP when it isn't given explicitly.
-  const rmisCarrierZip =
-    rawTag(xmlString, 'Mailing_Zip') || rawTag(xmlString, 'dot_Business_Zip')
-  const rmisCarrierState =
-    rawTag(xmlString, 'Mailing_State') || stateFromZip(rmisCarrierZip) || ''
+  // Physical address (where the carrier operates): the FMCSA business address,
+  // else the RMIS physical address. Each block is taken whole so street, city
+  // and ZIP never mix sources. The mailing address (often a P.O. Box or a
+  // remit-to) is kept separately and never used as the location.
+  const block = (street: string, city: string, state: string, zip: string) => {
+    const s = rawTag(xmlString, street)
+    return s
+      ? { street: s, city: rawTag(xmlString, city), state: rawTag(xmlString, state), zip: rawTag(xmlString, zip) }
+      : null
+  }
+  const physical =
+    block('dot_Business_Addr', 'dot_Business_City', 'dot_Business_St', 'dot_Business_Zip') ??
+    block('Physical_Street', 'Physical_City', 'Physical_State', 'Physical_Zip') ??
+    block('Mailing_Street', 'Mailing_City', 'Mailing_State', 'Mailing_Zip') ??
+    { street: '', city: '', state: '', zip: '' }
+  const mailing =
+    block('Mailing_Street', 'Mailing_City', 'Mailing_State', 'Mailing_Zip') ??
+    block('dot_Mailing_Addr', 'dot_Mailing_City', 'dot_Mailing_St', 'dot_Mailing_Zip') ??
+    { street: '', city: '', state: '', zip: '' }
+  const rmisCarrierZip = physical.zip
+  const rmisCarrierState = physical.state || stateFromZip(rmisCarrierZip) || ''
 
   const carrier = root.Carrier ?? {}
   const header = root.Header ?? {}
@@ -294,12 +314,14 @@ export function parseRMISXML(xmlString: string): ParsedRMISData {
     payToEntity: String(carrier.Payto ?? ''),
     payToAddress: String(carrier.PaytoAddress ?? ''),
 
-    rmisCarrierStreet:
-      rawTag(xmlString, 'Mailing_Street') || rawTag(xmlString, 'dot_Business_Addr'),
-    rmisCarrierCity:
-      rawTag(xmlString, 'Mailing_City') || rawTag(xmlString, 'dot_Business_City'),
+    rmisCarrierStreet: physical.street,
+    rmisCarrierCity: physical.city,
     rmisCarrierState,
     rmisCarrierZip,
+    rmisMailingStreet: mailing.street,
+    rmisMailingCity: mailing.city,
+    rmisMailingState: mailing.state || stateFromZip(mailing.zip) || '',
+    rmisMailingZip: mailing.zip,
 
     rmisEmail: firstNonEmptyTag(xmlString, 'Email'),
     rmisPhone: firstNonEmptyTag(xmlString, 'Phone'),

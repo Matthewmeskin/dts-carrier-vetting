@@ -213,6 +213,10 @@ export type Database = {
           rmis_eld_enrolled: boolean | null
           rmis_certification_notes: string[] | null
           rmis_scheduled_vehicles: Json | null
+          rmis_mailing_street: string | null
+          rmis_mailing_city: string | null
+          rmis_mailing_state: string | null
+          rmis_mailing_zip: string | null
           rmis_flags: string[] | null
           rmis_is_certified: boolean | null
           rmis_overall_pass: boolean | null
@@ -285,6 +289,10 @@ export type Database = {
           rmis_eld_enrolled?: boolean | null
           rmis_certification_notes?: string[] | null
           rmis_scheduled_vehicles?: Json | null
+          rmis_mailing_street?: string | null
+          rmis_mailing_city?: string | null
+          rmis_mailing_state?: string | null
+          rmis_mailing_zip?: string | null
           rmis_flags?: string[] | null
           rmis_is_certified?: boolean | null
           rmis_overall_pass?: boolean | null
@@ -357,6 +365,10 @@ export type Database = {
           rmis_eld_enrolled?: boolean | null
           rmis_certification_notes?: string[] | null
           rmis_scheduled_vehicles?: Json | null
+          rmis_mailing_street?: string | null
+          rmis_mailing_city?: string | null
+          rmis_mailing_state?: string | null
+          rmis_mailing_zip?: string | null
           rmis_flags?: string[] | null
           rmis_is_certified?: boolean | null
           rmis_overall_pass?: boolean | null

@@ -28,6 +28,7 @@ import { CarrierDocuments } from '@/components/CarrierDocuments'
 import { RmisMonitoring } from '@/components/RmisMonitoring'
 import { CarrierActivity } from '@/components/CarrierActivity'
 import { AddressCheck } from '@/components/AddressCheck'
+import { AddressSummary } from '@/components/AddressSummary'
 import { ltlFacts, ltlEvidence } from '@/lib/ltl'
 import { IntrastateToggle } from '@/components/IntrastateToggle'
 import { AssignOwner } from '@/components/AssignOwner'
@@ -350,42 +351,9 @@ export default function CarrierDetailPage({
             </span>
           </div>
 
-          {/* Row 3: how to reach them, and the carrier in the TMS and RMIS */}
+          {/* Row 3: where they are (each address labelled by source), how to
+              reach them, and the carrier in the TMS and RMIS */}
           {(() => {
-            const join = (
-              street: string | null | undefined,
-              city: string | null | undefined,
-              state: string | null | undefined,
-              zip: string | null | undefined
-            ) =>
-              [street, [city, state, zip].filter(Boolean).join(' ')]
-                .filter((p) => p && p.trim())
-                .join(', ')
-            // Prefer the RMIS/DOT physical address; fall back to the
-            // carrier's own address (Brokerware/TMS) when RMIS has none.
-            const rmisAddr = join(
-              insurance?.rmis_carrier_street,
-              insurance?.rmis_carrier_city,
-              insurance?.rmis_carrier_state,
-              insurance?.rmis_carrier_zip
-            )
-            const carrierAddr = join(
-              carrier.street,
-              carrier.city,
-              carrier.state,
-              carrier.zip
-            )
-            const addr = rmisAddr || carrierAddr
-            const addrSource = rmisAddr
-              ? 'Physical address (RMIS/DOT)'
-              : 'Address on file in Brokerware/TMS'
-            // If Brokerware/TMS holds a different address than the RMIS
-            // physical one (commonly the factor's remit-to PO Box), show it
-            // too, labeled, so it's clear where each address comes from.
-            const nrmAddr = (s: string) =>
-              s.toLowerCase().replace(/[^a-z0-9]/g, '')
-            const tmsDiffers =
-              !!rmisAddr && !!carrierAddr && nrmAddr(rmisAddr) !== nrmAddr(carrierAddr)
             // Prefer the carrier's real contact from RMIS over the
             // Brokerware/TMS value (which is often a placeholder like
             // na@na.com); fall back to TMS when RMIS has none.
@@ -404,18 +372,25 @@ export default function CarrierDetailPage({
               : 'Contact email (Brokerware/TMS)'
             const hyperion = hyperionCarrierUrl(carrier.brokerware_carrier_id)
             const rmisUrl = rmisCarrierUrl(carrier.rmis_insured_id)
-            if (!addr && !phone && !email && !hyperion && !rmisUrl) return null
             return (
               <>
+              <AddressSummary
+                physical={{
+                  street: insurance?.rmis_carrier_street,
+                  city: insurance?.rmis_carrier_city,
+                  state: insurance?.rmis_carrier_state,
+                  zip: insurance?.rmis_carrier_zip,
+                }}
+                mailing={{
+                  street: insurance?.rmis_mailing_street,
+                  city: insurance?.rmis_mailing_city,
+                  state: insurance?.rmis_mailing_state,
+                  zip: insurance?.rmis_mailing_zip,
+                }}
+                tms={{ street: carrier.street, city: carrier.city, state: carrier.state, zip: carrier.zip }}
+              />
+              {(phone || email || hyperion || rmisUrl) && (
               <div className="mt-1 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-gray-600">
-                {addr && (
-                  <span title={addrSource}>
-                    {addr}{' '}
-                    <span className="text-xs text-gray-400">
-                      ({rmisAddr ? 'RMIS/DOT' : 'Brokerware/TMS'})
-                    </span>
-                  </span>
-                )}
                 {phone && (
                   <a
                     href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
@@ -457,11 +432,6 @@ export default function CarrierDetailPage({
                   </a>
                 )}
               </div>
-              {tmsDiffers && (
-                <div className="mt-0.5 text-xs text-gray-400">
-                  Brokerware/TMS address on file: {carrierAddr} — usually
-                  the mailing / remit-to address
-                </div>
               )}
               </>
             )

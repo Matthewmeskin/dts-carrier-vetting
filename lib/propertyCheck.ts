@@ -237,10 +237,14 @@ export async function runPropertyCheck(
   let record: PropertyRecord | null = null
   let error: string | null = null
   // Smarty first (deed owner); RentCast when Smarty has no match or fails.
+  // An error is only reported when no provider gave an answer: a lapsed Smarty
+  // subscription with a clean "no record" from RentCast is just "not found".
   const errors: string[] = []
+  let answered = false
   if (smartyConfigured()) {
     try {
       ;({ found, raw, record } = await fetchSmarty(info.parts))
+      answered = true
     } catch (e: any) {
       errors.push(e?.message ?? String(e))
     }
@@ -248,11 +252,12 @@ export async function runPropertyCheck(
   if (!found && rentcastConfigured()) {
     try {
       ;({ found, raw, record } = await fetchRentcast(info.address))
+      answered = true
     } catch (e: any) {
       errors.push(e?.message ?? String(e))
     }
   }
-  if (!found && errors.length) error = errors.join('; ')
+  if (!found && !answered && errors.length) error = errors.join('; ')
 
   const { data, error: insErr } = await (supabaseAdmin as any)
     .from('carrier_property_checks')

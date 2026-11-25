@@ -278,13 +278,15 @@ export function SosPanel({
 
   return (
     <div className="mt-5 border-t border-gray-100 pt-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-baseline gap-2">
+      {/* Wraps on narrow screens: the title, the registry link and the six
+          actions don't fit on one phone-width line. */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
           <h3 className="text-sm font-bold text-gray-900">Business Registration (SOS)</h3>
           <span className="text-xs text-gray-400">Secretary of State · via OpenSOS</span>
         </div>
         {configured && (
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 sm:gap-x-2">
             {activeSos?.sos_source_url ? (
               <a
                 href={activeSos.sos_source_url}
